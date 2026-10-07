@@ -9,16 +9,18 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
-  DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { canhBaoList } from "@/data/mock";
 import { nhanDuongDan } from "@/lib/navigation";
-import {
-  docPhien, phienMacDinh, tenVaiTro, theoDoiPhien, xoaPhien, type PhienDangNhap,
-} from "@/lib/phien-dang-nhap";
+import { canVisit, roleNames, type AuthUser } from "@/lib/auth-contract";
 
 function dungBreadcrumb(pathname: string) {
   if (pathname === "/") return [{ href: "/", label: "Tổng quan" }];
@@ -32,7 +34,7 @@ function dungBreadcrumb(pathname: string) {
   return crumbs;
 }
 
-export function AppHeader() {
+export function AppHeader({ user }: { user: AuthUser }) {
   const pathname = usePathname();
   const crumbs = dungBreadcrumb(pathname);
   const chuaDoc = canhBaoList.filter((c) => !c.daDoc).length;
@@ -42,16 +44,32 @@ export function AppHeader() {
     document.documentElement.classList.toggle("dark", toi);
   }, [toi]);
 
-  // Phiên nằm trong localStorage nên chỉ đọc được sau khi component gắn vào DOM,
-  // tránh lệch nội dung giữa lần render trên server và trên trình duyệt.
-  // Header thuộc layout gốc và không được gắn lại khi điều hướng, nên phải
-  // đọc lại mỗi khi phiên đổi thì mới hiện đúng người vừa đăng nhập.
-  const [phien, setPhien] = React.useState<PhienDangNhap>(phienMacDinh);
-  React.useEffect(() => {
-    const docLai = () => setPhien(docPhien() ?? phienMacDinh);
-    docLai();
-    return theoDoiPhien(docLai);
-  }, []);
+  const [logoutError, setLogoutError] = React.useState<string | null>(null);
+  const [loggingOut, setLoggingOut] = React.useState(false);
+  const phien = {
+    hoTen: user.fullName,
+    chucVu: roleNames[user.role],
+    capBac: "",
+    tenDangNhap: user.username,
+    vaiTro: user.role,
+    phamViDuLieu:
+      user.scopes
+        .map((s) => (s.kind === "all" ? "Toàn hệ thống" : `${s.kind}: ${s.targetId}`))
+        .join(", ") || "Chưa cấp phạm vi",
+  };
+  async function logout() {
+    setLoggingOut(true);
+    setLogoutError(null);
+    try {
+      const response = await fetch("/api/auth/logout", { method: "POST" });
+      if (!response.ok) throw new Error("Logout failed");
+      window.location.assign("/dang-nhap");
+    } catch {
+      setLogoutError("Đăng xuất chưa thành công. Vui lòng thử lại.");
+    } finally {
+      setLoggingOut(false);
+    }
+  }
 
   const chuCaiDau = phien.hoTen
     .trim()
@@ -85,33 +103,44 @@ export function AppHeader() {
         </ol>
       </nav>
 
-      <Button variant="outline" size="sm" asChild className="hidden md:inline-flex">
-        <Link href="/tra-cuu">
-          <Search className="size-4" />
-          <span className="text-muted-foreground font-normal">Tra cứu toàn hệ thống…</span>
-        </Link>
-      </Button>
+      {canVisit(user, "/tra-cuu") && (
+        <Button variant="outline" size="sm" asChild className="hidden md:inline-flex">
+          <Link href="/tra-cuu">
+            <Search className="size-4" />
+            <span className="text-muted-foreground font-normal">Tra cứu toàn hệ thống…</span>
+          </Link>
+        </Button>
+      )}
 
-      <Button variant="ghost" size="icon-sm" onClick={() => setToi((v) => !v)} aria-label="Đổi giao diện sáng/tối">
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        onClick={() => setToi((v) => !v)}
+        aria-label="Đổi giao diện sáng/tối"
+      >
         {toi ? <Moon className="size-4" /> : <Sun className="size-4" />}
       </Button>
 
-      <Button variant="ghost" size="icon-sm" asChild className="relative" aria-label="Cảnh báo">
-        <Link href="/canh-bao">
-          <Bell className="size-4" />
-          {chuaDoc > 0 && (
-            <span className="bg-primary text-primary-foreground absolute -top-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full text-[10px] font-bold">
-              {chuaDoc}
-            </span>
-          )}
-        </Link>
-      </Button>
+      {canVisit(user, "/canh-bao") && (
+        <Button variant="ghost" size="icon-sm" asChild className="relative" aria-label="Cảnh báo">
+          <Link href="/canh-bao">
+            <Bell className="size-4" />
+            {chuaDoc > 0 && (
+              <span className="bg-primary text-primary-foreground absolute -top-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full text-[10px] font-bold">
+                {chuaDoc}
+              </span>
+            )}
+          </Link>
+        </Button>
+      )}
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button className="hover:bg-accent flex cursor-pointer items-center gap-2 rounded-md py-1 pr-2 pl-1 transition-colors">
             <Avatar className="size-7">
-              <AvatarFallback className="bg-primary text-primary-foreground">{chuCaiDau}</AvatarFallback>
+              <AvatarFallback className="bg-primary text-primary-foreground">
+                {chuCaiDau}
+              </AvatarFallback>
             </Avatar>
             <span className="hidden text-left leading-tight lg:grid">
               <span className="text-[13px] font-semibold">{phien.hoTen}</span>
@@ -125,9 +154,9 @@ export function AppHeader() {
               <p className="text-sm font-semibold">
                 {phien.capBac} {phien.hoTen}
               </p>
-              <p className="text-muted-foreground text-xs">{phien.tenDangNhap}@pc07.gov.vn</p>
+              <p className="text-muted-foreground text-xs">{phien.tenDangNhap}</p>
               <Badge variant="secondary" className="mt-1 w-fit">
-                {phien.vaiTro} · {tenVaiTro[phien.vaiTro]}
+                {phien.vaiTro} · {roleNames[phien.vaiTro]}
               </Badge>
               <p className="text-muted-foreground mt-0.5 text-[11px]">
                 Phạm vi dữ liệu: {phien.phamViDuLieu}
@@ -135,25 +164,38 @@ export function AppHeader() {
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem asChild>
-            <Link href="/to-chuc/can-bo">
-              <User2 />
-              Hồ sơ cán bộ
-            </Link>
-          </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <Link href="/quan-tri/vai-tro">
-              <Bell />
-              Vai trò &amp; phạm vi dữ liệu
-            </Link>
-          </DropdownMenuItem>
+          {canVisit(user, "/to-chuc/can-bo") && (
+            <DropdownMenuItem asChild>
+              <Link href="/to-chuc/can-bo">
+                <User2 />
+                Hồ sơ cán bộ
+              </Link>
+            </DropdownMenuItem>
+          )}
+          {canVisit(user, "/quan-tri/vai-tro") && (
+            <DropdownMenuItem asChild>
+              <Link href="/quan-tri/vai-tro">
+                <Bell />
+                Vai trò &amp; phạm vi dữ liệu
+              </Link>
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" onClick={xoaPhien} asChild>
-            <Link href="/dang-nhap">
-              <LogOut />
-              Đăng xuất
+          <DropdownMenuItem asChild>
+            <Link href="/doi-mat-khau">
+              <User2 />
+              Đổi mật khẩu
             </Link>
           </DropdownMenuItem>
+          <DropdownMenuItem variant="destructive" onSelect={logout} disabled={loggingOut}>
+            <LogOut />
+            {loggingOut ? "Đang đăng xuất…" : "Đăng xuất"}
+          </DropdownMenuItem>
+          {logoutError && (
+            <p role="alert" className="text-destructive p-2 text-xs">
+              {logoutError}
+            </p>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     </header>
