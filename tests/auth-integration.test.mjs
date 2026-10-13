@@ -7,23 +7,32 @@ import { seedDemo } from "../Backend/src/seed.js";
 import { createApp } from "../Backend/src/app.js";
 
 test(
-  "Next frontend proxy + separate backend: login, first-password change, role navigation, scope and logout",
+  "Next frontend proxy + backend: auth regression and persisted ORG workflows",
   { timeout: 60000 },
   async (t) => {
     const db = openDatabase(":memory:");
     const password = "Integration-only-password";
     await seedDemo(db, password);
-    const origin = "http://localhost:3100";
+    const backendPort = Number(process.env.TEST_BACKEND_PORT || 4000);
+    const frontendPort = Number(process.env.TEST_FRONTEND_PORT || 3100);
+    const origin = `http://localhost:${frontendPort}`;
     const backend = createApp(db, { appOrigin: origin });
-    backend.listen(4000, "127.0.0.1");
+    backend.listen(backendPort, "127.0.0.1");
     await once(backend, "listening");
     let logs = "";
     const frontend = spawn(
       process.execPath,
-      ["node_modules/next/dist/bin/next", "start", "--hostname", "127.0.0.1", "--port", "3100"],
+      [
+        "node_modules/next/dist/bin/next",
+        "start",
+        "--hostname",
+        "127.0.0.1",
+        "--port",
+        String(frontendPort),
+      ],
       {
         cwd: process.cwd(),
-        env: { ...process.env, BACKEND_URL: "http://127.0.0.1:4000" },
+        env: { ...process.env, BACKEND_URL: `http://127.0.0.1:${backendPort}` },
         stdio: ["ignore", "pipe", "pipe"],
         windowsHide: true,
       },
@@ -43,7 +52,7 @@ test(
       await new Promise((resolve) => backend.close(resolve));
       db.close();
     });
-    const base = "http://127.0.0.1:3100";
+    const base = `http://127.0.0.1:${frontendPort}`;
     let ready = false;
     for (let i = 0; i < 100; i++) {
       if (frontend.exitCode !== null) throw new Error(logs);
@@ -156,5 +165,95 @@ test(
     const adminPage = await request("/quan-tri/vai-tro", { cookie: adminCookie });
     assert.equal(adminPage.status, 200);
     assert.match(await adminPage.text(), /Vai trò &amp; phạm vi dữ liệu/);
+    for (const path of ["/to-chuc/don-vi", "/to-chuc/can-bo"]) {
+      const denied = await request(path, { cookie });
+      assert.ok(denied.headers.get("location").endsWith("/dang-nhap"));
+      assert.equal((await request(path, { cookie: adminCookie })).status, 200);
+    }
+    const tree = await request("/api/organization/tree", { cookie: adminCookie });
+    assert.equal(tree.status, 200);
+    assert.ok((await tree.json()).items.some((node) => node.id === "DV-KV10"));
+    const payload = {
+      officerCode: "INTEGRATION-ORG",
+      fullName: "Cán bộ tích hợp giả lập",
+      rank: "Đại úy",
+      position: "Cán bộ",
+      phone: "0900000001",
+      email: "integration-org@example.test",
+      unitId: "DV-KV10",
+      businessRole: "A03",
+      notes: "Ghi chú tùy chọn",
+    };
+    const created = await request("/api/officers", {
+      method: "POST",
+      cookie: adminCookie,
+      body: payload,
+    });
+    assert.equal(created.status, 201);
+    const officer = (await created.json()).officer;
+    assert.equal(
+      (await request("/api/officers", { method: "POST", cookie: adminCookie, body: payload }))
+        .status,
+      409,
+    );
+    const edited = await request(`/api/officers/${officer.id}`, {
+      method: "PATCH",
+      cookie: adminCookie,
+      body: { notes: "Đã cập nhật qua Next rewrite" },
+    });
+    assert.equal(edited.status, 200);
+    const status = await request(`/api/officers/${officer.id}/status`, {
+      method: "PATCH",
+      cookie: adminCookie,
+      body: {
+        status: "TRANSFERRED",
+        reason: "Chuyển công tác kiểm thử",
+        effectiveDate: "2026-10-13",
+      },
+    });
+    assert.equal(status.status, 200);
+    const detail = await (
+      await request(`/api/officers/${officer.id}`, { cookie: adminCookie })
+    ).json();
+    assert.equal(detail.officer.status, "TRANSFERRED");
+    assert.equal(detail.officer.notes, "Đã cập nhật qua Next rewrite");
+    assert.ok(
+      db
+        .prepare("SELECT 1 FROM audit_logs WHERE object_id=? AND after_json LIKE '%TRANSFERRED%'")
+        .get(officer.id),
+    );
+    const wardResponse = await request("/api/units", {
+      method: "POST",
+      cookie: adminCookie,
+      body: {
+        code: "INTEGRATION-WARD",
+        name: "Phường tích hợp",
+        level: "WARD",
+        parentId: "DV-KV10",
+      },
+    });
+    assert.equal(wardResponse.status, 201);
+    const ward = (await wardResponse.json()).unit;
+    assert.equal(
+      (
+        await request(`/api/units/${ward.id}/status`, {
+          method: "PATCH",
+          cookie: adminCookie,
+          body: { status: "INACTIVE" },
+        })
+      ).status,
+      200,
+    );
+    const noPermissionLogin = await request("/api/auth/login", {
+      method: "POST",
+      body: { username: "demo.can-bo", password: newPassword },
+    });
+    const noPermissionCookie = noPermissionLogin.headers.get("set-cookie").split(";")[0];
+    assert.ok(
+      (await request("/to-chuc/can-bo", { cookie: noPermissionCookie })).headers
+        .get("location")
+        .endsWith("/khong-co-quyen"),
+    );
+    assert.equal((await request("/api/officers", { cookie: noPermissionCookie })).status, 403);
   },
 );

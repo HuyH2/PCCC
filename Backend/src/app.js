@@ -10,6 +10,7 @@ import {
 } from "./authorization.js";
 import { updateAccountAuthorization, updateRolePermissions } from "./administration.js";
 import { object, pagination, text } from "./validation.js";
+import { handleOrganization } from "./organization.js";
 
 function cookieToken(request) {
   return (request.headers.cookie || "")
@@ -87,7 +88,7 @@ export function createApp(
         "Nguồn yêu cầu không được phép.",
       );
       if (request.method === "OPTIONS") {
-        response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
+        response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, OPTIONS");
         response.setHeader("Access-Control-Allow-Headers", "Content-Type");
         response.statusCode = 204;
         response.end();
@@ -136,6 +137,20 @@ export function createApp(
       }
       const user = authenticate(db, token);
       if (method === "GET" && path === "/api/auth/me") return send(200, { user });
+      if (
+        await handleOrganization({
+          db,
+          user,
+          path,
+          method,
+          url,
+          ip,
+          send,
+          readBody: () => readJson(request),
+          authenticateAgain: () => authenticate(db, token),
+        })
+      )
+        return;
       if (method === "POST" && path === "/api/auth/skip-password-change") {
         auth.skipPasswordChange(user, ip);
         return send(200, {

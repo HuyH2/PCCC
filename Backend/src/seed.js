@@ -34,31 +34,44 @@ export async function seedDemo(db, password) {
           action,
         );
       }
-    db.prepare("INSERT OR IGNORE INTO units VALUES (?,?,?)").run("DV-PC07", "PC07 (mẫu)", null);
-    db.prepare("INSERT OR IGNORE INTO units VALUES (?,?,?)").run(
+    db.prepare("INSERT OR IGNORE INTO units(id,name,parent_id,code,level) VALUES (?,?,?,?,?)").run(
+      "DV-PC07",
+      "PC07 (mẫu)",
+      null,
+      "DV-PC07",
+      "ROOT",
+    );
+    db.prepare("INSERT OR IGNORE INTO units(id,name,parent_id,code,level) VALUES (?,?,?,?,?)").run(
       "DV-KV10",
       "Đội khu vực 10 (mẫu)",
       "DV-PC07",
+      "DV-KV10",
+      "AREA",
     );
-    db.prepare("INSERT OR IGNORE INTO units VALUES (?,?,?)").run(
+    db.prepare("INSERT OR IGNORE INTO units(id,name,parent_id,code,level) VALUES (?,?,?,?,?)").run(
       "DV-KV11",
       "Đội khu vực 11 (mẫu)",
       "DV-PC07",
+      "DV-KV11",
+      "AREA",
     );
-    db.prepare("INSERT OR IGNORE INTO regions VALUES (?,?,?)").run(
+    db.prepare("INSERT OR IGNORE INTO regions(id,name,unit_id,code) VALUES (?,?,?,?)").run(
       "KP01",
       "Khu phố 01 (mẫu)",
       "DV-KV10",
+      "KP01",
     );
-    db.prepare("INSERT OR IGNORE INTO regions VALUES (?,?,?)").run(
+    db.prepare("INSERT OR IGNORE INTO regions(id,name,unit_id,code) VALUES (?,?,?,?)").run(
       "KP02",
       "Khu phố 02 (mẫu)",
       "DV-KV10",
+      "KP02",
     );
-    db.prepare("INSERT OR IGNORE INTO regions VALUES (?,?,?)").run(
+    db.prepare("INSERT OR IGNORE INTO regions(id,name,unit_id,code) VALUES (?,?,?,?)").run(
       "KP03",
       "Khu phố 03 (mẫu)",
       "DV-KV11",
+      "KP03",
     );
     for (const [id, region, officer] of [
       ["CS001", "KP01", "CB-A03"],
@@ -70,11 +83,19 @@ export async function seedDemo(db, password) {
       ).run(id, `Cơ sở ${id} (dữ liệu mẫu)`, "Địa chỉ giả lập", region, officer);
     }
     const grants = {
-      A01: ["M03.view", "M03.approve", "M03.export", "M10.view"],
+      A01: [
+        "M02.view",
+        "M02.create",
+        "M02.edit",
+        "M03.view",
+        "M03.approve",
+        "M03.export",
+        "M10.view",
+      ],
       A02: ["M03.view", "M10.view"],
       A03: ["M03.view", "M03.create", "M03.edit", "M10.view"],
-      A04: ["M03.view", "M03.export", "M10.view"],
-      A05: ["M01.view", "M01.edit", "M03.view", "M10.view"],
+      A04: ["M02.view", "M02.create", "M02.edit", "M03.view", "M03.export", "M10.view"],
+      A05: ["M01.view", "M01.edit", "M02.view", "M02.create", "M02.edit", "M03.view", "M10.view"],
       A06: ["M03.view", "M10.view"],
     };
     const usernames = {
@@ -101,5 +122,43 @@ export async function seedDemo(db, password) {
         "INSERT INTO account_scopes(account_id,kind,unit_id,region_id) VALUES (?,?,?,?)",
       ).run(id, kind, kind === "unit" ? "DV-KV10" : null, kind === "region" ? "KP01" : null);
     }
+    // Explicit synthetic demo profiles. Never infer personal data from arbitrary accounts.
+    const now = Date.now();
+    for (const role of Object.keys(usernames)) {
+      db.prepare(
+        `INSERT OR IGNORE INTO officers(id,officer_code,full_name,rank,position,phone,email,notes,unit_id,business_role,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+      ).run(
+        `CB-${role}`,
+        `CB-${role}`,
+        `Cán bộ ${role} (dữ liệu mẫu)`,
+        "Cấp bậc mẫu",
+        roleNames[role],
+        "0900000000",
+        `${role.toLowerCase()}@example.invalid`,
+        "Hồ sơ giả lập phục vụ kiểm thử.",
+        role === "A05" || role === "A06" ? "DV-PC07" : "DV-KV10",
+        role,
+        now,
+        now,
+      );
+    }
+    db.prepare(
+      `INSERT OR IGNORE INTO officers(id,officer_code,full_name,rank,position,phone,email,notes,unit_id,business_role,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      "CB-OTHER",
+      "CB-OTHER",
+      "Cán bộ khu vực 11 (dữ liệu mẫu)",
+      "Cấp bậc mẫu",
+      "Cán bộ mẫu",
+      "0900000001",
+      "other@example.invalid",
+      "Hồ sơ giả lập liên kết cơ sở mẫu.",
+      "DV-KV11",
+      "A03",
+      now,
+      now,
+    );
   });
 }

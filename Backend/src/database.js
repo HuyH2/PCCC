@@ -20,6 +20,13 @@ export function transaction(db, work) {
 export function openDatabase(path = process.env.DATABASE_PATH || "./data/pccc.sqlite") {
   if (path !== ":memory:") mkdirSync(dirname(resolve(path)), { recursive: true });
   const db = new DatabaseSync(path);
+  db.function("search_text", { deterministic: true }, (value) =>
+    String(value ?? "")
+      .normalize("NFD")
+      .replace(/\p{M}/gu, "")
+      .replace(/[đĐ]/g, "d")
+      .toLowerCase(),
+  );
   db.exec("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
   db.exec(
     "CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)",

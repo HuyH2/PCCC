@@ -10,6 +10,13 @@ const files = [
   "scripts/format-auth.mjs",
   "src/lib/auth-contract.ts",
   "src/lib/backend.ts",
+  "src/lib/organization-contract.ts",
+  "src/lib/organization-client.ts",
+  "src/app/(app)/to-chuc/don-vi",
+  "src/app/(app)/to-chuc/can-bo",
+  "src/components/forms/can-bo-form.tsx",
+  "src/components/forms/don-vi-form.tsx",
+  "src/components/forms/organization-status-form.tsx",
   "src/proxy.ts",
   "src/app/dang-nhap/dang-nhap-form.tsx",
   "src/app/(app)/layout.tsx",
@@ -28,6 +35,9 @@ const result = spawnSync(
   process.execPath,
   [
     "node_modules/prettier/bin/prettier.cjs",
+    // Preserve Git checkout line endings on Windows without reformatting unrelated files.
+    "--end-of-line",
+    "auto",
     process.argv.includes("--write") ? "--write" : "--check",
     ...files,
   ],

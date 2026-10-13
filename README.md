@@ -11,10 +11,34 @@ người 3 và API chi tiết được mô tả trong [`Backend/README.md`](Back
 Không còn đăng nhập nhanh bỏ qua mật khẩu hoặc session localStorage.
 
 Các trang đăng nhập, đổi mật khẩu và cấu hình vai trò/phạm vi đã nối API thật.
-Sidebar, dashboard `/`, trang `/co-so` và các màn hình nghiệp vụ giữ nguyên UI và dữ liệu
+Sidebar, dashboard `/`, trang `/co-so` và các màn hình nghiệp vụ ngoài hai trang tổ chức giữ nguyên UI và dữ liệu
 mẫu của dự án. Chủ module cần nối các màn hình này với API kiểm soát quyền/phạm vi;
 backend kiểm tra quyền độc lập trên các API hiện có. Quyền seed là cấu hình mẫu,
 chưa thay thế phê duyệt Q02.
+
+## Tổ chức và cán bộ — UC-ORG-01, UC-ORG-02
+
+`/to-chuc/don-vi` và `/to-chuc/can-bo` đã dùng API thật và SQLite: xem cây/danh bạ/chi tiết,
+thêm/sửa, tìm kiếm/lọc/phân trang cán bộ, ngưng đơn vị và đổi trạng thái công tác có audit.
+Hai màn hình kiểm `M02.view`; thao tác thêm/sửa cần `M02.create`/`M02.edit` và scope hợp lệ
+ở backend. Danh bạ giữ liên kết `tel:`, có loading/error/empty/retry và hỗ trợ mobile.
+
+Migration mới `002-organization.sql` giữ ID/quan hệ cũ: PC07 là gốc chỉ đọc, Khu vực/Phường
+ở `units`, Khu phố ở `regions`. Khu phố legacy trực tiếp Khu vực được giữ cha khi không
+di chuyển. Đây là adapter của catalog hiện hữu, chưa phải danh mục tỉnh chính thức Q02.
+Hồ sơ dùng vai trò nghiệp vụ tham chiếu `roles`; sửa hồ sơ/trạng thái không tự đổi role,
+scope hoặc khóa tài khoản đăng nhập, không tự chuyển giao địa bàn UC-ORG-03.
+
+**Với database đã có tài khoản:** seed không tự bổ sung quyền M02 vào role đang cấu hình.
+Quản trị mở `/quan-tri/vai-tro` và cấp `M02.view/create/edit` cho vai trò theo thẩm quyền;
+giữ scope hiện hữu. Không cần xóa database hoặc reset tài khoản. Migration tự chạy khi
+backend mở database, có kiểm thử upgrade từ 001 và persistence.
+
+API dùng `/api/organization/tree`, `/api/organization/options`, `/api/units`, `/api/regions`
+và `/api/officers`; xem [hợp đồng backend](Backend/README.md#tổ-chức-và-cán-bộ--uc-org-01-uc-org-02)
+và [báo cáo bàn giao](BAO_CAO_BAN_GIAO_UC_ORG_01_02.md) với ma trận bốn sơ đồ/41 backend tests.
+Detail khảo sát chưa có bộ trường trong URD; biểu mẫu chỉ lưu Master và ghi chú Master
+tùy chọn. Các màn hình nghiệp vụ khác tiếp tục dùng dữ liệu mẫu.
 
 Kiểm tra: `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, sau đó
 `npm run test:integration`. Backend có thêm `npm --prefix Backend run check`.
@@ -250,8 +274,8 @@ chuẩn (Q04), chỉ cần sửa file này là toàn bộ biểu mẫu có hiệ
 | Báo cáo       | Hộp thoại                      | Số ngày cảnh báo 1–30; báo cáo đột xuất cần số văn bản yêu cầu                                         |
 | Sự cố         | Hộp thoại                      | Diện tích cháy chỉ áp dụng cho loại Cháy; cơ sở liên quan lọc theo phường                              |
 
-Các biểu mẫu hiện **ghi log ra console và hiện toast**, chưa gọi API. Điểm nối API nằm ở hàm
-`onSubmit` của từng form.
+Biểu mẫu cán bộ đã gọi API thật và chỉ báo thành công sau response. Các biểu mẫu nghiệp vụ
+còn lại hiện **ghi log ra console và hiện toast**, chưa gọi API; điểm nối nằm ở `onSubmit`.
 
 ## Quy tắc nghiệp vụ đã thể hiện trên giao diện
 
@@ -272,7 +296,8 @@ import/export, Q13 ở đăng nhập.
 
 ## Việc còn lại
 
-Các phân hệ ngoài Authentication & Authorization vẫn là **giao diện dùng dữ liệu mẫu tĩnh**. Để đưa vào vận hành cần:
+Ngoài Authentication & Authorization và hai màn hình UC-ORG-01/02 đã tích hợp, các phân hệ
+còn lại vẫn là **giao diện dùng dữ liệu mẫu tĩnh**. Để đưa vào vận hành cần:
 
 1. Thay `src/data/mock.ts` bằng lớp gọi API thật (giữ nguyên kiểu trong `src/data/types.ts`).
 2. Nối `onSubmit` của các biểu mẫu nghiệp vụ vào API; dùng middleware xác thực/phân quyền và bộ lọc

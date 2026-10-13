@@ -2,6 +2,47 @@
 
 Backend riêng cho **UC-ADM-01** và **UC-ADM-03**, đối chiếu URD v1.0 và sơ đồ sequence ADM-01. Node.js >= 22.13, HTTP API và SQLite tích hợp (`node:sqlite`). Không cần cài package backend. SQLite ở Node 22 còn có cảnh báo experimental; lựa chọn này phục vụ môi trường đồ án, chưa chốt hạ tầng production Q13.
 
+## Tổ chức và cán bộ — UC-ORG-01, UC-ORG-02
+
+Backend đã bổ sung hai Use Case tổ chức/cán bộ trong `src/organization.js`, được
+`app.js` gọi qua `handleOrganization`. Tái sử dụng session cookie, permission M02,
+scope, error handler, transaction và append-only audit hiện hữu; giữ convention `/api`
+và SQLite thay cho bearer/MySQL/`/api/v1` trong ví dụ sơ đồ.
+
+| Method | Endpoint                                              | Chức năng                                                                                                                                |
+| ------ | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/organization/tree`, `/api/organization/options` | Cây/counts/options từ DB theo scope; M02.view.                                                                                           |
+| GET    | `/api/units`, `/api/units/:id`, `/api/regions/:id`    | List/detail đơn vị/khu phố; ngoài scope 404, ancestor context được redaction.                                                            |
+| POST   | `/api/units`, `/api/regions`                          | Thêm Khu vực/Phường/Khu phố; M02.create; 201.                                                                                            |
+| PATCH  | `/api/units/:id`, `/api/regions/:id`                  | Sửa field được gửi; M02.edit; 200.                                                                                                       |
+| PATCH  | `/api/units/:id/status`, `/api/regions/:id/status`    | Body `{status}` với ACTIVE/INACTIVE; kiểm quan hệ/audit, không delete.                                                                   |
+| GET    | `/api/officers`, `/api/officers/:id`                  | Danh bạ/detail scoped; q/search, status, unitId, page/pageSize; tìm tiếng Việt có/không dấu.                                             |
+| POST   | `/api/officers`                                       | Tạo Master: officerCode/fullName/rank/position/phone/email/unitId/businessRole/notes tùy chọn; ACTIVE mặc định; 201; mã/email trùng 409. |
+| PATCH  | `/api/officers/:id`                                   | Partial update hồ sơ; không tự sửa account role/scope; 200.                                                                              |
+| PATCH  | `/api/officers/:id/status`                            | `{status,reason,effectiveDate}`; reason 1–1.000 ký tự, ngày YYYY-MM-DD tồn tại; transaction/audit; 200.                                  |
+
+Mutation cần Origin đúng APP_ORIGIN và JSON. Backend lấy actor/quyền/scope từ session,
+kiểm lại phiên sau khi đọc body; không tin actor do client gửi. Facility-only scope
+không cấp quyền sửa cả khu phố/đơn vị; unit scope không mở toàn bộ cán bộ khác đơn vị
+qua tham chiếu cơ sở legacy. List/options/count/detail đều dùng scope trước query.
+
+Migration `002-organization.sql` bổ sung metadata vào `units`/`regions` và bảng `officers`;
+không sửa 001 hoặc thay ID/quan hệ cũ. `units` dùng ROOT/AREA/WARD, `regions` là NEIGHBORHOOD.
+PC07 ROOT chỉ đọc; khu phố cũ trỏ trực tiếp AREA vẫn được giữ khi không đổi cha. Mới hoặc
+di chuyển khu phố phải có cha WARD. Không xóa vật lý; ngưng hoặc reparent có quan hệ
+đang dùng bị chặn để bảo toàn dữ liệu/phạm vi. `business_role` là metadata FK `roles`,
+không tạo UserRoles/RBAC song song. Tham chiếu officer_id legacy chưa có profile được giữ.
+
+`statusEffectiveDate` lưu ngày nghiệp vụ; trạng thái đổi ngay khi xác nhận, chưa có
+scheduler chuyển trạng thái tương lai. Số tài khoản liên kết hiển thị trong profile;
+backend không tự khóa tài khoản hoặc chuyển giao địa bàn/scope ngoài UC này. Detail
+khảo sát chưa có trường đặc tả: chỉ lưu Master và ghi chú Master tùy chọn.
+
+Seed profiles giả lập/idempotent; không ghi đè accounts/password/grants/scopes hiện có.
+Database cũ chưa có M02 cần được quản trị cấp quyền qua `/quan-tri/vai-tro`; không reset
+database để mở tính năng. Xem [báo cáo bàn giao](../BAO_CAO_BAN_GIAO_UC_ORG_01_02.md)
+cho 41/41 backend tests, integration/browser và ma trận bốn sơ đồ.
+
 ## Chạy trên PowerShell
 
 ```powershell
@@ -86,7 +127,7 @@ Các scope kết hợp bằng OR; unit gồm đơn vị con. `[]` không cho xem
 - Đăng nhập kiểm tra mật khẩu trước khi thông báo tài khoản khóa/ngưng; log thành công/thất bại không chứa password/token.
 - Mỗi API đọc lại trạng thái tài khoản, role, quyền và scope từ DB. Quyền từ body/header/client không được tin.
 - Giới hạn 10 lần đăng nhập thất bại trong 15 phút theo IP và username; đăng nhập thành công không tiêu hao ngân sách lỗi của các tài khoản dùng chung frontend proxy. Đây là ngưỡng kỹ thuật demo, không phải quy tắc khóa tài khoản nghiệp vụ. IP lấy từ socket, không tin X-Forwarded-For. Cần cấu hình trusted proxy và chiến lược limiter khi hạ tầng được chốt.
-- Mọi POST/PUT yêu cầu `Origin` đúng `APP_ORIGIN` để chống CSRF. Gọi curl/Postman cũng phải gửi header này. CORS chỉ cho origin cấu hình và credentials.
+- Mọi POST/PUT/PATCH yêu cầu `Origin` đúng `APP_ORIGIN` để chống CSRF. Gọi curl/Postman cũng phải gửi header này. CORS chỉ cho origin cấu hình và credentials.
 - JSON tối đa 16 KiB; reject unknown fields và giá trị không hợp lệ. SQL có tham số; schema có FK/unique/check/index.
 - Audit append-only với trigger chặn UPDATE/DELETE; chỉ admin toàn hệ thống xem được. Không có API sửa/xóa audit.
 
@@ -108,13 +149,15 @@ Repo chưa có bảng tài khoản thật nên migration cung cấp **một bả
 
 Không hard-delete tài khoản có lịch sử. Khi khóa/ngưng, API từ chối ngay; người 3 cần xóa sessions cùng transaction để phiên cũ không sống lại khi mở khóa. Reset mật khẩu cũng phải thu hồi sessions và ghi audit. Các thao tác này thuộc UC-ADM-02/04, không cung cấp CRUD tài khoản ngoài scope task.
 
-`units`, `regions`, `facilities` là catalog tích hợp tối thiểu để kiểm chứng scope. Khi người phụ trách nghiệp vụ hoàn thành schema dùng chung, nối các FK/query vào nguồn đó bằng migration, không duy trì hai nguồn dữ liệu thật.
+`units`/`regions` đã được mở rộng qua migration 002 để quản lý tổ chức dùng chung;
+`officers` là nguồn hồ sơ cán bộ thật. `facilities` vẫn là catalog tối thiểu để kiểm chứng
+scope. Các phân hệ tiếp theo nối vào nguồn này bằng migration, không tạo nguồn dữ liệu thật song song.
 
 ## Frontend và giới hạn bàn giao
 
-Đã nối `/dang-nhap`, `/doi-mat-khau` và `/quan-tri/vai-tro`. Reload dùng cookie server; không còn localStorage chứa danh tính hay tài khoản mặc định. Proxy kiểm tra đăng nhập và quyền vào trang cấu hình phân quyền; API kiểm tra quyền/phạm vi độc lập. Sidebar và các màn hình nghiệp vụ giữ nguyên UI, dữ liệu mẫu ban đầu; chủ module tiếp tục tích hợp API. `/tong-quan` và `/du-lieu/co-so` chuyển về `/` và `/co-so`. Logout/login dùng full navigation để bỏ router cache tài khoản cũ.
+Đã nối `/dang-nhap`, `/doi-mat-khau`, `/quan-tri/vai-tro` và hai trang `/to-chuc/don-vi`, `/to-chuc/can-bo`. Reload dùng cookie server; không còn localStorage chứa danh tính hay tài khoản mặc định. Proxy kiểm tra đăng nhập và quyền vào trang cấu hình phân quyền/tổ chức; API kiểm tra quyền/phạm vi độc lập. Sidebar và các màn hình nghiệp vụ khác giữ nguyên UI, dữ liệu mẫu ban đầu; chủ module tiếp tục tích hợp API. `/tong-quan` và `/du-lieu/co-so` chuyển về `/` và `/co-so`. Logout/login dùng full navigation để bỏ router cache tài khoản cũ.
 
-Mã các màn hình nghiệp vụ tĩnh cũ vẫn được giữ. Chúng bị ẩn/chặn đến khi chủ module nối API có kiểm soát scope. Cấp quyền M04–M11 trong ma trận không tự mở các màn hình chưa tích hợp. Đây là giới hạn rõ ràng của phần tích hợp, không phải quyền chính thức đã chốt. Không đưa dữ liệu thật vào `src/data/mock.ts`, vì đó là module dữ liệu công khai của giao diện demo.
+Các trang nghiệp vụ khác vẫn mở dạng demo sau đăng nhập, chưa tích hợp RBAC/scope nghiệp vụ trên giao diện. API thật kiểm quyền độc lập; grants M04–M11 không có nghĩa các workflow đã được triển khai. Không đưa dữ liệu thật vào `src/data/mock.ts`, vì đó là module dữ liệu công khai của giao diện demo.
 
 ## Kiểm thử
 

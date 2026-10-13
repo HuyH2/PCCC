@@ -26,6 +26,14 @@ export const roleNames: Record<ActorCode, string> = {
 
 /** Preserve existing demo screens. Backend enforces permissions on its APIs. */
 export function canVisit(user: AuthUser, path: string) {
+  if (
+    path === "/to-chuc/don-vi" ||
+    path === "/to-chuc/can-bo" ||
+    path.startsWith("/to-chuc/don-vi/") ||
+    path.startsWith("/to-chuc/can-bo/")
+  ) {
+    return user.permissions.includes("M02.view");
+  }
   if (path === "/quan-tri/vai-tro") {
     return (
       user.permissions.includes("M01.view") &&
