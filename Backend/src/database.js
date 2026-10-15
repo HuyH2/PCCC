@@ -17,9 +17,21 @@ export function transaction(db, work) {
   }
 }
 
+/** Case- and accent-insensitive form for Vietnamese search ("Đông Á" -> "dong a"). */
+export function foldSearchText(value) {
+  if (value == null) return null;
+  return String(value)
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase();
+}
+
 export function openDatabase(path = process.env.DATABASE_PATH || "./data/pccc.sqlite") {
   if (path !== ":memory:") mkdirSync(dirname(resolve(path)), { recursive: true });
   const db = new DatabaseSync(path);
+  db.function("fold", { deterministic: true }, foldSearchText);
   db.exec("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
   db.exec(
     "CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)",
