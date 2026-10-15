@@ -43,20 +43,43 @@ export function requireAdministrator(principal, permission = "M01.edit") {
   );
 }
 
+const unitDescendants = `WITH RECURSIVE descendants(id) AS (SELECT id FROM units WHERE id=?
+  UNION SELECT child.id FROM units child JOIN descendants d ON child.parent_id=d.id)
+  SELECT id FROM descendants`;
+
 /** Filter at SQL level, before count, pagination or detail lookup. Empty scope denies all. */
-export function facilityScope(principal) {
+function scopeFilter(principal, clauseForKind) {
   if (principal.scopes.some((s) => s.kind === "all")) return { sql: "1=1", params: [] };
   const clauses = [];
   const params = [];
   for (const scope of principal.scopes) {
-    if (scope.kind === "facility") clauses.push("f.id=?");
-    else if (scope.kind === "region") clauses.push("f.region_id=?");
-    else if (scope.kind === "unit")
-      clauses.push(`f.region_id IN (SELECT id FROM regions WHERE unit_id IN (
-      WITH RECURSIVE descendants(id) AS (SELECT id FROM units WHERE id=? UNION SELECT u.id FROM units u JOIN descendants d ON u.parent_id=d.id)
-      SELECT id FROM descendants))`);
-    else continue;
+    const clause = clauseForKind[scope.kind];
+    if (!clause) continue;
+    clauses.push(clause);
     params.push(scope.targetId);
   }
   return { sql: clauses.length ? `(${clauses.join(" OR ")})` : "0=1", params };
+}
+
+/** Facilities on alias f (facilities or facility_overview). */
+export function facilityScope(principal) {
+  return scopeFilter(principal, {
+    facility: "f.id=?",
+    region: "f.region_id=?",
+    unit: `f.region_id IN (SELECT id FROM regions WHERE unit_id IN (${unitDescendants}))`,
+  });
+}
+
+/** Regions on alias r: the regions that contain the caller's facilities. */
+export function regionScope(principal) {
+  return scopeFilter(principal, {
+    facility: "r.id IN (SELECT region_id FROM facilities WHERE id=?)",
+    region: "r.id=?",
+    unit: `r.unit_id IN (${unitDescendants})`,
+  });
+}
+
+/** Units on alias u: only unit-level grants expose units (and their sub-units). */
+export function unitScope(principal) {
+  return scopeFilter(principal, { unit: `u.id IN (${unitDescendants})` });
 }

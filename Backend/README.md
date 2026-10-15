@@ -44,25 +44,30 @@ Lần đầu hiển thị trang đổi mật khẩu với nút **Bỏ qua, đổ
 
 Response lỗi thống nhất: `{ "error": { "code": "FORBIDDEN", "message": "..." } }`.
 
-| Method | Path                                         | Điều kiện                                                   |
-| ------ | -------------------------------------------- | ----------------------------------------------------------- |
-| GET    | `/api/health`                                | Public, không trả thông tin nội bộ                          |
-| POST   | `/api/auth/login`                            | `{username,password}`; tài khoản và vai trò hoạt động       |
-| POST   | `/api/auth/logout`                           | Thu hồi session; idempotent                                 |
-| GET    | `/api/auth/me`                               | Session hợp lệ; trả identity, permissions, scopes           |
-| POST   | `/api/auth/change-password`                  | `{currentPassword,newPassword}`; session hợp lệ             |
-| GET    | `/api/authorization/roles`                   | A05 + all + M01.view                                        |
-| PUT    | `/api/authorization/roles/:role/permissions` | A05 + all + M01.edit; `{permissions:["M03.view"]}`          |
-| GET    | `/api/authorization/accounts`                | A05 + all + M01.view; phân trang                            |
-| GET    | `/api/authorization/accounts/:id`            | A05 + all + M01.view                                        |
-| PUT    | `/api/authorization/accounts/:id`            | A05 + all + M01.edit; role + scopes                         |
-| GET    | `/api/authorization/scope-options?kind=unit` | A05 + all + M01.view; kind unit/region/facility, phân trang |
-| GET    | `/api/audit-logs`                            | A05 + all + M01.view; chỉ đọc, phân trang                   |
-| GET    | `/api/facilities`                            | M03.view + lọc scope trước search/count/pagination          |
-| GET    | `/api/facilities/:id`                        | M03.view; ngoài scope trả 404                               |
-| GET    | `/api/dashboard`                             | M10.view + M03.view; count từ cùng truy vấn scope           |
+| Method | Path                                         | Điều kiện                                                                      |
+| ------ | -------------------------------------------- | ------------------------------------------------------------------------------ |
+| GET    | `/api/health`                                | Public, không trả thông tin nội bộ                                             |
+| POST   | `/api/auth/login`                            | `{username,password}`; tài khoản và vai trò hoạt động                          |
+| POST   | `/api/auth/logout`                           | Thu hồi session; idempotent                                                    |
+| GET    | `/api/auth/me`                               | Session hợp lệ; trả identity, permissions, scopes                              |
+| POST   | `/api/auth/change-password`                  | `{currentPassword,newPassword}`; session hợp lệ                                |
+| GET    | `/api/authorization/roles`                   | A05 + all + M01.view                                                           |
+| PUT    | `/api/authorization/roles/:role/permissions` | A05 + all + M01.edit; `{permissions:["M03.view"]}`                             |
+| GET    | `/api/authorization/accounts`                | A05 + all + M01.view; phân trang                                               |
+| GET    | `/api/authorization/accounts/:id`            | A05 + all + M01.view                                                           |
+| PUT    | `/api/authorization/accounts/:id`            | A05 + all + M01.edit; role + scopes                                            |
+| GET    | `/api/authorization/scope-options?kind=unit` | A05 + all + M01.view; kind unit/region/facility, phân trang                    |
+| GET    | `/api/audit-logs`                            | A05 + all + M01.view; chỉ đọc, phân trang                                      |
+| GET    | `/api/facilities`                            | M03.view + lọc scope trước search/count/pagination                             |
+| GET    | `/api/facilities/:id`                        | M03.view; ngoài scope trả 404                                                  |
+| GET    | `/api/dashboard`                             | M10.view + M03.view; `facilityCount`, `regionCount`, `officerCount` theo scope |
+| GET    | `/api/dashboard/facilities-by-region`        | M10.view + M03.view; số cơ sở theo khu vực, phân trang                         |
+| GET    | `/api/dashboard/facilities-by-officer`       | M10.view + M03.view; số cơ sở theo cán bộ, phân trang                          |
+| GET    | `/api/search?q=&limit=`                      | M10.view; tìm không dấu, nhóm kết quả theo loại và scope                       |
 
 Danh sách hỗ trợ `page` (mặc định 1), `pageSize` (mặc định 20, tối đa 100). Cơ sở hỗ trợ `search` tên/địa chỉ, tối đa 100 ký tự. Scope options phân trang để tra ID hợp lệ.
+
+Tra cứu và dashboard (UC-SYS-01/02, SCRUM-18): `q` 2–100 ký tự, `limit` 1–50 (mặc định 10) mỗi nhóm. Nhóm `facilities` và `officers` cần thêm M03.view, thiếu quyền thì nhóm bị bỏ khỏi kết quả; `regions` và `units` luôn lọc theo scope (scope khu vực/cơ sở không thấy đơn vị). Mọi số liệu đọc từ view `facility_overview` (migration 003) với cùng bộ lọc scope, nên tổng theo khu vực và theo cán bộ luôn bằng `facilityCount`. "Cán bộ" là `facilities.officer_id`; tên lấy từ view `officer_directory` (bảng `accounts`) cho đến khi tích hợp bảng cán bộ dùng chung, khi đó chỉ cần thay view này. Tìm kiếm dùng hàm SQLite `fold` (bỏ dấu, không phân biệt hoa thường) và quét toàn bảng; quy mô hàng nghìn cơ sở chưa cần index riêng.
 
 Ví dụ cấp phạm vi:
 

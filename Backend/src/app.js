@@ -9,6 +9,8 @@ import {
   scopesFor,
 } from "./authorization.js";
 import { updateAccountAuthorization, updateRolePermissions } from "./administration.js";
+import { dashboardSummary, facilitiesByOfficer, facilitiesByRegion } from "./dashboard.js";
+import { globalSearch } from "./search.js";
 import { object, pagination, text } from "./validation.js";
 
 function cookieToken(request) {
@@ -271,16 +273,13 @@ export function createApp(
           pageSize,
         });
       }
-      if (method === "GET" && path === "/api/dashboard") {
-        requirePermission(user, "M10.view");
-        requirePermission(user, "M03.view");
-        const scope = facilityScope(user);
-        return send(200, {
-          facilityCount: db
-            .prepare(`SELECT count(*) AS total FROM facilities f WHERE ${scope.sql}`)
-            .get(...scope.params).total,
-        });
-      }
+      if (method === "GET" && path === "/api/search") return send(200, globalSearch(db, user, url));
+      if (method === "GET" && path === "/api/dashboard")
+        return send(200, dashboardSummary(db, user));
+      if (method === "GET" && path === "/api/dashboard/facilities-by-region")
+        return send(200, facilitiesByRegion(db, user, pagination(url)));
+      if (method === "GET" && path === "/api/dashboard/facilities-by-officer")
+        return send(200, facilitiesByOfficer(db, user, pagination(url)));
       throw new ApiError(404, "NOT_FOUND", "API không tồn tại.");
     } catch (error) {
       if (error instanceof ApiError)

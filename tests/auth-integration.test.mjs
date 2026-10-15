@@ -118,6 +118,14 @@ test(
     assert.match(dashboardHtml, /Tra cứu toàn hệ thống/);
     assert.match(dashboardHtml, /Vi phạm - Đình chỉ/);
     assert.match(dashboardHtml, /Báo cáo - Deadline/);
+    assert.match(dashboardHtml, /Cơ sở theo cán bộ phụ trách/);
+    assert.match(dashboardHtml, /CB-A03/);
+    assert.doesNotMatch(dashboardHtml, /CB-OTHER/);
+    const search = await (await request("/api/search?q=mau", { cookie })).json();
+    assert.deepEqual(
+      search.groups.facilities.items.map((item) => item.id),
+      ["CS001"],
+    );
     const data = await (await request("/api/facilities", { cookie })).json();
     assert.equal(data.total, 1);
     assert.equal(data.items[0].id, "CS001");

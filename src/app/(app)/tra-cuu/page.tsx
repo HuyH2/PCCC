@@ -1,278 +1,283 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
+import type { LucideIcon } from "lucide-react";
 import {
-  Building2, ClipboardCheck, FileSpreadsheet, Scale, Search, ShieldAlert, Siren, Users,
+  AlertTriangle,
+  Building2,
+  Landmark,
+  Loader2,
+  Lock,
+  MapPinned,
+  Search,
+  Users,
 } from "lucide-react";
 
 import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
-import { StatusBadge } from "@/components/shared/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  baoCaoList, canBoList, canBoTheoId, coSoList, coSoTheoId, cuocKiemTraList,
-  khuVucTheoId, suCoList, vanBanList, viPhamList,
-} from "@/data/mock";
-import { deaccent, formatDate } from "@/lib/utils";
+  facilityStatusLabels,
+  unlinkedOfficerLabel,
+  type SearchGroup,
+  type SearchResponse,
+} from "@/lib/insights-contract";
+import { formatNumber } from "@/lib/utils";
 
-const GOI_Y = ["karaoke", "đình chỉ", "Hòa Hưng", "trạm xăng", "chung cư", "0903"];
+const MIN_LENGTH = 2;
+const MAX_LENGTH = 100;
+const RESULT_LIMIT = 20;
+const DEBOUNCE_MS = 300;
+
+type SearchState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "error"; forbidden: boolean; message: string }
+  | { kind: "done"; result: SearchResponse };
+
+type GroupKey = keyof SearchResponse["groups"];
+const groupMeta: Record<GroupKey, { label: string; icon: LucideIcon }> = {
+  facilities: { label: "Cơ sở", icon: Building2 },
+  officers: { label: "Cán bộ", icon: Users },
+  regions: { label: "Khu vực", icon: MapPinned },
+  units: { label: "Đơn vị", icon: Landmark },
+};
+const groupOrder: GroupKey[] = ["facilities", "officers", "regions", "units"];
+
+function ResultCard({
+  title,
+  code,
+  children,
+}: {
+  title: string;
+  code: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <Card className="gap-0 p-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className="font-semibold">{title}</span>
+        <span className="text-muted-foreground ml-auto font-mono text-xs">{code}</span>
+      </div>
+      {children && <div className="text-muted-foreground mt-0.5 text-[13px]">{children}</div>}
+    </Card>
+  );
+}
+
+function GroupFooter({ group }: { group: SearchGroup<unknown> }) {
+  if (group.total === 0)
+    return (
+      <p className="text-muted-foreground py-6 text-center text-sm">
+        Không có kết quả trong nhóm này.
+      </p>
+    );
+  if (group.total <= group.items.length) return null;
+  return (
+    <p className="text-muted-foreground text-xs">
+      Hiển thị {group.items.length}/{formatNumber(group.total)} kết quả. Nhập từ khóa cụ thể hơn để
+      thu hẹp.
+    </p>
+  );
+}
 
 export default function TrangTraCuu() {
-  const [tuKhoa, setTuKhoa] = React.useState("");
-  const q = deaccent(tuKhoa.trim());
-  const coTuKhoa = q.length >= 2;
+  const [keyword, setKeyword] = React.useState("");
+  const [state, setState] = React.useState<SearchState>({ kind: "idle" });
+  const query = keyword.trim();
 
-  const ketQua = React.useMemo(() => {
-    if (!coTuKhoa) return null;
-    return {
-      coSo: coSoList.filter(
-        (c) => deaccent(c.ten).includes(q) || deaccent(c.diaChi).includes(q) || c.ma.toLowerCase().includes(q) || deaccent(c.loaiHinh).includes(q),
-      ).slice(0, 30),
-      canBo: canBoList.filter(
-        (c) => deaccent(c.hoTen).includes(q) || deaccent(c.chucVu).includes(q) || c.ma.toLowerCase().includes(q) || c.dienThoai.replace(/\s/g, "").includes(q),
-      ),
-      viPham: viPhamList.filter((v) => {
-        const cs = coSoTheoId.get(v.coSoId);
-        return v.ma.toLowerCase().includes(q) || deaccent(v.loai).includes(q) || (cs ? deaccent(cs.ten).includes(q) : false);
-      }).slice(0, 20),
-      kiemTra: cuocKiemTraList.filter((k) => {
-        const cs = coSoTheoId.get(k.coSoId);
-        return k.ma.toLowerCase().includes(q) || (cs ? deaccent(cs.ten).includes(q) : false);
-      }).slice(0, 20),
-      suCo: suCoList.filter((s) => s.ma.toLowerCase().includes(q) || deaccent(s.diaChi).includes(q) || deaccent(s.nguyenNhan).includes(q)).slice(0, 20),
-      baoCao: baoCaoList.filter((b) => deaccent(b.ten).includes(q) || b.ma.toLowerCase().includes(q) || deaccent(b.noiNhan).includes(q)).slice(0, 20),
-      vanBan: vanBanList.filter((v) => deaccent(v.trichYeu).includes(q) || v.soKyHieu.toLowerCase().includes(q)),
+  React.useEffect(() => {
+    if (query.length < MIN_LENGTH) {
+      setState({ kind: "idle" });
+      return;
+    }
+    const controller = new AbortController();
+    setState({ kind: "loading" });
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(
+          `/api/search?q=${encodeURIComponent(query)}&limit=${RESULT_LIMIT}`,
+          { cache: "no-store", signal: controller.signal },
+        );
+        if (response.status === 401) {
+          window.location.assign("/dang-nhap");
+          return;
+        }
+        const data = await response.json();
+        if (!response.ok) {
+          setState({
+            kind: "error",
+            forbidden: response.status === 403,
+            message: data.error?.message || "Không thể tra cứu. Vui lòng thử lại.",
+          });
+          return;
+        }
+        setState({ kind: "done", result: data as SearchResponse });
+      } catch {
+        if (controller.signal.aborted) return;
+        setState({
+          kind: "error",
+          forbidden: false,
+          message: "Không kết nối được máy chủ. Vui lòng thử lại.",
+        });
+      }
+    }, DEBOUNCE_MS);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
     };
-  }, [q, coTuKhoa]);
+  }, [query]);
 
-  const tong = ketQua
-    ? ketQua.coSo.length + ketQua.canBo.length + ketQua.viPham.length + ketQua.kiemTra.length + ketQua.suCo.length + ketQua.baoCao.length + ketQua.vanBan.length
-    : 0;
+  const groups =
+    state.kind === "done" ? groupOrder.filter((key) => state.result.groups[key] !== undefined) : [];
+  const total =
+    state.kind === "done"
+      ? groups.reduce((sum, key) => sum + (state.result.groups[key]?.total ?? 0), 0)
+      : 0;
+  const firstWithResults =
+    state.kind === "done"
+      ? (groups.find((key) => (state.result.groups[key]?.total ?? 0) > 0) ?? groups[0])
+      : undefined;
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Tra cứu toàn hệ thống"
-        description="Tìm nhanh cơ sở, cán bộ, hồ sơ vi phạm, cuộc kiểm tra, sự cố, báo cáo và văn bản. Hỗ trợ tìm không dấu; kết quả được giới hạn theo phạm vi dữ liệu của người dùng."
+        description="Tìm nhanh cơ sở, cán bộ phụ trách, khu vực và đơn vị. Hỗ trợ tìm không dấu; kết quả chỉ gồm dữ liệu trong phạm vi được cấp cho tài khoản."
         module="M10"
         useCases={["UC-SYS-01"]}
       />
 
       <Card>
-        <CardContent className="space-y-3 pt-5">
+        <CardContent className="pt-5">
+          <label htmlFor="global-search" className="sr-only">
+            Từ khóa tra cứu
+          </label>
           <div className="relative">
             <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3.5 size-5 -translate-y-1/2" />
             <Input
+              id="global-search"
+              type="search"
               autoFocus
-              value={tuKhoa}
-              onChange={(e) => setTuKhoa(e.target.value)}
-              placeholder="Nhập tên cơ sở, địa chỉ, tên cán bộ, số điện thoại, mã hồ sơ…"
-              className="h-12 pl-11 text-base"
+              maxLength={MAX_LENGTH}
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              placeholder="Nhập tên/mã cơ sở, địa chỉ, tên/mã cán bộ, khu vực, đơn vị…"
+              className="h-12 pr-11 pl-11 text-base"
             />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-muted-foreground text-xs">Gợi ý:</span>
-            {GOI_Y.map((g) => (
-              <button
-                key={g}
-                onClick={() => setTuKhoa(g)}
-                className="border-border hover:border-primary hover:text-primary cursor-pointer rounded-full border px-2.5 py-0.5 text-xs transition-colors"
-              >
-                {g}
-              </button>
-            ))}
+            {state.kind === "loading" && (
+              <Loader2
+                aria-label="Đang tìm"
+                className="text-muted-foreground absolute top-1/2 right-3.5 size-5 -translate-y-1/2 animate-spin"
+              />
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {!coTuKhoa ? (
+      {state.kind === "idle" && (
         <Card>
           <CardContent className="py-14">
             <EmptyState
               icon={Search}
               title="Nhập từ khóa để bắt đầu tra cứu"
-              description="Cần ít nhất 2 ký tự. Hệ thống tìm đồng thời trên cơ sở, cán bộ, vi phạm, kiểm tra, sự cố, báo cáo và văn bản."
+              description={`Cần ít nhất ${MIN_LENGTH} ký tự. Hệ thống tìm đồng thời trên cơ sở, cán bộ, khu vực và đơn vị.`}
             />
           </CardContent>
         </Card>
-      ) : tong === 0 ? (
+      )}
+
+      {state.kind === "error" && (
+        <Card role="alert">
+          <CardContent className="py-14">
+            <EmptyState
+              icon={state.forbidden ? Lock : AlertTriangle}
+              title={
+                state.forbidden ? "Bạn chưa được cấp quyền tra cứu" : "Tra cứu không thành công"
+              }
+              description={state.message}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {state.kind === "done" && total === 0 && (
         <Card>
           <CardContent className="py-14">
             <EmptyState
-              title={`Không tìm thấy kết quả cho “${tuKhoa}”`}
-              description="Thử rút ngắn từ khóa hoặc bỏ dấu tiếng Việt."
+              title={`Không tìm thấy kết quả cho “${state.result.query}”`}
+              description="Thử rút ngắn từ khóa. Dữ liệu ngoài phạm vi được cấp sẽ không hiển thị."
             />
           </CardContent>
         </Card>
-      ) : (
+      )}
+
+      {state.kind === "done" && total > 0 && (
         <>
-          <p className="text-muted-foreground text-sm">
-            Tìm thấy <strong className="text-foreground font-semibold">{tong}</strong> kết quả cho{" "}
-            <strong className="text-foreground">“{tuKhoa}”</strong>
+          <p className="text-muted-foreground text-sm" aria-live="polite">
+            Tìm thấy{" "}
+            <strong className="text-foreground font-semibold">{formatNumber(total)}</strong> kết quả
+            cho <strong className="text-foreground">“{state.result.query}”</strong>
           </p>
 
-          <Tabs defaultValue="co-so">
+          <Tabs key={state.result.query} defaultValue={firstWithResults}>
             <TabsList className="flex-wrap">
-              <TabsTrigger value="co-so">
-                <Building2 /> Cơ sở
-                <Badge variant="secondary">{ketQua!.coSo.length}</Badge>
-              </TabsTrigger>
-              <TabsTrigger value="can-bo">
-                <Users /> Cán bộ
-                <Badge variant="secondary">{ketQua!.canBo.length}</Badge>
-              </TabsTrigger>
-              <TabsTrigger value="vi-pham">
-                <ShieldAlert /> Vi phạm
-                <Badge variant="secondary">{ketQua!.viPham.length}</Badge>
-              </TabsTrigger>
-              <TabsTrigger value="kiem-tra">
-                <ClipboardCheck /> Kiểm tra
-                <Badge variant="secondary">{ketQua!.kiemTra.length}</Badge>
-              </TabsTrigger>
-              <TabsTrigger value="su-co">
-                <Siren /> Sự cố
-                <Badge variant="secondary">{ketQua!.suCo.length}</Badge>
-              </TabsTrigger>
-              <TabsTrigger value="bao-cao">
-                <FileSpreadsheet /> Báo cáo
-                <Badge variant="secondary">{ketQua!.baoCao.length}</Badge>
-              </TabsTrigger>
-              <TabsTrigger value="van-ban">
-                <Scale /> Văn bản
-                <Badge variant="secondary">{ketQua!.vanBan.length}</Badge>
-              </TabsTrigger>
+              {groups.map((key) => {
+                const { label, icon: Icon } = groupMeta[key];
+                return (
+                  <TabsTrigger key={key} value={key}>
+                    <Icon /> {label}
+                    <Badge variant="secondary">{state.result.groups[key]?.total ?? 0}</Badge>
+                  </TabsTrigger>
+                );
+              })}
             </TabsList>
 
-            <TabsContent value="co-so" className="space-y-2">
-              {ketQua!.coSo.map((cs) => (
-                <Link key={cs.id} href={`/co-so/${cs.id}`}>
-                  <Card className="hover:border-primary/50 gap-0 p-3 transition-colors">
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                      <span className="font-semibold">{cs.ten}</span>
-                      <StatusBadge value={cs.trangThai} />
-                      <Badge variant="outline">{cs.loaiHinh}</Badge>
-                      <span className="text-muted-foreground ml-auto font-mono text-xs">{cs.ma}</span>
-                    </div>
-                    <p className="text-muted-foreground mt-0.5 text-[13px]">
-                      {cs.diaChi} · {khuVucTheoId.get(cs.khuVucId)?.ten} · CB:{" "}
-                      {canBoTheoId.get(cs.canBoPhuTrachId)?.hoTen}
-                    </p>
-                  </Card>
-                </Link>
+            {state.result.groups.facilities && (
+              <TabsContent value="facilities" className="space-y-2">
+                {state.result.groups.facilities.items.map((f) => (
+                  <ResultCard key={f.id} title={f.name} code={f.id}>
+                    {f.address} · {f.regionName} · CB: {f.officerName ?? f.officerId} ·{" "}
+                    {facilityStatusLabels[f.status] ?? f.status}
+                  </ResultCard>
+                ))}
+                <GroupFooter group={state.result.groups.facilities} />
+              </TabsContent>
+            )}
+
+            {state.result.groups.officers && (
+              <TabsContent value="officers" className="space-y-2">
+                {state.result.groups.officers.items.map((o) => (
+                  <ResultCard
+                    key={o.officerId}
+                    title={o.officerName ?? unlinkedOfficerLabel}
+                    code={o.officerId}
+                  >
+                    Phụ trách {formatNumber(o.facilityCount)} cơ sở trong phạm vi của bạn
+                  </ResultCard>
+                ))}
+                <GroupFooter group={state.result.groups.officers} />
+              </TabsContent>
+            )}
+
+            <TabsContent value="regions" className="space-y-2">
+              {state.result.groups.regions.items.map((r) => (
+                <ResultCard key={r.id} title={r.name} code={r.id}>
+                  Thuộc {r.unitName}
+                </ResultCard>
               ))}
+              <GroupFooter group={state.result.groups.regions} />
             </TabsContent>
 
-            <TabsContent value="can-bo" className="space-y-2">
-              {ketQua!.canBo.map((cb) => (
-                <Card key={cb.id} className="gap-0 p-3">
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <span className="font-semibold">{cb.hoTen}</span>
-                    <Badge variant="secondary">{cb.vaiTro}</Badge>
-                    <StatusBadge value={cb.trangThai} />
-                    <span className="text-muted-foreground ml-auto font-mono text-xs">{cb.ma}</span>
-                  </div>
-                  <p className="text-muted-foreground mt-0.5 text-[13px]">
-                    {cb.capBac} · {cb.chucVu} ·{" "}
-                    <a href={`tel:${cb.dienThoai.replace(/\s/g, "")}`} className="text-primary hover:underline">
-                      {cb.dienThoai}
-                    </a>
-                  </p>
-                </Card>
+            <TabsContent value="units" className="space-y-2">
+              {state.result.groups.units.items.map((u) => (
+                <ResultCard key={u.id} title={u.name} code={u.id}>
+                  {u.parentId ? `Đơn vị cấp trên: ${u.parentId}` : "Đơn vị cấp cao nhất"}
+                </ResultCard>
               ))}
-            </TabsContent>
-
-            <TabsContent value="vi-pham" className="space-y-2">
-              {ketQua!.viPham.map((v) => {
-                const cs = coSoTheoId.get(v.coSoId)!;
-                return (
-                  <Link key={v.id} href={`/co-so/${cs.id}`}>
-                    <Card className="hover:border-primary/50 gap-0 p-3 transition-colors">
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                        <span className="font-mono text-xs">{v.ma}</span>
-                        <span className="font-semibold">{cs.ten}</span>
-                        <StatusBadge value={v.trangThai} />
-                        <StatusBadge value={v.mucDo} />
-                      </div>
-                      <p className="text-muted-foreground mt-0.5 text-[13px]">
-                        {v.loai} · phát hiện {formatDate(v.ngayPhatHien)}
-                        {v.soQuyetDinh && ` · QĐ ${v.soQuyetDinh}`}
-                      </p>
-                    </Card>
-                  </Link>
-                );
-              })}
-            </TabsContent>
-
-            <TabsContent value="kiem-tra" className="space-y-2">
-              {ketQua!.kiemTra.map((k) => {
-                const cs = coSoTheoId.get(k.coSoId)!;
-                return (
-                  <Card key={k.id} className="gap-0 p-3">
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                      <span className="font-mono text-xs">{k.ma}</span>
-                      <span className="font-semibold">{cs.ten}</span>
-                      <StatusBadge value={k.loai} />
-                      <StatusBadge value={k.trangThai} />
-                    </div>
-                    <p className="text-muted-foreground mt-0.5 text-[13px]">
-                      Ngày {formatDate(k.ngayKiemTra)} · trưởng đoàn{" "}
-                      {canBoTheoId.get(k.truongDoanId)?.hoTen}
-                      {k.soBienBan && ` · biên bản ${k.soBienBan}`}
-                    </p>
-                  </Card>
-                );
-              })}
-            </TabsContent>
-
-            <TabsContent value="su-co" className="space-y-2">
-              {ketQua!.suCo.map((s) => (
-                <Card key={s.id} className="gap-0 p-3">
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <span className="font-mono text-xs">{s.ma}</span>
-                    <span className="font-semibold">{s.loai}</span>
-                    <StatusBadge value={s.trangThai} />
-                  </div>
-                  <p className="text-muted-foreground mt-0.5 text-[13px]">
-                    {s.diaChi} · {s.nguyenNhan}
-                  </p>
-                </Card>
-              ))}
-            </TabsContent>
-
-            <TabsContent value="bao-cao" className="space-y-2">
-              {ketQua!.baoCao.map((b) => (
-                <Card key={b.id} className="gap-0 p-3">
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <span className="font-mono text-xs">{b.ma}</span>
-                    <span className="font-semibold">{b.ten}</span>
-                    <StatusBadge value={b.trangThai} />
-                  </div>
-                  <p className="text-muted-foreground mt-0.5 text-[13px]">
-                    Nơi nhận: {b.noiNhan} · hạn {formatDate(b.hanNop)} · chu kỳ {b.chuKy.toLowerCase()}
-                  </p>
-                </Card>
-              ))}
-            </TabsContent>
-
-            <TabsContent value="van-ban" className="space-y-2">
-              {ketQua!.vanBan.map((v) => (
-                <Card key={v.id} className="gap-0 p-3">
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <span className="font-mono text-xs">{v.soKyHieu}</span>
-                    <span className="font-semibold">{v.trichYeu}</span>
-                    <Badge variant={v.conHieuLuc ? "success" : "muted"}>
-                      {v.conHieuLuc ? "Còn hiệu lực" : "Hết hiệu lực"}
-                    </Badge>
-                  </div>
-                  <p className="text-muted-foreground mt-0.5 text-[13px]">
-                    {v.loai} · {v.coQuanBanHanh} · hiệu lực từ {formatDate(v.ngayHieuLuc)}
-                  </p>
-                </Card>
-              ))}
+              <GroupFooter group={state.result.groups.units} />
             </TabsContent>
           </Tabs>
         </>

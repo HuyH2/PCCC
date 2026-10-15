@@ -63,7 +63,7 @@ test("migration persists, reopens idempotently, and enforces FK/unique/audit con
     await seedDemo(db, password);
     db.close();
     db = openDatabase(path);
-    assert.equal(db.prepare("SELECT count(*) AS n FROM schema_migrations").get().n, 1);
+    assert.equal(db.prepare("SELECT count(*) AS n FROM schema_migrations").get().n, 2);
     assert.equal(db.prepare("SELECT count(*) AS n FROM accounts").get().n, 6);
     assert.throws(() =>
       db.prepare("INSERT INTO role_permissions VALUES (?,?)").run("A99", "M03.view"),
