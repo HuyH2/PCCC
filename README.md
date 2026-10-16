@@ -1,5 +1,12 @@
 # Hệ thống Quản lý công tác PCCC & CNCH
 
+## Kho văn bản và nhật ký — UC-DOC-01, UC-DOC-02, UC-SYS-05
+
+`/van-ban` đã kết nối API: tìm kiếm/lọc, thêm/sửa/phân loại, xem chi tiết, tải PDF hoặc mở link,
+và xem lịch sử thay đổi. `/quan-tri/nhat-ky` đọc audit thật, lọc người dùng/thời gian/feature/thao tác.
+Xem [hướng dẫn migration, seed, quyền M05 và hợp đồng API](Backend/LEGAL_DOCUMENTS.md).
+Database có sẵn giữ nguyên quyền: quản trị cần cấp M05 qua màn hình vai trò nếu chưa được cấp.
+
 ## Authentication & Authorization — UC-ADM-01, UC-ADM-03
 
 Backend được triển khai riêng trong [`Backend`](Backend/README.md): Node.js >= 22.13, SQLite,
@@ -11,8 +18,8 @@ người 3 và API chi tiết được mô tả trong [`Backend/README.md`](Back
 Không còn đăng nhập nhanh bỏ qua mật khẩu hoặc session localStorage.
 
 Các trang đăng nhập, đổi mật khẩu và cấu hình vai trò/phạm vi đã nối API thật.
-Sidebar, dashboard `/`, trang `/co-so` và các màn hình nghiệp vụ giữ nguyên UI và dữ liệu
-mẫu của dự án. Chủ module cần nối các màn hình này với API kiểm soát quyền/phạm vi;
+Dashboard `/` và tra cứu đã nối API; trang `/co-so` và nhiều màn hình nghiệp vụ vẫn dùng dữ liệu
+mẫu của dự án. Chủ module cần nối các màn hình còn lại với API kiểm soát quyền/phạm vi;
 backend kiểm tra quyền độc lập trên các API hiện có. Quyền seed là cấu hình mẫu,
 chưa thay thế phê duyệt Q02.
 

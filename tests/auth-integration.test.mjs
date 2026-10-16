@@ -13,17 +13,27 @@ test(
     const db = openDatabase(":memory:");
     const password = "Integration-only-password";
     await seedDemo(db, password);
-    const origin = "http://localhost:3100";
+    const frontendPort = Number(process.env.PCCC_TEST_FRONTEND_PORT || 3100);
+    const backendPort = Number(process.env.PCCC_TEST_BACKEND_PORT || 4000);
+    const backendOrigin = `http://127.0.0.1:${backendPort}`;
+    const origin = `http://localhost:${frontendPort}`;
     const backend = createApp(db, { appOrigin: origin });
-    backend.listen(4000, "127.0.0.1");
+    backend.listen(backendPort, "127.0.0.1");
     await once(backend, "listening");
     let logs = "";
     const frontend = spawn(
       process.execPath,
-      ["node_modules/next/dist/bin/next", "start", "--hostname", "127.0.0.1", "--port", "3100"],
+      [
+        "node_modules/next/dist/bin/next",
+        "start",
+        "--hostname",
+        "127.0.0.1",
+        "--port",
+        String(frontendPort),
+      ],
       {
         cwd: process.cwd(),
-        env: { ...process.env, BACKEND_URL: "http://127.0.0.1:4000" },
+        env: { ...process.env, BACKEND_URL: backendOrigin },
         stdio: ["ignore", "pipe", "pipe"],
         windowsHide: true,
       },
@@ -43,7 +53,7 @@ test(
       await new Promise((resolve) => backend.close(resolve));
       db.close();
     });
-    const base = "http://127.0.0.1:3100";
+    const base = `http://127.0.0.1:${frontendPort}`;
     let ready = false;
     for (let i = 0; i < 100; i++) {
       if (frontend.exitCode !== null) throw new Error(logs);
@@ -142,6 +152,18 @@ test(
         .endsWith("/khong-co-quyen"),
     );
     assert.equal((await request("/tra-cuu", { cookie })).status, 200);
+    assert.equal((await request("/van-ban", { cookie })).status, 200);
+    assert.equal((await request("/van-ban/DEMO-DOC-1", { cookie })).status, 200);
+    assert.ok(
+      (await request("/van-ban/them", { cookie })).headers
+        .get("location")
+        .endsWith("/khong-co-quyen"),
+    );
+    assert.ok(
+      (await request("/quan-tri/nhat-ky", { cookie })).headers
+        .get("location")
+        .endsWith("/khong-co-quyen"),
+    );
     assert.equal((await request("/api/auth/logout", { method: "POST", cookie })).status, 200);
     assert.equal((await request("/api/auth/me", { cookie })).status, 401);
     assert.ok(
@@ -164,5 +186,52 @@ test(
     const adminPage = await request("/quan-tri/vai-tro", { cookie: adminCookie });
     assert.equal(adminPage.status, 200);
     assert.match(await adminPage.text(), /Vai trò &amp; phạm vi dữ liệu/);
+    const documentBody = {
+      category_id: "law",
+      title: "Văn bản tích hợp (mẫu)",
+      reference_number: "INTEGRATION-DOC",
+      issuing_authority: "Cơ quan mẫu",
+      effective_date: "2026-01-01",
+      status: "effective",
+      source_url: "https://example.org/",
+      file: {
+        name: "integration.pdf",
+        contentBase64: Buffer.from("%PDF-1.4\n%%EOF\n").toString("base64"),
+      },
+    };
+    const created = await request("/api/legal-documents", {
+      method: "POST",
+      cookie: adminCookie,
+      body: documentBody,
+    });
+    assert.equal(created.status, 201);
+    const document = (await created.json()).document;
+    const downloaded = await request(`/api/legal-documents/${document.id}/file`, {
+      cookie: adminCookie,
+    });
+    assert.equal(downloaded.status, 200);
+    assert.match(downloaded.headers.get("content-disposition"), /^attachment;/);
+    assert.equal(await downloaded.text(), "%PDF-1.4\n%%EOF\n");
+    for (const route of [
+      "/van-ban/them",
+      `/van-ban/${document.id}/sua`,
+      `/van-ban/${document.id}`,
+      "/quan-tri/nhat-ky",
+    ])
+      assert.equal((await request(route, { cookie: adminCookie })).status, 200, route);
+    const changed = await request(`/api/legal-documents/${document.id}`, {
+      method: "PUT",
+      cookie: adminCookie,
+      body: { ...documentBody, status: "expired", version: 1 },
+    });
+    assert.equal(changed.status, 200);
+    const history = await (
+      await request(`/api/legal-documents/${document.id}/history`, { cookie: adminCookie })
+    ).json();
+    assert.equal(history.total, 2);
+    const audit = await (
+      await request(`/api/audit-logs?feature=M05&objectId=${document.id}`, { cookie: adminCookie })
+    ).json();
+    assert.equal(audit.total, 2);
   },
 );

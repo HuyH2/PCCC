@@ -12,6 +12,18 @@ import { updateAccountAuthorization, updateRolePermissions } from "./administrat
 import { dashboardSummary, facilitiesByOfficer, facilitiesByRegion } from "./dashboard.js";
 import { globalSearch } from "./search.js";
 import { object, pagination, text } from "./validation.js";
+import { listAuditLogs } from "./audit.js";
+import {
+  documentCategories,
+  documentDetail,
+  documentHistory,
+  listDocuments,
+  saveDocument,
+  replaceDocumentFile,
+  requireDocumentAccess,
+  MAX_DOCUMENT_BYTES,
+  DOCUMENT_SIZE_MESSAGE,
+} from "./legal-documents.js";
 
 function cookieToken(request) {
   return (request.headers.cookie || "")
@@ -21,7 +33,7 @@ function cookieToken(request) {
     ?.slice(COOKIE_NAME.length + 1);
 }
 
-async function readJson(request) {
+async function readJson(request, limit = 16384) {
   assert(
     request.headers["content-type"]?.split(";")[0].trim() === "application/json",
     415,
@@ -32,7 +44,7 @@ async function readJson(request) {
   let size = 0;
   for await (const chunk of request) {
     size += chunk.length;
-    assert(size <= 16384, 413, "BODY_TOO_LARGE", "Dữ liệu gửi lên quá lớn.");
+    assert(size <= limit, 413, "BODY_TOO_LARGE", "Dữ liệu gửi lên quá lớn.");
     chunks.push(chunk);
   }
   try {
@@ -90,7 +102,10 @@ export function createApp(
       );
       if (request.method === "OPTIONS") {
         response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
-        response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+        response.setHeader(
+          "Access-Control-Allow-Headers",
+          "Content-Type, X-File-Name, X-Document-Version",
+        );
         response.statusCode = 204;
         response.end();
         return;
@@ -232,16 +247,96 @@ export function createApp(
         });
       }
       if (method === "GET" && path === "/api/audit-logs") {
-        requireAdministrator(user, "M01.view");
-        const { page, pageSize } = pagination(url);
-        return send(200, {
-          items: db
-            .prepare("SELECT * FROM audit_logs ORDER BY id DESC LIMIT ? OFFSET ?")
-            .all(pageSize, (page - 1) * pageSize),
-          total: db.prepare("SELECT count(*) AS total FROM audit_logs").get().total,
-          page,
-          pageSize,
-        });
+        return send(200, listAuditLogs(db, user, url));
+      }
+      if (method === "GET" && path === "/api/legal-document-categories")
+        return send(200, { items: documentCategories(db, user), maxFileBytes: MAX_DOCUMENT_BYTES });
+      if (path === "/api/legal-documents") {
+        if (method === "GET") return send(200, listDocuments(db, user, url));
+        if (method === "POST") {
+          requireDocumentAccess(user, "create");
+          return send(201, {
+            document: saveDocument(
+              db,
+              user,
+              await readJson(request, Math.ceil(MAX_DOCUMENT_BYTES / 3) * 4 + 20000),
+              null,
+              ip,
+            ),
+          });
+        }
+      }
+      const documentMatch = path.match(
+        /^\/api\/legal-documents\/([a-zA-Z0-9-]+)(?:\/(file|history))?$/,
+      );
+      if (documentMatch) {
+        const [, id, subresource] = documentMatch;
+        if (!subresource && method === "GET")
+          return send(200, { document: documentDetail(db, user, id) });
+        if (!subresource && method === "PUT") {
+          requireDocumentAccess(user, "edit");
+          return send(200, {
+            document: saveDocument(
+              db,
+              user,
+              await readJson(request, Math.ceil(MAX_DOCUMENT_BYTES / 3) * 4 + 20000),
+              id,
+              ip,
+            ),
+          });
+        }
+        if (subresource === "history" && method === "GET")
+          return send(200, documentHistory(db, user, id, url));
+        if (subresource === "file" && method === "GET") {
+          documentDetail(db, user, id);
+          const file = db
+            .prepare("SELECT file_name,file_data FROM legal_documents WHERE id=?")
+            .get(id);
+          assert(file.file_data, 404, "NOT_FOUND", "Văn bản không có file đính kèm.");
+          response.statusCode = 200;
+          response.setHeader("Content-Type", "application/pdf");
+          response.setHeader(
+            "Content-Disposition",
+            `attachment; filename="document.pdf"; filename*=UTF-8''${encodeURIComponent(file.file_name)}`,
+          );
+          response.setHeader("Content-Security-Policy", "sandbox; default-src 'none'");
+          response.end(Buffer.from(file.file_data));
+          return;
+        }
+        if (subresource === "file" && method === "POST") {
+          requireDocumentAccess(user, "edit");
+          documentDetail(db, user, id);
+          assert(
+            request.headers["content-type"] === "application/pdf",
+            415,
+            "UNSUPPORTED_MEDIA_TYPE",
+            "Yêu cầu file PDF.",
+          );
+          const chunks = [];
+          let size = 0;
+          for await (const chunk of request) {
+            size += chunk.length;
+            assert(size <= MAX_DOCUMENT_BYTES, 413, "FILE_TOO_LARGE", DOCUMENT_SIZE_MESSAGE);
+            chunks.push(chunk);
+          }
+          let name;
+          try {
+            name = decodeURIComponent(request.headers["x-file-name"] ?? "");
+          } catch {
+            throw new ApiError(400, "INVALID_INPUT", "Tên file không hợp lệ.");
+          }
+          return send(200, {
+            document: replaceDocumentFile(
+              db,
+              user,
+              id,
+              name,
+              Buffer.concat(chunks),
+              Number(request.headers["x-document-version"]),
+              ip,
+            ),
+          });
+        }
       }
       if (
         method === "GET" &&

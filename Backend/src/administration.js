@@ -1,7 +1,7 @@
 import { assert } from "./errors.js";
 import { object, text } from "./validation.js";
 import { requireAdministrator, permissionsFor, scopesFor } from "./authorization.js";
-import { audit } from "./authentication.js";
+import { audit } from "./audit.js";
 import { transaction } from "./database.js";
 
 function preserveAdministrator(db) {
