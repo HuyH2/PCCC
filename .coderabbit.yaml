@@ -1,0 +1,5 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# Chỉ review khi được gọi bằng comment trên PR: "@coderabbitai review" hoặc "@coderabbitai full review".
+reviews:
+  auto_review:
+    enabled: false

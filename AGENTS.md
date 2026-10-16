@@ -1,17 +1,8 @@
-<!-- BEGIN:nextjs-agent-rules -->
-
-# This is NOT the Next.js you know
-
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
-
-This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
-
-<!-- END:nextjs-agent-rules -->
-
 # Hướng dẫn agent cho PCCC & CNCH
 
 Áp dụng cho toàn repository. Đọc tài liệu này trước khi sửa; `CLAUDE.md` hiện tham chiếu tới đây.
-Giữ nguyên khối `nextjs-agent-rules` phía trên vì Next.js tự quản lý khối đó.
+Quy định riêng của Next.js (khối `nextjs-agent-rules` do `next dev` tự quản lý) nằm ở
+`pccc-FE/AGENTS.md`. Kiến trúc, cấu trúc thư mục và nhật ký feature xem `PROJECT.md`.
 
 ## Ngữ cảnh và nguồn yêu cầu
 
@@ -22,7 +13,7 @@ Giữ nguyên khối `nextjs-agent-rules` phía trên vì Next.js tự quản l�
   `AGENT.md`. URD được README nhắc tới nhưng chưa có trong cây file khảo sát; không khẳng định
   đã đọc URD nếu chưa truy cập được tài liệu thực tế.
 - Về trạng thái triển khai, kiểm chứng bằng source và test hiện tại. README và
-  `Backend/VERIFICATION.md` có thông tin lịch sử, không phải bằng chứng kiểm thử của lần làm việc mới.
+  `pccc-BE/VERIFICATION.md` có thông tin lịch sử, không phải bằng chứng kiểm thử của lần làm việc mới.
 - Không biến điểm “Cần xác nhận” thành quy tắc cứng. Q02 là ma trận quyền mẫu, Q04 là bộ trường
   đề xuất; yêu cầu xác nhận nếu quyết định còn thiếu ảnh hưởng lớn tới dữ liệu, quyền hoặc pháp lý.
 - Giữ các quyết định đã ghi nhận: mỗi khu phố/cơ sở có một cán bộ phụ trách (Q03), tài khoản nội bộ
@@ -30,26 +21,33 @@ Giữ nguyên khối `nextjs-agent-rules` phía trên vì Next.js tự quản l�
 
 ## Stack và bản đồ mã nguồn
 
-- Frontend: Next.js 16 App Router, React 19, TypeScript strict; npm và `package-lock.json`.
+Monorepo pnpm (`pnpm-workspace.yaml`) gồm hai ứng dụng; backend theo modular monolith.
+
+- Frontend `pccc-FE`: Next.js 16 App Router, React 19, TypeScript strict.
 - UI: Tailwind CSS v4, shadcn/ui + Radix, lucide-react, Recharts; form dùng react-hook-form + Zod.
-- Backend: JavaScript ESM, `node:http`, `node:sqlite` với `DatabaseSync`; Node.js >= 22.13.0.
+- Backend `pccc-BE`: JavaScript ESM, `node:http`, `node:sqlite` với `DatabaseSync`; Node.js >= 22.13.0.
   Backend hiện không có dependency riêng, ORM hoặc Express.
+- Package manager: pnpm (phiên bản ghim ở `packageManager` của `package.json` root), `pnpm-lock.yaml`.
+- Các đường dẫn `src/...` dưới đây (frontend) nằm trong `pccc-FE/`:
 - `src/app/(app)/`: các trang trong khung sidebar/header. Route group không xuất hiện trong URL.
 - `src/app/dang-nhap`, `doi-mat-khau`, `khong-co-quyen`: các luồng xác thực ngoài khung ứng dụng.
 - `src/proxy.ts`: kiểm tra session và điều hướng trước khi vào trang; không thay thế quyền ở API.
 - `src/lib/backend.ts`: server fetch chuyển cookie session, `currentUser`, `requirePage`.
-- `src/lib/auth-contract.ts`, `insights-contract.ts`: kiểu dữ liệu auth, scope, search/dashboard.
+- `src/lib/auth-contract.ts`, `insights-contract.ts`, `legal-document-contract.ts`: kiểu dữ liệu
+  auth, scope, search/dashboard, văn bản.
 - `src/lib/navigation.ts`: cây điều hướng, breadcrumb và ánh xạ phân hệ/use case.
 - `src/components/ui`, `shared`, `layout`, `forms`, `charts`: primitive và component tái sử dụng.
 - `src/data/types.ts`, `schemas.ts`: type nghiệp vụ và validation form; `mock.ts`, `thong-ke.ts`
   chứa dữ liệu/tổng hợp demo, không phải nguồn dữ liệu production.
-- `Backend/src/app.js`: HTTP router, validation request và phản hồi lỗi.
-- `Backend/src/authentication.js`, `authorization.js`, `administration.js`: session, RBAC,
-  scope và cập nhật cấu hình quyền; `search.js`, `dashboard.js`: truy vấn nghiệp vụ tương ứng.
-- `Backend/src/database.js`, `Backend/migrations/*.sql`: mở SQLite, transaction, migration.
-- `Backend/src/legal-documents.js`, `audit.js`: kho văn bản M05 và service audit chung.
-  Hợp đồng API, file PDF và quyền được mô tả trong `Backend/LEGAL_DOCUMENTS.md`.
-- `Backend/test/*.test.js`: kiểm thử bằng `node:test`, HTTP và SQLite; `tests/auth-integration.test.mjs`:
+- `pccc-BE/src/app.js`: HTTP server, middleware chung (CORS, Origin, session, lỗi) và bảng routes.
+- `pccc-BE/src/core/`: `database.js` (SQLite, transaction, migration), `errors.js`, `validation.js`,
+  `password.js`, `http.js` (`readJson`, `findRoute`), seed demo.
+- `pccc-BE/src/modules/<module>/`: `<module>.service.js` (logic, SQL, quyền/scope) và
+  `<module>.routes.js` (route HTTP). Module hiện có: `auth`, `authorization` (RBAC + scope dùng
+  chung), `administration`, `facilities`, `search`, `dashboard`, `audit` (service audit chung + nhật
+  ký), `legal-documents` (kho văn bản M05; hợp đồng API, PDF và quyền ở `pccc-BE/LEGAL_DOCUMENTS.md`).
+- `pccc-BE/migrations/*.sql`: migration theo thứ tự tên file.
+- `pccc-BE/test/*.test.js`: kiểm thử bằng `node:test`, HTTP và SQLite; `tests/auth-integration.test.mjs`:
   tích hợp frontend production với backend.
 
 ## Luồng dữ liệu và ranh giới triển khai
@@ -70,14 +68,14 @@ Giữ nguyên khối `nextjs-agent-rules` phía trên vì Next.js tự quản l�
 
 ## Môi trường và database
 
-- Frontend đọc `.env*` tại root; backend chạy với `--env-file-if-exists=.env` trong `Backend`.
+- Frontend đọc `.env*` trong `pccc-FE`; backend chạy với `--env-file-if-exists=.env` trong `pccc-BE`.
   Không ghi đè cấu hình có sẵn; chỉ tạo từ `.env.example` khi file đích chưa tồn tại.
 - Frontend dùng `BACKEND_URL`. Backend dùng `PORT`, `HOST`, `DATABASE_PATH`, `APP_ORIGIN`,
   `SESSION_TTL_SECONDS`, `COOKIE_SECURE`, `DEMO_PASSWORD`, `LEGAL_DOCUMENT_MAX_BYTES`; xem các file `.env.example`.
 - `DATABASE_URL`, `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`, `PGSSLMODE` đã có
   trong template để chuẩn bị PostgreSQL, nhưng hiện chưa được backend đọc. Thêm biến không chuyển
   database; nếu được giao chuyển PostgreSQL phải xử lý driver, query, migration, seed và test.
-- SQLite mặc định nằm ở `Backend/data/pccc.sqlite` khi chạy backend từ thư mục của nó.
+- SQLite mặc định nằm ở `pccc-BE/data/pccc.sqlite` (script backend chạy trong thư mục `pccc-BE`).
   Migration SQL được chạy theo tên đã sắp xếp, ghi nhận trong `schema_migrations`.
 - Thêm migration mới cho schema mới; không sửa migration đã phát hành. Dùng constraint,
   parameterized query và transaction cho nhiều thao tác ghi liên quan.
@@ -90,25 +88,25 @@ Giữ nguyên khối `nextjs-agent-rules` phía trên vì Next.js tự quản l�
 
 Chạy các lệnh sau tại root, trừ khi có ghi chú khác:
 
-| Mục đích                   | Lệnh / điều kiện                                          |
-| -------------------------- | --------------------------------------------------------- |
-| Cài dependency             | `npm ci`                                                  |
-| Frontend dev               | `npm run dev` — cổng 3000                                 |
-| Backend dev                | `npm --prefix Backend run dev` — cổng 4000                |
-| Khởi tạo schema            | `npm --prefix Backend run migrate`                        |
-| Seed demo local            | `npm --prefix Backend run seed`                           |
-| Kiểm format phạm vi script | `npm run format:check`                                    |
-| Format phạm vi script      | `npm run format:auth` — xem danh sách file trước khi dùng |
-| Lint                       | `npm run lint`                                            |
-| TypeScript                 | `npm run typecheck`                                       |
-| Backend syntax             | `npm --prefix Backend run check`                          |
-| Backend tests              | `npm test`                                                |
-| Frontend build             | `npm run build`                                           |
-| Frontend production        | `npm run start` — cần build và backend đang chạy          |
-| Tích hợp frontend/backend  | `npm run test:integration` — cần build trước              |
+| Mục đích                   | Lệnh / điều kiện                                       |
+| -------------------------- | ------------------------------------------------------ |
+| Cài dependency             | `pnpm install --frozen-lockfile`                       |
+| Frontend dev               | `pnpm dev:fe` — cổng 3000                              |
+| Backend dev                | `pnpm dev:be` — cổng 4000                              |
+| Khởi tạo schema            | `pnpm migrate`                                         |
+| Seed demo local            | `pnpm seed`                                            |
+| Kiểm format phạm vi script | `pnpm format:check`                                    |
+| Format phạm vi script      | `pnpm format:auth` — xem danh sách file trước khi dùng |
+| Lint                       | `pnpm lint`                                            |
+| TypeScript                 | `pnpm typecheck`                                       |
+| Backend syntax             | `pnpm check`                                           |
+| Backend tests              | `pnpm test`                                            |
+| Frontend build             | `pnpm build`                                           |
+| Frontend production        | `pnpm start:fe` — cần build và backend đang chạy       |
+| Tích hợp frontend/backend  | `pnpm test:integration` — cần build trước              |
 
 - `APP_ORIGIN` local mặc định là `http://localhost:3000`, phải khớp origin frontend chính xác.
-  Production yêu cầu HTTPS và `COOKIE_SECURE=true` theo `Backend/src/server.js`.
+  Production yêu cầu HTTPS và `COOKIE_SECURE=true` theo `pccc-BE/src/server.js`.
 - Integration test tự chạy backend in-memory trên 4000 và frontend production trên 3100.
   Kiểm tra cổng trước; không tự dừng tiến trình của người dùng để giải phóng cổng.
 - Build dùng Inter qua `next/font/google`; lần chưa có cache có thể cần mạng.
@@ -118,17 +116,17 @@ Chạy các lệnh sau tại root, trừ khi có ghi chú khác:
 
 ## Quy ước khi sửa code
 
-- Đọc guide tương ứng trong `node_modules/next/dist/docs/` trước khi thay đổi Next.js.
+- Đọc guide tương ứng trong `pccc-FE/node_modules/next/dist/docs/` trước khi thay đổi Next.js.
   Các guide liên quan thường gặp: `01-app/01-getting-started/05-server-and-client-components.md`,
   `01-app/01-getting-started/16-proxy.md`, `01-app/02-guides/environment-variables.md`.
   Nếu docs local chưa có, khôi phục dependency đúng lockfile trước khi dựa vào API mới.
 - Giữ Server Components cho đọc dữ liệu phía server; chỉ thêm `"use client"` khi cần tương tác.
-  Giữ cookie/credential và logic database ở server; dùng `src/proxy.ts` theo convention hiện tại.
-- Dùng alias `@/*` tới `src/*`, type/contract chung và component có sẵn. Theo convention từng file;
+  Giữ cookie/credential và logic database ở server; dùng `pccc-FE/src/proxy.ts` theo convention hiện tại.
+- Dùng alias `@/*` tới `pccc-FE/src/*`, type/contract chung và component có sẵn. Theo convention từng file;
   tránh reformat diện rộng. Prettier dùng double quote, printWidth 100, trailing comma.
-- Giữ giao diện và thông báo tiếng Việt có dấu, token trong `src/app/globals.css`, label form,
+- Giữ giao diện và thông báo tiếng Việt có dấu, token trong `pccc-FE/src/app/globals.css`, label form,
   keyboard/focus, responsive và loading/error/empty state khi lấy dữ liệu.
-- Validation Zod phía client phục vụ UX; backend vẫn validate độc lập trong `validation.js` và service.
+- Validation Zod phía client phục vụ UX; backend vẫn validate độc lập trong `core/validation.js` và service.
 - Quyền backend phải kết hợp permission và data scope (all/unit/region/facility), kèm trạng thái
   đối tượng khi nghiệp vụ áp dụng. Search, count, dashboard, export và lookup đều phải giữ scope.
 - Giữ session HttpOnly, kiểm Origin cho mutation, giới hạn request và audit hiện có.
@@ -168,4 +166,4 @@ hướng dẫn áp dụng không yêu cầu làm việc song song bằng agent.
   các kiểm thử runtime không liên quan đánh dấu `N/A`, không ghi PASS nếu chưa chạy.
 - Tự rà lại `RULES.md`, các mục liên quan trong `CHECKLIST.md` và diff cuối. Báo kết quả ngắn:
   thay đổi gì, file chính, kiểm chứng thực tế, self-check và giả định/blocker còn lại.
-  Không lấy kết quả trong `Backend/VERIFICATION.md` làm kết quả mới.
+  Không lấy kết quả trong `pccc-BE/VERIFICATION.md` làm kết quả mới.
