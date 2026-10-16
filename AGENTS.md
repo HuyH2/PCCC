@@ -45,7 +45,8 @@ Monorepo pnpm (`pnpm-workspace.yaml`) gồm hai ứng dụng; backend theo modul
 - `pccc-BE/src/modules/<module>/`: `<module>.service.js` (logic, SQL, quyền/scope) và
   `<module>.routes.js` (route HTTP). Module hiện có: `auth`, `authorization` (RBAC + scope dùng
   chung), `administration`, `facilities`, `search`, `dashboard`, `audit` (service audit chung + nhật
-  ký), `legal-documents` (kho văn bản M05; hợp đồng API, PDF và quyền ở `pccc-BE/LEGAL_DOCUMENTS.md`).
+  ký), `legal-documents` (kho văn bản M05; hợp đồng API, PDF và quyền ở `pccc-BE/LEGAL_DOCUMENTS.md`),
+  `inspections` (thực hiện kiểm tra M06; API, trạng thái và giả định ở `pccc-BE/INSPECTIONS.md`).
 - `pccc-BE/migrations/*.sql`: migration theo thứ tự tên file.
 - `pccc-BE/test/*.test.js`: kiểm thử bằng `node:test`, HTTP và SQLite; `tests/auth-integration.test.mjs`:
   tích hợp frontend production với backend.
@@ -71,7 +72,8 @@ Monorepo pnpm (`pnpm-workspace.yaml`) gồm hai ứng dụng; backend theo modul
 - Frontend đọc `.env*` trong `pccc-FE`; backend chạy với `--env-file-if-exists=.env` trong `pccc-BE`.
   Không ghi đè cấu hình có sẵn; chỉ tạo từ `.env.example` khi file đích chưa tồn tại.
 - Frontend dùng `BACKEND_URL`. Backend dùng `PORT`, `HOST`, `DATABASE_PATH`, `APP_ORIGIN`,
-  `SESSION_TTL_SECONDS`, `COOKIE_SECURE`, `DEMO_PASSWORD`, `LEGAL_DOCUMENT_MAX_BYTES`; xem các file `.env.example`.
+  `SESSION_TTL_SECONDS`, `COOKIE_SECURE`, `DEMO_PASSWORD`, `LEGAL_DOCUMENT_MAX_BYTES`,
+  `INSPECTION_DOCUMENT_MAX_BYTES`; xem các file `.env.example`.
 - `DATABASE_URL`, `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`, `PGSSLMODE` đã có
   trong template để chuẩn bị PostgreSQL, nhưng hiện chưa được backend đọc. Thêm biến không chuyển
   database; nếu được giao chuyển PostgreSQL phải xử lý driver, query, migration, seed và test.

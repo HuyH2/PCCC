@@ -91,7 +91,7 @@ export default function TrangCuocKiemTra() {
         actions={
           <>
             <Button variant="outline" size="sm" asChild>
-              <Link href="/van-ban">
+              <Link href="/kiem-tra/checklist">
                 <ClipboardList />
                 Checklist kiểm tra
               </Link>

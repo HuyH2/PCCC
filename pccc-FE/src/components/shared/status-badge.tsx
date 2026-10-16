@@ -36,6 +36,7 @@ const bangMau: Record<string, Variant> = {
   "Đã thông báo": "info",
   "Đã dời lịch": "warning",
   "Chờ biên bản": "warning",
+  "Đã đánh giá": "info",
   "Hoàn thành": "success",
   "Đạt": "success",
   "Đạt có điều kiện": "warning",

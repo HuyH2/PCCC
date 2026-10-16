@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDatabase } from "../src/core/database.js";
@@ -13,6 +13,9 @@ import { MAX_DOCUMENT_BYTES } from "../src/modules/legal-documents/legal-documen
 
 const password = "Documents-test-password-2026";
 const origin = "http://localhost:3000";
+const migrationCount = readdirSync(new URL("../migrations/", import.meta.url)).filter((f) =>
+  f.endsWith(".sql"),
+).length;
 const pdf = Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n");
 const payload = (extra = {}) => ({
   category_id: "law",
@@ -53,7 +56,7 @@ test("forward migration preserves pre-existing audit content and remains idempot
     assert.throws(() => db.exec("UPDATE audit_logs SET before_json='changed'"));
     db.close();
     db = openDatabase(path);
-    assert.equal(db.prepare("SELECT count(*) AS n FROM schema_migrations").get().n, 3);
+    assert.equal(db.prepare("SELECT count(*) AS n FROM schema_migrations").get().n, migrationCount);
     assert.equal(db.prepare("SELECT count(*) AS n FROM audit_logs").get().n, 1);
   } finally {
     db?.close();

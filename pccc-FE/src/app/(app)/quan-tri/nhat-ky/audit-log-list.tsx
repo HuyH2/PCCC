@@ -92,7 +92,7 @@ export function AuditLogList() {
               maxLength={100}
             />
             <datalist id="audit-features">
-              {["M05", "M01.auth", "M01.authorization", "system"].map((f) => (
+              {["M05", "M06", "M01.auth", "M01.authorization", "system"].map((f) => (
                 <option key={f} value={f} />
               ))}
             </datalist>

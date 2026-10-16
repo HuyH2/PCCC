@@ -7,6 +7,30 @@ và xem lịch sử thay đổi. `/quan-tri/nhat-ky` đọc audit thật, lọc 
 Xem [hướng dẫn migration, seed, quyền M05 và hợp đồng API](pccc-BE/LEGAL_DOCUMENTS.md).
 Database có sẵn giữ nguyên quyền: quản trị cần cấp M05 qua màn hình vai trò nếu chưa được cấp.
 
+## Thực hiện kiểm tra — UC-INS-06..09 (SCRUM-22)
+
+Luồng **Cuộc kiểm tra → Checklist → Biên bản → Kết quả → Kết luận → Hậu kiểm** đã nối API thật:
+`/kiem-tra/thuc-hien` (danh sách, tạo kiểm tra đột xuất/chuyên đề, màn hình thực hiện 4 tab) và
+`/kiem-tra/checklist` (checklist và hướng dẫn kiểm tra). API, trạng thái, quyền M06 và các giả định
+xem [pccc-BE/INSPECTIONS.md](pccc-BE/INSPECTIONS.md). Database đã có tài khoản giữ nguyên quyền:
+quản trị cần cấp `M06.view/create/edit` qua `/quan-tri/vai-tro`, hoặc tạo lại DB demo (mục 7).
+
+Thử nhanh sau khi chạy dự án (mục **Chạy dự án**), đăng nhập `demo.can-bo`:
+
+1. `/kiem-tra/checklist` — xem checklist và hướng dẫn. Tạo checklist mới bằng `demo.chi-huy` hoặc
+   `demo.to-truong` (nút **Tạo checklist**, trang `/kiem-tra/checklist/tao`); các vai trò khác không
+   thấy nút và API trả 403.
+2. `/kiem-tra/thuc-hien` → **Tạo kiểm tra đột xuất / chuyên đề** → chọn cơ sở, nhập lý do.
+3. Mở cuộc kiểm tra: tab **Checklist** chọn checklist → Bắt đầu → tick từng nội dung, ghi chú → **Lưu nháp** (vẫn sửa được) → **Chốt kết quả** (trạng thái "Đã đánh giá", checklist bị khóa);
+   tab **Biên bản & tài liệu** tải biên bản PDF (kèm số biên bản) và ảnh PNG/JPEG; tab **Kết luận**
+   chọn kết quả, nhập kết luận → Lưu → Hoàn thành (bị chặn nếu chưa chốt kết quả, thiếu kết luận
+   hoặc biên bản); tab **Hậu kiểm** tạo yêu cầu, tải bằng chứng khắc phục, cập nhật kết quả.
+4. Đăng nhập `demo.admin` → `/quan-tri/nhat-ky`, lọc feature `M06` để xem audit.
+
+Phạm vi mẫu: `demo.can-bo` (A03, khu phố KP01) chỉ thấy cơ sở CS001; `demo.to-truong` (A02) thấy
+CS001–CS002; `demo.chi-huy` (A01) tạo được cuộc kiểm tra/checklist nhưng không thực hiện; `demo.nguoi-xem` (A06) chỉ xem;
+`demo.admin` (A05) không có quyền M06. Ma trận này chỉ là mẫu (Q02).
+
 ## Authentication & Authorization — UC-ADM-01, UC-ADM-03
 
 Repo là monorepo pnpm gồm hai ứng dụng: frontend [`pccc-FE`](pccc-FE) (Next.js) và backend
@@ -37,11 +61,11 @@ của PC07 — Đội Khu vực 10, xây dựng theo `URD_He_thong_Quan_ly_PCCC_
 
 ### 1. Yêu cầu môi trường
 
-- Node.js **>= 22.13.0** và **pnpm 10** (phiên bản ghim trong `packageManager` của `package.json`).
-  Bật pnpm một lần bằng `corepack enable pnpm` (hoặc `npm install -g pnpm@10`), kiểm tra bằng
-  `node --version` và `pnpm --version`.
-- Mở terminal PowerShell tại **thư mục gốc repo**, nơi có `package.json`, `pccc-FE` và `pccc-BE`.
-  Mọi lệnh bên dưới đều chạy tại đây.
+- Node.js **>= 22.13.0** và **pnpm 10.34.7** (phiên bản ghim trong `packageManager` của
+  `package.json`). Cài pnpm một lần bằng `npm install -g pnpm@10.34.7` (hoặc `corepack enable pnpm`),
+  kiểm tra bằng `node --version` và `pnpm --version`. Nếu báo `pnpm: command not found`, xem mục 7.
+- Mở terminal (PowerShell trên Windows, Terminal/zsh trên macOS) tại **thư mục gốc repo**, nơi có
+  `package.json`, `pccc-FE` và `pccc-BE`. Mọi lệnh bên dưới đều chạy tại đây.
 - Giữ hai terminal chạy đồng thời: frontend ở cổng **3000**, backend ở cổng **4000**.
 - Database là SQLite, không cần cài MySQL/PostgreSQL hoặc chạy Docker. Backend dùng thư viện có sẵn
   trong Node.js, `pnpm install` ở root cài cho cả hai ứng dụng (pnpm workspace).
@@ -58,16 +82,24 @@ if (!(Test-Path pccc-FE/.env.local)) { Copy-Item pccc-FE/.env.example pccc-FE/.e
 if (!(Test-Path pccc-BE/.env)) { Copy-Item pccc-BE/.env.example pccc-BE/.env }
 ```
 
+Trên macOS/Linux (zsh/bash), thay hai dòng copy bằng (`-n` không ghi đè file đã có):
+
+```bash
+cp -n pccc-FE/.env.example pccc-FE/.env.local
+cp -n pccc-BE/.env.example pccc-BE/.env
+```
+
 Mở hai file vừa tạo trong IDE và kiểm tra:
 
-| File                 | Biến            | Giá trị khi chạy local                             |
-| -------------------- | --------------- | -------------------------------------------------- |
-| `pccc-FE/.env.local` | `BACKEND_URL`   | `http://127.0.0.1:4000`                            |
-| `pccc-BE/.env`       | `PORT`          | `4000`                                             |
-| `pccc-BE/.env`       | `APP_ORIGIN`    | `http://localhost:3000`                            |
-| `pccc-BE/.env`       | `DATABASE_PATH` | `./data/pccc.sqlite`                               |
-| `pccc-BE/.env`       | `COOKIE_SECURE` | `false`                                            |
-| `pccc-BE/.env`       | `DEMO_PASSWORD` | `PcccDemo@2026` — mật khẩu mẫu chung cho team test |
+| File                 | Biến                            | Giá trị khi chạy local                                                       |
+| -------------------- | ------------------------------- | ---------------------------------------------------------------------------- |
+| `pccc-FE/.env.local` | `BACKEND_URL`                   | `http://127.0.0.1:4000`                                                      |
+| `pccc-BE/.env`       | `PORT`                          | `4000`                                                                       |
+| `pccc-BE/.env`       | `APP_ORIGIN`                    | `http://localhost:3000`                                                      |
+| `pccc-BE/.env`       | `DATABASE_PATH`                 | `./data/pccc.sqlite`                                                         |
+| `pccc-BE/.env`       | `COOKIE_SECURE`                 | `false`                                                                      |
+| `pccc-BE/.env`       | `DEMO_PASSWORD`                 | `PcccDemo@2026` — mật khẩu mẫu chung cho team test                           |
+| `pccc-BE/.env`       | `INSPECTION_DOCUMENT_MAX_BYTES` | `5242880` — giới hạn file biên bản/tài liệu kiểm tra (byte), có thể bỏ trống |
 
 Lưu file cấu hình, sau đó tạo bảng và dữ liệu mẫu. Vẫn chạy tại thư mục gốc:
 
@@ -165,6 +197,10 @@ xem cấu hình chi tiết trong [`pccc-BE/README.md`](pccc-BE/README.md).
 | Đăng nhập trả lỗi nguồn yêu cầu/Origin                                    | Mở đúng `http://localhost:3000`; `APP_ORIGIN` phải khớp chính xác URL frontend, không có dấu `/` cuối.                                                                             |
 | Cổng 3000/4000 đang được sử dụng                                          | Dừng tiến trình cũ. Nếu đổi cổng frontend, cập nhật `APP_ORIGIN`; nếu đổi cổng backend, cập nhật `PORT` và `BACKEND_URL`. Khởi động lại cả hai phần; build lại nếu dùng bản build. |
 | Mật khẩu seed không đăng nhập được sau khi đã đổi mật khẩu                | Dùng mật khẩu mới. Sửa `DEMO_PASSWORD` hoặc seed lại không reset mật khẩu tài khoản hiện có.                                                                                       |
+| `pnpm: command not found`                                                 | Chạy `npm install -g pnpm@10.34.7` rồi mở lại terminal. Nếu `corepack enable` báo `EACCES ... .cache/node/corepack`, thư mục `~/.cache` đang thuộc `root`: dùng cách cài bằng npm. |
+| Trang kiểm tra báo không có quyền dù đã seed                              | DB tạo trước khi có M06 giữ nguyên quyền cũ. Cấp `M06.*` tại `/quan-tri/vai-tro` hoặc tạo lại DB demo (dòng dưới).                                                                 |
+| Muốn tạo lại DB demo (xóa toàn bộ dữ liệu local)                          | Dừng backend, xóa `pccc-BE/data/pccc.sqlite*` (PowerShell: `Remove-Item pccc-BE/data/pccc.sqlite*`; zsh: `rm -f pccc-BE/data/pccc.sqlite(N)`), rồi `pnpm migrate` và `pnpm seed`.  |
+| zsh báo `no matches found: pccc-BE/data/pccc.sqlite*`                     | Chưa có DB nên không có gì để xóa; bỏ qua và chạy tiếp `pnpm migrate`.                                                                                                             |
 
 ## Công nghệ
 
@@ -209,35 +245,40 @@ pccc-FE/src/
 
 ## Bản đồ màn hình ↔ URD
 
-| Đường dẫn                 | Phân hệ | Use Case                                                |
-| ------------------------- | ------- | ------------------------------------------------------- |
-| `/`                       | M10     | UC-SYS-02 — Dashboard điều hành (R01–R12)               |
-| `/tra-cuu`                | M10     | UC-SYS-01 — Tìm kiếm toàn hệ thống                      |
-| `/canh-bao`               | M10     | UC-SYS-03 — Chuông nhắc việc, cấu hình BR-07            |
-| `/to-chuc/don-vi`         | M02     | UC-ORG-01 — Cây tổ chức 4 cấp                           |
-| `/to-chuc/can-bo`         | M02     | UC-ORG-02 — Danh bạ cán bộ                              |
-| `/to-chuc/khu-vuc`        | M02     | UC-ORG-03 — Danh mục khu phố                            |
-| `/to-chuc/phan-cong`      | M02     | UC-ORG-03, UC-ADM-04 — Phân công & chuyển giao          |
-| `/co-so`                  | M03     | UC-FAC-01, UC-FAC-02 — Danh sách cơ sở                  |
-| `/co-so/them`             | M03     | UC-FAC-02 — Biểu mẫu tạo hồ sơ cơ sở                    |
-| `/co-so/[id]`             | M03     | UC-FAC-03..08 — Hồ sơ, điều kiện PCCC, nhân sự, lịch sử |
-| `/co-so/[id]/sua`         | M03     | UC-FAC-02 — Biểu mẫu cập nhật hồ sơ cơ sở               |
-| `/vi-pham`                | M04     | UC-VIO-01..05 — Vi phạm, đình chỉ, khắc phục            |
-| `/van-ban`                | M05     | UC-DOC-01, UC-DOC-02 — Kho văn bản/quy chuẩn            |
-| `/kiem-tra/ke-hoach`      | M06     | UC-INS-01, UC-INS-02 — Chỉ tiêu & nợ chỉ tiêu           |
-| `/kiem-tra/cuoc-kiem-tra` | M06     | UC-INS-03..08 — Hồ sơ cuộc kiểm tra                     |
-| `/cong-viec/lich`         | M07     | UC-WRK-01 — Lịch công tác 7 ngày                        |
-| `/cong-viec/giao-viec`    | M07     | UC-WRK-02, UC-WRK-03 — Giao việc & tiến độ              |
-| `/cong-viec/kpi`          | M07     | UC-WRK-04 — KPI & nợ chỉ tiêu                           |
-| `/cong-viec/giai-trinh`   | M07     | UC-WRK-05 — Yêu cầu/phản hồi giải trình                 |
-| `/bao-cao`                | M08     | UC-RPT-01..04 — Báo cáo & deadline                      |
-| `/su-co`                  | M09     | UC-INC-01..06 — Sự cố và thiệt hại                      |
-| `/tien-ich/import`        | M11     | UC-FAC-07, UC-SYS-04 — Import Excel có preview lỗi      |
-| `/tien-ich/export`        | M11     | UC-RPT-06 — Kết xuất R01–R12                            |
-| `/quan-tri/tai-khoan`     | M01     | UC-ADM-02 — Tài khoản                                   |
-| `/quan-tri/vai-tro`       | M01     | UC-ADM-03 — Ma trận quyền 7 vai trò × 11 phân hệ        |
-| `/quan-tri/nhat-ky`       | M01     | UC-SYS-05 — Nhật ký thao tác                            |
-| `/dang-nhap`              | M01     | UC-ADM-01 — Đăng nhập (layout riêng, ngoài sidebar)     |
+| Đường dẫn                  | Phân hệ | Use Case                                                |
+| -------------------------- | ------- | ------------------------------------------------------- |
+| `/`                        | M10     | UC-SYS-02 — Dashboard điều hành (R01–R12)               |
+| `/tra-cuu`                 | M10     | UC-SYS-01 — Tìm kiếm toàn hệ thống                      |
+| `/canh-bao`                | M10     | UC-SYS-03 — Chuông nhắc việc, cấu hình BR-07            |
+| `/to-chuc/don-vi`          | M02     | UC-ORG-01 — Cây tổ chức 4 cấp                           |
+| `/to-chuc/can-bo`          | M02     | UC-ORG-02 — Danh bạ cán bộ                              |
+| `/to-chuc/khu-vuc`         | M02     | UC-ORG-03 — Danh mục khu phố                            |
+| `/to-chuc/phan-cong`       | M02     | UC-ORG-03, UC-ADM-04 — Phân công & chuyển giao          |
+| `/co-so`                   | M03     | UC-FAC-01, UC-FAC-02 — Danh sách cơ sở                  |
+| `/co-so/them`              | M03     | UC-FAC-02 — Biểu mẫu tạo hồ sơ cơ sở                    |
+| `/co-so/[id]`              | M03     | UC-FAC-03..08 — Hồ sơ, điều kiện PCCC, nhân sự, lịch sử |
+| `/co-so/[id]/sua`          | M03     | UC-FAC-02 — Biểu mẫu cập nhật hồ sơ cơ sở               |
+| `/vi-pham`                 | M04     | UC-VIO-01..05 — Vi phạm, đình chỉ, khắc phục            |
+| `/van-ban`                 | M05     | UC-DOC-01, UC-DOC-02 — Kho văn bản/quy chuẩn            |
+| `/kiem-tra/ke-hoach`       | M06     | UC-INS-01, UC-INS-02 — Chỉ tiêu & nợ chỉ tiêu           |
+| `/kiem-tra/cuoc-kiem-tra`  | M06     | UC-INS-03..05 — Hồ sơ cuộc kiểm tra (dữ liệu mẫu)       |
+| `/kiem-tra/thuc-hien`      | M06     | UC-INS-07..09 — Thực hiện kiểm tra (API thật)           |
+| `/kiem-tra/thuc-hien/tao`  | M06     | UC-INS-09 — Tạo kiểm tra đột xuất/chuyên đề             |
+| `/kiem-tra/thuc-hien/[id]` | M06     | UC-INS-06..08 — Checklist, biên bản, kết luận, hậu kiểm |
+| `/kiem-tra/checklist`      | M06     | UC-INS-06 — Checklist và hướng dẫn kiểm tra             |
+| `/kiem-tra/checklist/tao`  | M06     | UC-INS-06 — Tạo checklist (Chỉ huy, Phó chỉ huy)        |
+| `/cong-viec/lich`          | M07     | UC-WRK-01 — Lịch công tác 7 ngày                        |
+| `/cong-viec/giao-viec`     | M07     | UC-WRK-02, UC-WRK-03 — Giao việc & tiến độ              |
+| `/cong-viec/kpi`           | M07     | UC-WRK-04 — KPI & nợ chỉ tiêu                           |
+| `/cong-viec/giai-trinh`    | M07     | UC-WRK-05 — Yêu cầu/phản hồi giải trình                 |
+| `/bao-cao`                 | M08     | UC-RPT-01..04 — Báo cáo & deadline                      |
+| `/su-co`                   | M09     | UC-INC-01..06 — Sự cố và thiệt hại                      |
+| `/tien-ich/import`         | M11     | UC-FAC-07, UC-SYS-04 — Import Excel có preview lỗi      |
+| `/tien-ich/export`         | M11     | UC-RPT-06 — Kết xuất R01–R12                            |
+| `/quan-tri/tai-khoan`      | M01     | UC-ADM-02 — Tài khoản                                   |
+| `/quan-tri/vai-tro`        | M01     | UC-ADM-03 — Ma trận quyền 7 vai trò × 11 phân hệ        |
+| `/quan-tri/nhat-ky`        | M01     | UC-SYS-05 — Nhật ký thao tác                            |
+| `/dang-nhap`               | M01     | UC-ADM-01 — Đăng nhập (layout riêng, ngoài sidebar)     |
 
 ## Quyết định đã chốt với người sử dụng
 
@@ -284,10 +325,11 @@ import/export, Q13 ở đăng nhập.
 
 ## Việc còn lại
 
-Các phân hệ ngoài Authentication & Authorization vẫn là **giao diện dùng dữ liệu mẫu tĩnh**. Để đưa vào vận hành cần:
+Các phân hệ ngoài các mục đã nối API ở trên vẫn là **giao diện dùng dữ liệu mẫu tĩnh**. Để đưa vào vận hành cần:
 
 1. Thay `src/data/mock.ts` bằng lớp gọi API thật (giữ nguyên kiểu trong `src/data/types.ts`).
 2. Nối `onSubmit` của các biểu mẫu nghiệp vụ vào API; dùng middleware xác thực/phân quyền và bộ lọc
    phạm vi trong `pccc-BE` để bảo vệ từng module trước khi mở route trong `src/lib/auth-contract.ts`.
-3. Bổ sung màn hình chi tiết còn thiếu: cuộc kiểm tra, sự cố, hồ sơ vi phạm, trao đổi theo công việc.
+3. Bổ sung màn hình chi tiết còn thiếu: sự cố, hồ sơ vi phạm, trao đổi theo công việc; nối kế hoạch/thông
+   báo/dời lịch kiểm tra (UC-INS-01..05) vào bảng `inspections` dùng chung.
 4. Chốt các điểm còn lại Q01, Q02, Q04–Q12, Q15 trước khi làm SRS/FSD.

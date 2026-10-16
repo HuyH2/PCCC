@@ -75,7 +75,7 @@ pccc/
 │   ├── next.config.ts, tsconfig.json, components.json, postcss.config.mjs
 │   └── .env.example         # BACKEND_URL
 ├── pccc-BE/                 # Backend Node.js API (package pccc-be)
-│   ├── migrations/          # 001-auth.sql, 003-search-dashboard.sql, 004-legal-documents-audit.sql … (không sửa migration đã phát hành)
+│   ├── migrations/          # 001-auth.sql, 003-search-dashboard.sql, 004-legal-documents-audit.sql, 005-inspections.sql, 006-inspection-checklist-authoring.sql, 007-inspection-results-submission.sql … (không sửa migration đã phát hành)
 │   ├── scripts/             # migrate.js, seed.js, check.js
 │   ├── src/
 │   │   ├── app.js           # Tạo HTTP server, middleware chung, đăng ký routes các module
@@ -89,7 +89,8 @@ pccc/
 │   │       ├── search/          # UC-SYS-01 tìm kiếm toàn hệ thống
 │   │       ├── dashboard/       # UC-SYS-02 dashboard
 │   │       ├── audit/           # Service audit dùng chung + UC-SYS-05 nhật ký hệ thống
-│   │       └── legal-documents/ # M05 kho văn bản pháp luật/quy chuẩn (UC-DOC-01/02)
+│   │       ├── legal-documents/ # M05 kho văn bản pháp luật/quy chuẩn (UC-DOC-01/02)
+│   │       └── inspections/     # M06 thực hiện kiểm tra, biên bản, kết luận, hậu kiểm (UC-INS-06..09)
 │   ├── test/                # *.test.js — chạy bằng `pnpm test`
 │   └── .env.example
 ├── tests/auth-integration.test.mjs  # Test tích hợp pccc-FE build + pccc-BE
@@ -119,7 +120,8 @@ PR và mỗi push vào `main`. PR phải xanh CI mới được merge.
 ## 5. Trạng thái hiện tại
 
 - **Đã nối API thật:** đăng nhập, đổi mật khẩu, cấu hình vai trò/phạm vi (`/quan-tri/vai-tro`),
-  dashboard `/`, tra cứu `/tra-cuu`, kho văn bản `/van-ban`, nhật ký `/quan-tri/nhat-ky`.
+  dashboard `/`, tra cứu `/tra-cuu`, kho văn bản `/van-ban`, nhật ký `/quan-tri/nhat-ky`,
+  thực hiện kiểm tra `/kiem-tra/thuc-hien`, checklist `/kiem-tra/checklist`.
 - **Còn dùng dữ liệu mẫu tĩnh:** các màn hình nghiệp vụ còn lại (`pccc-FE/src/data/mock.ts`); biểu mẫu chỉ
   log console + toast, điểm nối API ở `onSubmit`.
 - **Chưa chốt với người dùng:** Q01, Q02 (ma trận quyền — grants seed chỉ là mẫu), Q04–Q12, Q15.
@@ -189,6 +191,32 @@ Thêm mục mới **ở cuối** danh sách, theo mẫu ở §7.
   401 trước 404, dispatch đúng module). Toàn bộ 27 test backend + test tích hợp pass.
 - **Ghi chú:** `AGENTS.md` của Next.js chuyển vào `pccc-FE/` vì `next dev` sinh file này trong thư mục
   app.
+
+### F05 — Inspection Execution & Result Management (UC-INS-06, UC-INS-07, UC-INS-08, UC-INS-09 — SCRUM-22)
+
+- **Người làm / branch:** HUY — `feature/SCRUM-22-inspection-execution`
+- **Mô tả:** Luồng Cuộc kiểm tra → Checklist → Biên bản → Kết quả → Kết luận → Hậu kiểm trên cùng
+  `inspection_id`. Mở checklist và hướng dẫn theo loại cơ sở; tick từng nội dung + ghi chú; tải
+  biên bản/hình ảnh/tài liệu (PDF/JPEG/PNG); kết quả + kết luận; hoàn thành chỉ khi đủ nội dung bắt
+  buộc, kết luận và biên bản (BR-02); một yêu cầu hậu kiểm mở mỗi lúc; tạo kiểm tra đột xuất/chuyên
+  đề. Chỉ huy (A01) và Phó chỉ huy (A02) tạo checklist mới (UC-INS-06). Checklist có **Lưu nháp** và **Chốt kết quả** (chốt xong không sửa được, trạng thái "Đã đánh giá"). State `planned → in_progress → evaluated → completed`, khóa lạc quan bằng `version`, audit mọi mutation.
+- **Backend:** `migrations/005-inspections.sql`, `006-inspection-checklist-authoring.sql`, `007-inspection-results-submission.sql` (`inspections`, `inspection_checklists`,
+  `inspection_checklist_items`, `inspection_results`, `inspection_documents`,
+  `follow_up_inspections`); module `inspections`; seed `core/seed-inspections.js`; API
+  `/api/inspections*`, `/api/inspection-checklists*`. Quyền M06.view/create/edit + scope cơ sở;
+  tạo checklist cần M06.create + vai trò A01/A02 (`requireChecklistAuthor`).
+  Chi tiết ở [pccc-BE/INSPECTIONS.md](pccc-BE/INSPECTIONS.md).
+- **Frontend (`pccc-FE`):** `/kiem-tra/thuc-hien` (danh sách), `/kiem-tra/thuc-hien/tao` (đột
+  xuất/chuyên đề), `/kiem-tra/thuc-hien/[id]` (tab Checklist, Biên bản & tài liệu, Kết luận, Hậu
+  kiểm), `/kiem-tra/checklist`, `/kiem-tra/checklist/tao`; `src/lib/inspection-contract.ts`, `inspection-server.ts`; `canVisit`
+  và menu M06.
+- **Test:** `pccc-BE/test/inspections.test.js` (6 test: migration/seed idempotent + constraint,
+  luồng đầy đủ + audit, validate input/file/state/version, 401/403, scope list/detail/file/mutation
+  và scope rỗng, tạo checklist chỉ A01/A02 + validate/trùng tên/audit). Hai test cũ đổi số migration cứng thành đếm file `migrations/*.sql`.
+- **Ghi chú:** Repo chưa có bảng `inspections` của người 3 nên tạo bản tối thiểu làm điểm tích hợp
+  chung (người 3 mở rộng bằng migration mới). Checklist seed là mẫu (Q04); loại cơ sở chưa có trong
+  `facilities` nên lọc checklist qua tham số. Quyền M06 seed là mẫu (Q02) và không áp vào DB đã có
+  tài khoản. Màn hình `/kiem-tra/cuoc-kiem-tra` (UC-INS-03) vẫn là mock.
 
 ## 7. Quy tắc khi làm feature
 
