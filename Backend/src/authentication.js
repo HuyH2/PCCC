@@ -3,23 +3,11 @@ import { hashPassword, verifyPassword } from "./password.js";
 import { assert } from "./errors.js";
 import { permissionsFor, scopesFor } from "./authorization.js";
 import { transaction } from "./database.js";
+import { audit } from "./audit.js";
+export { audit } from "./audit.js";
 
 export const COOKIE_NAME = "pccc_session";
 export const tokenHash = (token) => createHash("sha256").update(token).digest("hex");
-
-export function audit(db, actor, action, object, before, after, ip) {
-  db.prepare(
-    "INSERT INTO audit_logs(actor_id,action,object_id,before_json,after_json,occurred_at,ip) VALUES (?,?,?,?,?,?,?)",
-  ).run(
-    actor,
-    action,
-    object,
-    before == null ? null : JSON.stringify(before),
-    after == null ? null : JSON.stringify(after),
-    Date.now(),
-    ip,
-  );
-}
 
 export function principalFor(db, account) {
   return {
