@@ -67,6 +67,8 @@ Response lỗi thống nhất: `{ "error": { "code": "FORBIDDEN", "message": "..
 | GET    | `/api/dashboard/facilities-by-officer`       | M10.view + M03.view; số cơ sở theo cán bộ, phân trang                          |
 | GET    | `/api/search?q=&limit=`                      | M10.view; tìm không dấu, nhóm kết quả theo loại và scope                       |
 
+API thực hiện kiểm tra M06 (`/api/inspections*`, `/api/inspection-checklists*`): xem [INSPECTIONS.md](INSPECTIONS.md).
+
 Danh sách hỗ trợ `page` (mặc định 1), `pageSize` (mặc định 20, tối đa 100). Cơ sở hỗ trợ `search` tên/địa chỉ, tối đa 100 ký tự. Scope options phân trang để tra ID hợp lệ.
 
 Tra cứu và dashboard (UC-SYS-01/02, SCRUM-18): `q` 2–100 ký tự, `limit` 1–50 (mặc định 10) mỗi nhóm. Nhóm `facilities` và `officers` cần thêm M03.view, thiếu quyền thì nhóm bị bỏ khỏi kết quả; `regions` và `units` luôn lọc theo scope (scope khu vực/cơ sở không thấy đơn vị). Mọi số liệu đọc từ view `facility_overview` (migration 003) với cùng bộ lọc scope, nên tổng theo khu vực và theo cán bộ luôn bằng `facilityCount`. "Cán bộ" là `facilities.officer_id`; tên lấy từ view `officer_directory` (bảng `accounts`) cho đến khi tích hợp bảng cán bộ dùng chung, khi đó chỉ cần thay view này. Tìm kiếm dùng hàm SQLite `fold` (bỏ dấu, không phân biệt hoa thường) và quét toàn bảng; quy mô hàng nghìn cơ sở chưa cần index riêng.
