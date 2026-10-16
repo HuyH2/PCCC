@@ -16,8 +16,8 @@ mẫu của dự án. Chủ module cần nối các màn hình này với API ki
 backend kiểm tra quyền độc lập trên các API hiện có. Quyền seed là cấu hình mẫu,
 chưa thay thế phê duyệt Q02.
 
-Kiểm tra: `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, sau đó
-`npm run test:integration`. Backend có thêm `npm --prefix Backend run check`.
+Kiểm tra: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, sau đó
+`pnpm test:integration`. Backend có thêm `pnpm --dir Backend run check`.
 
 Giao diện web (Next.js) cho **Hệ thống quản lý công tác phòng cháy, chữa cháy và cứu nạn, cứu hộ**
 của PC07 — Đội Khu vực 10, xây dựng theo `URD_He_thong_Quan_ly_PCCC_CNCH_PC07_v1.0.docx`.
@@ -29,18 +29,20 @@ của PC07 — Đội Khu vực 10, xây dựng theo `URD_He_thong_Quan_ly_PCCC_
 
 ### 1. Yêu cầu môi trường
 
-- Node.js **>= 22.13.0** và npm. Kiểm tra bằng `node --version` và `npm --version`.
+- Node.js **>= 22.13.0** và **pnpm 10** (phiên bản ghim trong `packageManager` của `package.json`).
+  Bật pnpm một lần bằng `corepack enable pnpm` (hoặc `npm install -g pnpm@10`), kiểm tra bằng
+  `node --version` và `pnpm --version`.
 - Mở terminal PowerShell tại **thư mục gốc repo**, nơi có `package.json` và thư mục `Backend`.
 - Giữ hai terminal chạy đồng thời: frontend ở cổng **3000**, backend ở cổng **4000**.
 - Database là SQLite, không cần cài MySQL/PostgreSQL hoặc chạy Docker. Backend dùng thư viện có sẵn
-  trong Node.js, không cần chạy `npm install` riêng trong `Backend`.
+  trong Node.js, không cần chạy `pnpm install` riêng trong `Backend`.
 
 ### 2. Chuẩn bị lần đầu
 
 Chạy tại thư mục gốc repo:
 
 ```powershell
-npm ci
+pnpm install --frozen-lockfile
 
 # Chỉ tạo file cấu hình nếu chưa có, tránh ghi đè cấu hình đang sử dụng.
 if (!(Test-Path .env.local)) { Copy-Item .env.example .env.local }
@@ -61,8 +63,8 @@ Mở hai file vừa tạo trong IDE và kiểm tra:
 Lưu file cấu hình, sau đó tạo bảng và dữ liệu mẫu. Vẫn chạy tại thư mục gốc:
 
 ```powershell
-npm --prefix Backend run migrate
-npm --prefix Backend run seed
+pnpm --dir Backend run migrate
+pnpm --dir Backend run seed
 ```
 
 Database được tạo ở `Backend/data/pccc.sqlite`. Không commit `.env`, `.env.local` hoặc database.
@@ -75,7 +77,7 @@ Mở terminal tại thư mục gốc repo:
 
 ```powershell
 cd Backend
-npm run dev
+pnpm dev
 ```
 
 Giữ terminal này chạy. Backend mặc định nghe tại `http://127.0.0.1:4000`.
@@ -86,7 +88,7 @@ Có thể mở `http://127.0.0.1:4000/api/health` để kiểm tra; kết quả 
 Mở **terminal mới tại thư mục gốc repo**, không phải bên trong `Backend`:
 
 ```powershell
-npm run dev
+pnpm dev
 ```
 
 Giữ cả hai terminal chạy và mở **http://localhost:3000/dang-nhap**.
@@ -122,13 +124,13 @@ hoặc seed lại dữ liệu.
 Các lệnh kiểm tra chạy tại thư mục gốc:
 
 ```powershell
-npm run format:check
-npm run lint
-npm run typecheck
-npm test
-npm --prefix Backend run check
-npm run build
-npm run test:integration
+pnpm format:check
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm --dir Backend run check
+pnpm build
+pnpm test:integration
 ```
 
 `test:integration` cần build frontend trước, tự mở/dừng server kiểm thử và dùng database in-memory.
@@ -138,11 +140,11 @@ Lần build chưa có cache font Inter cần kết nối Internet để tải fo
 Để kiểm tra frontend bản build ở local, giữ backend đang chạy, dừng frontend dev rồi chạy tại root:
 
 ```powershell
-npm run build
-npm run start
+pnpm build
+pnpm start
 ```
 
-Backend có thể chạy bằng `npm run start` trong thư mục `Backend` nếu không cần chế độ tự khởi động
+Backend có thể chạy bằng `pnpm start` trong thư mục `Backend` nếu không cần chế độ tự khởi động
 lại khi sửa mã. Triển khai production với `NODE_ENV=production` yêu cầu HTTPS và `COOKIE_SECURE=true`;
 xem cấu hình chi tiết trong [`Backend/README.md`](Backend/README.md).
 

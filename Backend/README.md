@@ -8,15 +8,15 @@ Backend riêng cho **UC-ADM-01** và **UC-ADM-03**, đối chiếu URD v1.0 và 
 cd Backend
 Copy-Item .env.example .env
 # .env.example đã có DEMO_PASSWORD=PcccDemo@2026 cho team test.
-npm run migrate
-npm run seed
-npm run dev
+pnpm migrate
+pnpm seed
+pnpm dev
 ```
 
 Terminal khác, tại root repo:
 
 ```powershell
-npm run dev
+pnpm dev
 ```
 
 Mở http://localhost:3000/dang-nhap. Backend mặc định http://127.0.0.1:4000, frontend proxy `/api/*` sang backend. Nếu đổi cổng/domain, đặt `APP_ORIGIN` của backend bằng origin frontend; `BACKEND_URL` của Next.js bằng URL backend và khởi động/build lại frontend. Không trộn `localhost` với `127.0.0.1` ở URL frontend vì Origin phải khớp chính xác.
@@ -125,12 +125,12 @@ Mã các màn hình nghiệp vụ tĩnh cũ vẫn được giữ. Chúng bị �
 
 ```powershell
 cd Backend
-npm run check
-npm test
+pnpm check
+pnpm test
 ```
 
 Kiểm thử thật qua HTTP với SQLite: migration persistence/idempotence/constraints, seed không ghi đè, login/password/status/rate-limit/CSRF, session hết hạn/thu hồi, RBAC, scopes (all/unit/region/facility/empty), search/count/dashboard/detail, transaction rollback khi mất admin cuối, audit trước/sau và cấm sửa log. Tests dùng password giả và database tạm, không thay DB đang chạy.
 
-Tại root: `npm run typecheck`, `npm run build`, `npm run test:integration` (sau build). Test tích hợp cần cổng 4000 và 3100 trống, tự chạy/dừng server và dùng DB in-memory. Backend JavaScript chạy trực tiếp; không có build/TypeScript compile riêng.
+Tại root: `pnpm typecheck`, `pnpm build`, `pnpm test:integration` (sau build). Test tích hợp cần cổng 4000 và 3100 trống, tự chạy/dừng server và dùng DB in-memory. Backend JavaScript chạy trực tiếp; không có build/TypeScript compile riêng.
 
 API bỏ qua: "POST /api/auth/skip-password-change", yêu cầu session đang hoạt động và Origin hợp lệ; không nhận ID tài khoản từ client. Audit: "auth.password_change_skipped".

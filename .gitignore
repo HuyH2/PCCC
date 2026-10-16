@@ -9,3 +9,7 @@ npm-debug.log*
 !.env.example
 next-env.d.ts
 *.tsbuildinfo
+
+# Dự án dùng pnpm (pnpm-lock.yaml); không commit lockfile của npm/yarn.
+package-lock.json
+yarn.lock

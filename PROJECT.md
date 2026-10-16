@@ -60,7 +60,7 @@ Backend/
 │   ├── dashboard.js     # UC-SYS-02
 │   ├── search.js        # UC-SYS-01
 │   ├── database.js, validation.js, errors.js, password.js, seed.js, server.js
-└── test/              # *.test.js — chạy bằng `npm test`
+└── test/              # *.test.js — chạy bằng `pnpm test`
 src/
 ├── app/(app)/         # Màn hình trong layout có sidebar (mỗi thư mục = 1 route)
 ├── app/dang-nhap, doi-mat-khau, khong-co-quyen
@@ -73,15 +73,15 @@ tests/auth-integration.test.mjs   # Test tích hợp frontend build + backend
 
 ## 4. Lệnh thường dùng (tại root)
 
-| Mục đích                  | Lệnh                                                                 |
-| ------------------------- | -------------------------------------------------------------------- |
-| Chạy dev                  | `cd Backend && npm run dev` + (terminal khác) `npm run dev`          |
-| Migration / seed          | `npm --prefix Backend run migrate` / `npm --prefix Backend run seed` |
-| Test backend              | `npm test`                                                           |
-| Kiểm tra backend          | `npm --prefix Backend run check`                                     |
-| Lint / typecheck / build  | `npm run lint` / `npm run typecheck` / `npm run build`               |
-| Test tích hợp (sau build) | `npm run test:integration`                                           |
-| Format                    | `npm run format:check`                                               |
+| Mục đích                  | Lệnh                                                             |
+| ------------------------- | ---------------------------------------------------------------- |
+| Chạy dev                  | `cd Backend && pnpm dev` + (terminal khác) `pnpm dev`            |
+| Migration / seed          | `pnpm --dir Backend run migrate` / `pnpm --dir Backend run seed` |
+| Test backend              | `pnpm test`                                                      |
+| Kiểm tra backend          | `pnpm --dir Backend run check`                                   |
+| Lint / typecheck / build  | `pnpm lint` / `pnpm typecheck` / `pnpm build`                    |
+| Test tích hợp (sau build) | `pnpm test:integration`                                          |
+| Format                    | `pnpm format:check`                                              |
 
 CI: [.github/workflows/ci.yml](.github/workflows/ci.yml) chạy toàn bộ các lệnh trên (Node 22) cho mỗi
 PR và mỗi push vào `main`. PR phải xanh CI mới được merge.
@@ -143,7 +143,7 @@ Bắt buộc với mọi feature mới (người hoặc AI agent):
    - Tối thiểu phải có: luồng chính đúng; validate input/edge case; **chưa đăng nhập → 401, thiếu
      quyền → 403**; **không trả dữ liệu ngoài scope**; audit nếu feature có mutation quan trọng.
    - Bug fix phải có regression test. Không sửa test để che bug (RULES R-1001..R-1005).
-3. **Chạy test thật** (`npm test`, cùng lint/typecheck/build nếu đụng frontend) và ghi kết quả vào
+3. **Chạy test thật** (`pnpm test`, cùng lint/typecheck/build nếu đụng frontend) và ghi kết quả vào
    báo cáo; chưa chạy thì ghi `NOT RUN`, không ghi `PASS`.
 
 Mẫu mục nhật ký:
