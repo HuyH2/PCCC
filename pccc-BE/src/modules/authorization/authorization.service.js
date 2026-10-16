@@ -1,4 +1,4 @@
-import { assert } from "./errors.js";
+import { assert } from "../../core/errors.js";
 
 export function permissionsFor(db, role) {
   return db

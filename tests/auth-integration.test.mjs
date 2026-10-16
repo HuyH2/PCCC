@@ -2,9 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { openDatabase } from "../Backend/src/database.js";
-import { seedDemo } from "../Backend/src/seed.js";
-import { createApp } from "../Backend/src/app.js";
+import { fileURLToPath } from "node:url";
+import { openDatabase } from "../pccc-BE/src/core/database.js";
+import { seedDemo } from "../pccc-BE/src/core/seed.js";
+import { createApp } from "../pccc-BE/src/app.js";
+
+const frontendDirectory = fileURLToPath(new URL("../pccc-FE/", import.meta.url));
 
 test(
   "Next frontend proxy + separate backend: login, first-password change, role navigation, scope and logout",
@@ -22,7 +25,7 @@ test(
       process.execPath,
       ["node_modules/next/dist/bin/next", "start", "--hostname", "127.0.0.1", "--port", "3100"],
       {
-        cwd: process.cwd(),
+        cwd: frontendDirectory,
         env: { ...process.env, BACKEND_URL: "http://127.0.0.1:4000" },
         stdio: ["ignore", "pipe", "pipe"],
         windowsHide: true,

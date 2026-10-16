@@ -3,7 +3,9 @@ import globals from "globals";
 import reactHooks from "eslint-plugin-react-hooks";
 
 export default [
-  { ignores: ["node_modules/**", ".next/**", "Backend/data/**", "next-env.d.ts"] },
+  {
+    ignores: ["**/node_modules/**", "pccc-FE/.next/**", "pccc-BE/data/**", "pccc-FE/next-env.d.ts"],
+  },
   {
     files: ["**/*.js", "**/*.mjs", "**/*.ts", "**/*.tsx"],
     languageOptions: {

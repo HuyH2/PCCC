@@ -1,8 +1,8 @@
 import { createHash, randomBytes } from "node:crypto";
-import { hashPassword, verifyPassword } from "./password.js";
-import { assert } from "./errors.js";
-import { permissionsFor, scopesFor } from "./authorization.js";
-import { transaction } from "./database.js";
+import { hashPassword, verifyPassword } from "../../core/password.js";
+import { assert } from "../../core/errors.js";
+import { permissionsFor, scopesFor } from "../authorization/authorization.service.js";
+import { transaction } from "../../core/database.js";
 
 export const COOKIE_NAME = "pccc_session";
 export const tokenHash = (token) => createHash("sha256").update(token).digest("hex");

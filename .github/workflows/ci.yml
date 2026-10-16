@@ -21,12 +21,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Phiên bản pnpm lấy từ trường "packageManager" trong package.json.
+      # Phiên bản pnpm lấy từ trường "packageManager" trong package.json ở root.
       - uses: pnpm/action-setup@v6
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22 # Backend yêu cầu Node >= 22.13 (node:sqlite)
+          node-version: 22 # pccc-BE yêu cầu Node >= 22.13 (node:sqlite)
           cache: pnpm
 
       - name: Install dependencies
@@ -41,13 +41,13 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Backend tests
+      - name: Backend tests (pccc-BE)
         run: pnpm test
 
-      - name: Backend check
-        run: pnpm --dir Backend run check
+      - name: Backend syntax check (pccc-BE)
+        run: pnpm check
 
-      - name: Build frontend
+      - name: Build frontend (pccc-FE)
         run: pnpm build
 
       # Cần build trước; tự chạy backend (4000) + frontend (3100) với DB in-memory.

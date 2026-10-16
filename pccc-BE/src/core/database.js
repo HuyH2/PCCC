@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const migrationDirectory = fileURLToPath(new URL("../migrations/", import.meta.url));
+const migrationDirectory = fileURLToPath(new URL("../../migrations/", import.meta.url));
 
 export function transaction(db, work) {
   db.exec("BEGIN IMMEDIATE");

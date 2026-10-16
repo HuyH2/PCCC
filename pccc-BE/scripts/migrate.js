@@ -1,4 +1,4 @@
-import { openDatabase } from "../src/database.js";
+import { openDatabase } from "../src/core/database.js";
 const db = openDatabase();
 console.info(
   "Migrations applied:",

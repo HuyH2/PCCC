@@ -1,8 +1,12 @@
-import { assert } from "./errors.js";
-import { object, text } from "./validation.js";
-import { requireAdministrator, permissionsFor, scopesFor } from "./authorization.js";
-import { audit } from "./authentication.js";
-import { transaction } from "./database.js";
+import { assert } from "../../core/errors.js";
+import { object, text } from "../../core/validation.js";
+import {
+  requireAdministrator,
+  permissionsFor,
+  scopesFor,
+} from "../authorization/authorization.service.js";
+import { audit } from "../auth/auth.service.js";
+import { transaction } from "../../core/database.js";
 
 function preserveAdministrator(db) {
   const row = db
@@ -145,4 +149,63 @@ export function updateAccountAuthorization(db, principal, id, payload, ip) {
       ip,
     );
   });
+}
+
+const ACCOUNT_COLUMNS = "id,username,full_name,officer_id,role_code,status,must_change_password";
+const SCOPE_TABLES = { unit: "units", region: "regions", facility: "facilities" };
+
+export function listRoles(db) {
+  return {
+    roles: db
+      .prepare("SELECT * FROM roles ORDER BY code")
+      .all()
+      .map((r) => ({ ...r, permissions: permissionsFor(db, r.code) })),
+    permissions: db.prepare("SELECT * FROM permissions ORDER BY code").all(),
+  };
+}
+
+export function findAccount(db, id) {
+  return db.prepare(`SELECT ${ACCOUNT_COLUMNS} FROM accounts WHERE id=?`).get(id);
+}
+
+export function listAccounts(db, { page, pageSize }) {
+  return {
+    items: db
+      .prepare(
+        "SELECT id,username,full_name,role_code,status FROM accounts ORDER BY username LIMIT ? OFFSET ?",
+      )
+      .all(pageSize, (page - 1) * pageSize),
+    total: db.prepare("SELECT count(*) AS total FROM accounts").get().total,
+    page,
+    pageSize,
+  };
+}
+
+export function listScopeOptions(db, kind, { page, pageSize }) {
+  assert(
+    Object.hasOwn(SCOPE_TABLES, kind),
+    400,
+    "INVALID_INPUT",
+    "kind phải là unit, region hoặc facility.",
+  );
+  const table = SCOPE_TABLES[kind];
+  return {
+    items: db
+      .prepare(`SELECT id,name FROM ${table} ORDER BY id LIMIT ? OFFSET ?`)
+      .all(pageSize, (page - 1) * pageSize),
+    total: db.prepare(`SELECT count(*) AS total FROM ${table}`).get().total,
+    page,
+    pageSize,
+  };
+}
+
+export function listAuditLogs(db, { page, pageSize }) {
+  return {
+    items: db
+      .prepare("SELECT * FROM audit_logs ORDER BY id DESC LIMIT ? OFFSET ?")
+      .all(pageSize, (page - 1) * pageSize),
+    total: db.prepare("SELECT count(*) AS total FROM audit_logs").get().total,
+    page,
+    pageSize,
+  };
 }

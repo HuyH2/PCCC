@@ -1,6 +1,11 @@
-import { assert } from "./errors.js";
-import { facilityScope, regionScope, requirePermission, unitScope } from "./authorization.js";
-import { foldSearchText } from "./database.js";
+import { assert } from "../../core/errors.js";
+import {
+  facilityScope,
+  regionScope,
+  requirePermission,
+  unitScope,
+} from "../authorization/authorization.service.js";
+import { foldSearchText } from "../../core/database.js";
 
 function searchInput(url) {
   const query = (url.searchParams.get("q") ?? "").trim();

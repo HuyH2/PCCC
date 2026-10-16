@@ -1,5 +1,5 @@
-import { openDatabase } from "../src/database.js";
-import { seedDemo } from "../src/seed.js";
+import { openDatabase } from "../src/core/database.js";
+import { seedDemo } from "../src/core/seed.js";
 const db = openDatabase();
 try {
   await seedDemo(db, process.env.DEMO_PASSWORD);

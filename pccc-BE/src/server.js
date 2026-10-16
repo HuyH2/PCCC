@@ -1,4 +1,4 @@
-import { openDatabase } from "./database.js";
+import { openDatabase } from "./core/database.js";
 import { createApp } from "./app.js";
 
 const production = process.env.NODE_ENV === "production";
@@ -15,7 +15,7 @@ const server = createApp(db, {
 });
 const port = Number(process.env.PORT || 4000);
 server.listen(port, process.env.HOST || "127.0.0.1", () => {
-  console.info(`PCCC Backend listening on port ${port}`);
+  console.info(`PCCC pccc-BE listening on port ${port}`);
 });
 for (const signal of ["SIGINT", "SIGTERM"])
   process.on(signal, () =>

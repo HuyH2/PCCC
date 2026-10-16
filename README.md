@@ -2,12 +2,13 @@
 
 ## Authentication & Authorization — UC-ADM-01, UC-ADM-03
 
-Backend được triển khai riêng trong [`Backend`](Backend/README.md): Node.js >= 22.13, SQLite,
+Repo là monorepo pnpm gồm hai ứng dụng: frontend [`pccc-FE`](pccc-FE) (Next.js) và backend
+[`pccc-BE`](pccc-BE/README.md) (modular monolith, xem [PROJECT.md](PROJECT.md)). Backend: Node.js >= 22.13, SQLite,
 session cookie HttpOnly, RBAC và phạm vi đơn vị/khu phố/cơ sở. Có migration, seed vai trò,
 audit đăng nhập/thay đổi quyền và kiểm thử HTTP.
 
 Hướng dẫn khởi chạy cả hai phần nằm ở mục **Chạy dự án** bên dưới. Hợp đồng bảng `accounts` cho
-người 3 và API chi tiết được mô tả trong [`Backend/README.md`](Backend/README.md).
+người 3 và API chi tiết được mô tả trong [`pccc-BE/README.md`](pccc-BE/README.md).
 Không còn đăng nhập nhanh bỏ qua mật khẩu hoặc session localStorage.
 
 Các trang đăng nhập, đổi mật khẩu và cấu hình vai trò/phạm vi đã nối API thật.
@@ -17,13 +18,13 @@ backend kiểm tra quyền độc lập trên các API hiện có. Quyền seed 
 chưa thay thế phê duyệt Q02.
 
 Kiểm tra: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, sau đó
-`pnpm test:integration`. Backend có thêm `pnpm --dir Backend run check`.
+`pnpm test:integration`. Backend có thêm `pnpm check`.
 
 Giao diện web (Next.js) cho **Hệ thống quản lý công tác phòng cháy, chữa cháy và cứu nạn, cứu hộ**
 của PC07 — Đội Khu vực 10, xây dựng theo `URD_He_thong_Quan_ly_PCCC_CNCH_PC07_v1.0.docx`.
 
 > ⚠️ **Bản demo dùng dữ liệu mẫu.** Theo NFR-02 và BR-12 của URD, môi trường demo chỉ được dùng dữ
-> liệu mẫu hoặc dữ liệu đã xử lý. Toàn bộ số liệu trong `src/data/mock.ts` là hư cấu.
+> liệu mẫu hoặc dữ liệu đã xử lý. Toàn bộ số liệu trong `pccc-FE/src/data/mock.ts` là hư cấu.
 
 ## Chạy dự án
 
@@ -32,10 +33,11 @@ của PC07 — Đội Khu vực 10, xây dựng theo `URD_He_thong_Quan_ly_PCCC_
 - Node.js **>= 22.13.0** và **pnpm 10** (phiên bản ghim trong `packageManager` của `package.json`).
   Bật pnpm một lần bằng `corepack enable pnpm` (hoặc `npm install -g pnpm@10`), kiểm tra bằng
   `node --version` và `pnpm --version`.
-- Mở terminal PowerShell tại **thư mục gốc repo**, nơi có `package.json` và thư mục `Backend`.
+- Mở terminal PowerShell tại **thư mục gốc repo**, nơi có `package.json`, `pccc-FE` và `pccc-BE`.
+  Mọi lệnh bên dưới đều chạy tại đây.
 - Giữ hai terminal chạy đồng thời: frontend ở cổng **3000**, backend ở cổng **4000**.
 - Database là SQLite, không cần cài MySQL/PostgreSQL hoặc chạy Docker. Backend dùng thư viện có sẵn
-  trong Node.js, không cần chạy `pnpm install` riêng trong `Backend`.
+  trong Node.js, `pnpm install` ở root cài cho cả hai ứng dụng (pnpm workspace).
 
 ### 2. Chuẩn bị lần đầu
 
@@ -45,29 +47,29 @@ Chạy tại thư mục gốc repo:
 pnpm install --frozen-lockfile
 
 # Chỉ tạo file cấu hình nếu chưa có, tránh ghi đè cấu hình đang sử dụng.
-if (!(Test-Path .env.local)) { Copy-Item .env.example .env.local }
-if (!(Test-Path Backend/.env)) { Copy-Item Backend/.env.example Backend/.env }
+if (!(Test-Path pccc-FE/.env.local)) { Copy-Item pccc-FE/.env.example pccc-FE/.env.local }
+if (!(Test-Path pccc-BE/.env)) { Copy-Item pccc-BE/.env.example pccc-BE/.env }
 ```
 
 Mở hai file vừa tạo trong IDE và kiểm tra:
 
-| File           | Biến            | Giá trị khi chạy local                             |
-| -------------- | --------------- | -------------------------------------------------- |
-| `.env.local`   | `BACKEND_URL`   | `http://127.0.0.1:4000`                            |
-| `Backend/.env` | `PORT`          | `4000`                                             |
-| `Backend/.env` | `APP_ORIGIN`    | `http://localhost:3000`                            |
-| `Backend/.env` | `DATABASE_PATH` | `./data/pccc.sqlite`                               |
-| `Backend/.env` | `COOKIE_SECURE` | `false`                                            |
-| `Backend/.env` | `DEMO_PASSWORD` | `PcccDemo@2026` — mật khẩu mẫu chung cho team test |
+| File                 | Biến            | Giá trị khi chạy local                             |
+| -------------------- | --------------- | -------------------------------------------------- |
+| `pccc-FE/.env.local` | `BACKEND_URL`   | `http://127.0.0.1:4000`                            |
+| `pccc-BE/.env`       | `PORT`          | `4000`                                             |
+| `pccc-BE/.env`       | `APP_ORIGIN`    | `http://localhost:3000`                            |
+| `pccc-BE/.env`       | `DATABASE_PATH` | `./data/pccc.sqlite`                               |
+| `pccc-BE/.env`       | `COOKIE_SECURE` | `false`                                            |
+| `pccc-BE/.env`       | `DEMO_PASSWORD` | `PcccDemo@2026` — mật khẩu mẫu chung cho team test |
 
 Lưu file cấu hình, sau đó tạo bảng và dữ liệu mẫu. Vẫn chạy tại thư mục gốc:
 
 ```powershell
-pnpm --dir Backend run migrate
-pnpm --dir Backend run seed
+pnpm migrate
+pnpm seed
 ```
 
-Database được tạo ở `Backend/data/pccc.sqlite`. Không commit `.env`, `.env.local` hoặc database.
+Database được tạo ở `pccc-BE/data/pccc.sqlite`. Không commit `.env`, `.env.local` hoặc database.
 Seed chỉ cần chạy khi khởi tạo dữ liệu mẫu; chạy lại không ghi đè mật khẩu, quyền hoặc phạm vi
 đã cấu hình của tài khoản hiện có.
 
@@ -76,8 +78,7 @@ Seed chỉ cần chạy khi khởi tạo dữ liệu mẫu; chạy lại không 
 Mở terminal tại thư mục gốc repo:
 
 ```powershell
-cd Backend
-pnpm dev
+pnpm dev:be
 ```
 
 Giữ terminal này chạy. Backend mặc định nghe tại `http://127.0.0.1:4000`.
@@ -85,10 +86,10 @@ Có thể mở `http://127.0.0.1:4000/api/health` để kiểm tra; kết quả 
 
 ### 4. Chạy frontend — terminal 2
 
-Mở **terminal mới tại thư mục gốc repo**, không phải bên trong `Backend`:
+Mở **terminal mới tại thư mục gốc repo**:
 
 ```powershell
-pnpm dev
+pnpm dev:fe
 ```
 
 Giữ cả hai terminal chạy và mở **http://localhost:3000/dang-nhap**.
@@ -107,7 +108,7 @@ Frontend chuyển các request `/api/*` sang backend theo `BACKEND_URL`.
 | A06 — Lãnh đạo cấp phòng/Người xem    | `demo.nguoi-xem` | `PcccDemo@2026`  |
 
 Đây là toàn bộ 6 tài khoản được seed. A07 chưa có tài khoản mẫu vì vai trò này chưa kích hoạt.
-`Backend/.env.example` đã điền sẵn `DEMO_PASSWORD=PcccDemo@2026`. Nếu đã có `Backend/.env`,
+`pccc-BE/.env.example` đã điền sẵn `DEMO_PASSWORD=PcccDemo@2026`. Nếu đã có `pccc-BE/.env`,
 đặt biến này cùng giá trị trước khi seed lần đầu để mật khẩu khớp bảng trên.
 Nếu seed bằng giá trị khác, các tài khoản mới dùng giá trị đó thay vì mật khẩu trong bảng.
 
@@ -128,7 +129,7 @@ pnpm format:check
 pnpm lint
 pnpm typecheck
 pnpm test
-pnpm --dir Backend run check
+pnpm check
 pnpm build
 pnpm test:integration
 ```
@@ -141,19 +142,19 @@ Lần build chưa có cache font Inter cần kết nối Internet để tải fo
 
 ```powershell
 pnpm build
-pnpm start
+pnpm start:fe
 ```
 
-Backend có thể chạy bằng `pnpm start` trong thư mục `Backend` nếu không cần chế độ tự khởi động
+Backend có thể chạy bằng `pnpm start:be` nếu không cần chế độ tự khởi động
 lại khi sửa mã. Triển khai production với `NODE_ENV=production` yêu cầu HTTPS và `COOKIE_SECURE=true`;
-xem cấu hình chi tiết trong [`Backend/README.md`](Backend/README.md).
+xem cấu hình chi tiết trong [`pccc-BE/README.md`](pccc-BE/README.md).
 
 ### 7. Xử lý lỗi khởi chạy thường gặp
 
 | Hiện tượng                                                                | Cách xử lý                                                                                                                                                                         |
 | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Seed báo lỗi `DEMO_PASSWORD`                                              | Điền mật khẩu tạm 12–256 ký tự trong `Backend/.env`, lưu file rồi chạy lại seed.                                                                                                   |
-| Trang báo dịch vụ xác thực không khả dụng hoặc không kết nối được máy chủ | Kiểm tra terminal backend, `/api/health` và `BACKEND_URL` trong `.env.local`.                                                                                                      |
+| Seed báo lỗi `DEMO_PASSWORD`                                              | Điền mật khẩu tạm 12–256 ký tự trong `pccc-BE/.env`, lưu file rồi chạy lại seed.                                                                                                   |
+| Trang báo dịch vụ xác thực không khả dụng hoặc không kết nối được máy chủ | Kiểm tra terminal backend, `/api/health` và `BACKEND_URL` trong `pccc-FE/.env.local`.                                                                                              |
 | Đăng nhập trả lỗi nguồn yêu cầu/Origin                                    | Mở đúng `http://localhost:3000`; `APP_ORIGIN` phải khớp chính xác URL frontend, không có dấu `/` cuối.                                                                             |
 | Cổng 3000/4000 đang được sử dụng                                          | Dừng tiến trình cũ. Nếu đổi cổng frontend, cập nhật `APP_ORIGIN`; nếu đổi cổng backend, cập nhật `PORT` và `BACKEND_URL`. Khởi động lại cả hai phần; build lại nếu dùng bản build. |
 | Mật khẩu seed không đăng nhập được sau khi đã đổi mật khẩu                | Dùng mật khẩu mới. Sửa `DEMO_PASSWORD` hoặc seed lại không reset mật khẩu tài khoản hiện có.                                                                                       |
@@ -172,16 +173,18 @@ xem cấu hình chi tiết trong [`Backend/README.md`](Backend/README.md).
 ## Bộ màu
 
 Đỏ cứu hỏa `#C8102E` làm màu chủ đạo trên nền trắng — sidebar đỏ đậm, tiêu đề bảng đỏ, nội dung trắng.
-Toàn bộ token định nghĩa dưới dạng biến CSS trong [`src/app/globals.css`](src/app/globals.css), có
+Toàn bộ token định nghĩa dưới dạng biến CSS trong [`src/app/globals.css`](pccc-FE/src/app/globals.css), có
 sẵn cả biến thể **sáng/tối** (nút đổi giao diện ở header).
 
-Quy ước màu trạng thái dùng chung (xem [`status-badge.tsx`](src/components/shared/status-badge.tsx)):
+Quy ước màu trạng thái dùng chung (xem [`status-badge.tsx`](pccc-FE/src/components/shared/status-badge.tsx)):
 đỏ = cần xử lý/nghiêm trọng, vàng = sắp tới hạn, xanh lá = đã hoàn thành, xám = không áp dụng.
 
 ## Cấu trúc thư mục
 
+Cấu trúc toàn repo và các module backend xem [PROJECT.md](PROJECT.md) §3. Frontend trong `pccc-FE`:
+
 ```
-src/
+pccc-FE/src/
 ├── app/                      # Route App Router, mỗi thư mục là một màn hình
 ├── components/
 │   ├── ui/                   # Primitive shadcn/ui (button, table, sidebar, …)
@@ -239,7 +242,7 @@ src/
 
 ## Biểu mẫu nhập liệu
 
-Ràng buộc dữ liệu tập trung ở [`src/data/schemas.ts`](src/data/schemas.ts) — khi đơn vị chốt bộ trường
+Ràng buộc dữ liệu tập trung ở [`src/data/schemas.ts`](pccc-FE/src/data/schemas.ts) — khi đơn vị chốt bộ trường
 chuẩn (Q04), chỉ cần sửa file này là toàn bộ biểu mẫu có hiệu lực theo.
 
 | Biểu mẫu      | Dạng                           | Ràng buộc đáng chú ý                                                                                   |
@@ -278,6 +281,6 @@ Các phân hệ ngoài Authentication & Authorization vẫn là **giao diện d�
 
 1. Thay `src/data/mock.ts` bằng lớp gọi API thật (giữ nguyên kiểu trong `src/data/types.ts`).
 2. Nối `onSubmit` của các biểu mẫu nghiệp vụ vào API; dùng middleware xác thực/phân quyền và bộ lọc
-   phạm vi trong `Backend` để bảo vệ từng module trước khi mở route trong `src/lib/auth-contract.ts`.
+   phạm vi trong `pccc-BE` để bảo vệ từng module trước khi mở route trong `src/lib/auth-contract.ts`.
 3. Bổ sung màn hình chi tiết còn thiếu: cuộc kiểm tra, sự cố, hồ sơ vi phạm, trao đổi theo công việc.
 4. Chốt các điểm còn lại Q01, Q02, Q04–Q12, Q15 trước khi làm SRS/FSD.

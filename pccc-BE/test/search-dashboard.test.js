@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { openDatabase } from "../src/database.js";
-import { seedDemo } from "../src/seed.js";
+import { openDatabase } from "../src/core/database.js";
+import { seedDemo } from "../src/core/seed.js";
 import { createApp } from "../src/app.js";
 
 const password = "Temporary-test-password-2026";

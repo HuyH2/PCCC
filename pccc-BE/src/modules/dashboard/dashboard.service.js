@@ -1,4 +1,8 @@
-import { facilityScope, regionScope, requirePermission } from "./authorization.js";
+import {
+  facilityScope,
+  regionScope,
+  requirePermission,
+} from "../authorization/authorization.service.js";
 
 function requireDashboard(principal) {
   requirePermission(principal, "M10.view");

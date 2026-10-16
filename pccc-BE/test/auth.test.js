@@ -4,10 +4,10 @@ import { once } from "node:events";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openDatabase } from "../src/database.js";
-import { seedDemo } from "../src/seed.js";
+import { openDatabase } from "../src/core/database.js";
+import { seedDemo } from "../src/core/seed.js";
 import { createApp } from "../src/app.js";
-import { tokenHash } from "../src/authentication.js";
+import { tokenHash } from "../src/modules/auth/auth.service.js";
 
 const password = "Temporary-test-password-2026";
 const origin = "http://localhost:3000";

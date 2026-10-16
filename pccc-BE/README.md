@@ -1,27 +1,29 @@
-# Backend Authentication & Authorization — PCCC/CNCH
+# pccc-BE — Backend PCCC/CNCH
 
-Backend riêng cho **UC-ADM-01** và **UC-ADM-03**, đối chiếu URD v1.0 và sơ đồ sequence ADM-01. Node.js >= 22.13, HTTP API và SQLite tích hợp (`node:sqlite`). Không cần cài package backend. SQLite ở Node 22 còn có cảnh báo experimental; lựa chọn này phục vụ môi trường đồ án, chưa chốt hạ tầng production Q13.
+Backend (modular monolith) của monorepo. Mỗi module nghiệp vụ nằm ở `src/modules/<module>/` (`*.service.js` + `*.routes.js`), hạ tầng chung ở `src/core/`, `src/app.js` đăng ký routes; quy tắc chi tiết ở [PROJECT.md](../PROJECT.md) §2. Phần auth phục vụ **UC-ADM-01** và **UC-ADM-03**, đối chiếu URD v1.0 và sơ đồ sequence ADM-01. Node.js >= 22.13, HTTP API và SQLite tích hợp (`node:sqlite`). Không cần cài package backend. SQLite ở Node 22 còn có cảnh báo experimental; lựa chọn này phục vụ môi trường đồ án, chưa chốt hạ tầng production Q13.
 
 ## Chạy trên PowerShell
 
+Tại root repo:
+
 ```powershell
-cd Backend
-Copy-Item .env.example .env
+pnpm install
+Copy-Item pccc-BE/.env.example pccc-BE/.env
 # .env.example đã có DEMO_PASSWORD=PcccDemo@2026 cho team test.
 pnpm migrate
 pnpm seed
-pnpm dev
+pnpm dev:be
 ```
 
 Terminal khác, tại root repo:
 
 ```powershell
-pnpm dev
+pnpm dev:fe
 ```
 
 Mở http://localhost:3000/dang-nhap. Backend mặc định http://127.0.0.1:4000, frontend proxy `/api/*` sang backend. Nếu đổi cổng/domain, đặt `APP_ORIGIN` của backend bằng origin frontend; `BACKEND_URL` của Next.js bằng URL backend và khởi động/build lại frontend. Không trộn `localhost` với `127.0.0.1` ở URL frontend vì Origin phải khớp chính xác.
 
-Database mặc định `Backend/data/pccc.sqlite` khi chạy từ `Backend`. Migration tự chạy khi server khởi động, có bảng theo dõi và transaction; CLI `migrate` dùng để kiểm tra riêng. Không commit database, `.env`, mật khẩu thật hoặc session. Mật khẩu demo công khai bên dưới phục vụ team test.
+Database mặc định `pccc-BE/data/pccc.sqlite` (script chạy trong thư mục `pccc-BE`). Migration tự chạy khi server khởi động, có bảng theo dõi và transaction; CLI `migrate` dùng để kiểm tra riêng. Không commit database, `.env`, mật khẩu thật hoặc session. Mật khẩu demo công khai bên dưới phục vụ team test.
 
 ## Tài khoản mẫu
 
@@ -103,7 +105,7 @@ Repo chưa có bảng tài khoản thật nên migration cung cấp **một bả
 | ------------------------- | ------------------------------------------------------------------------ |
 | id                        | ID ổn định, tham chiếu session/scope/audit                               |
 | username                  | Unique, không phân biệt hoa thường; định dạng `[a-z0-9._-]`, 1–100 ký tự |
-| password_hash             | Dùng `hashPassword` từ `src/password.js` khi cấp/reset mật khẩu          |
+| password_hash             | Dùng `hashPassword` từ `src/core/password.js` khi cấp/reset mật khẩu     |
 | officer_id                | ID cán bộ; nối FK khi schema cán bộ chung đã có                          |
 | full_name                 | Tên hiển thị                                                             |
 | role_code                 | FK tới roles.code                                                        |
@@ -124,7 +126,6 @@ Mã các màn hình nghiệp vụ tĩnh cũ vẫn được giữ. Chúng bị �
 ## Kiểm thử
 
 ```powershell
-cd Backend
 pnpm check
 pnpm test
 ```
