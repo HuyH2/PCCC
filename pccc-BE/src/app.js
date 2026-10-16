@@ -7,6 +7,8 @@ import { administrationRoutes } from "./modules/administration/administration.ro
 import { facilitiesRoutes } from "./modules/facilities/facilities.routes.js";
 import { searchRoutes } from "./modules/search/search.routes.js";
 import { dashboardRoutes } from "./modules/dashboard/dashboard.routes.js";
+import { auditRoutes } from "./modules/audit/audit.routes.js";
+import { legalDocumentsRoutes } from "./modules/legal-documents/legal-documents.routes.js";
 
 // Modular monolith: each business module registers its routes here; all share one process and DB.
 const routes = [
@@ -16,6 +18,8 @@ const routes = [
   ...facilitiesRoutes,
   ...searchRoutes,
   ...dashboardRoutes,
+  ...auditRoutes,
+  ...legalDocumentsRoutes,
 ];
 
 export function createApp(
@@ -66,7 +70,10 @@ export function createApp(
       );
       if (request.method === "OPTIONS") {
         response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
-        response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+        response.setHeader(
+          "Access-Control-Allow-Headers",
+          "Content-Type, X-File-Name, X-Document-Version",
+        );
         response.statusCode = 204;
         response.end();
         return;
@@ -86,17 +93,23 @@ export function createApp(
       const ctx = {
         db,
         auth,
+        request,
+        response,
         url,
         method,
         ip,
         token,
-        readJson: () => readJson(request),
+        readJson: (limit) => readJson(request, limit),
         setSessionCookie: (value) => response.setHeader("Set-Cookie", cookie(value, ttlSeconds)),
         clearSessionCookie: () => response.setHeader("Set-Cookie", cookie("", 0)),
       };
       // Every non-public route (and unknown paths) requires a valid session first.
       if (!found?.route.public) ctx.user = authenticate(db, token);
-      if (found) return send(200, await found.route.handle(ctx, found.match));
+      if (found) {
+        const body = await found.route.handle(ctx, found.match);
+        if (!response.writableEnded) send(ctx.status ?? 200, body);
+        return;
+      }
       throw new ApiError(404, "NOT_FOUND", "API không tồn tại.");
     } catch (error) {
       if (error instanceof ApiError)

@@ -4,7 +4,13 @@ import * as React from "react";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { formatNumber } from "@/lib/utils";
 
 export function DataPagination({
@@ -39,7 +45,7 @@ export function DataPagination({
             onDoiTrang(1);
           }}
         >
-          <SelectTrigger size="sm" className="w-[74px]">
+          <SelectTrigger size="sm" className="w-[74px]" aria-label="Số dòng mỗi trang">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -51,10 +57,22 @@ export function DataPagination({
           </SelectContent>
         </Select>
         <div className="flex items-center gap-1">
-          <Button variant="outline" size="icon-sm" disabled={trang === 1} onClick={() => onDoiTrang(1)}>
+          <Button
+            variant="outline"
+            size="icon-sm"
+            aria-label="Trang đầu"
+            disabled={trang === 1}
+            onClick={() => onDoiTrang(1)}
+          >
             <ChevronsLeft className="size-4" />
           </Button>
-          <Button variant="outline" size="icon-sm" disabled={trang === 1} onClick={() => onDoiTrang(trang - 1)}>
+          <Button
+            variant="outline"
+            size="icon-sm"
+            aria-label="Trang trước"
+            disabled={trang === 1}
+            onClick={() => onDoiTrang(trang - 1)}
+          >
             <ChevronLeft className="size-4" />
           </Button>
           <span className="px-2 text-[13px] font-medium tabular-nums">
@@ -63,6 +81,7 @@ export function DataPagination({
           <Button
             variant="outline"
             size="icon-sm"
+            aria-label="Trang sau"
             disabled={trang >= tongTrang}
             onClick={() => onDoiTrang(trang + 1)}
           >
@@ -71,6 +90,7 @@ export function DataPagination({
           <Button
             variant="outline"
             size="icon-sm"
+            aria-label="Trang cuối"
             disabled={trang >= tongTrang}
             onClick={() => onDoiTrang(tongTrang)}
           >

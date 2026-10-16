@@ -75,7 +75,7 @@ pccc/
 │   ├── next.config.ts, tsconfig.json, components.json, postcss.config.mjs
 │   └── .env.example         # BACKEND_URL
 ├── pccc-BE/                 # Backend Node.js API (package pccc-be)
-│   ├── migrations/          # 001-auth.sql, 003-search-dashboard.sql … (không sửa migration đã phát hành)
+│   ├── migrations/          # 001-auth.sql, 003-search-dashboard.sql, 004-legal-documents-audit.sql … (không sửa migration đã phát hành)
 │   ├── scripts/             # migrate.js, seed.js, check.js
 │   ├── src/
 │   │   ├── app.js           # Tạo HTTP server, middleware chung, đăng ký routes các module
@@ -87,7 +87,9 @@ pccc/
 │   │       ├── administration/  # UC-ADM-03 cấu hình vai trò, tài khoản, scope, audit log
 │   │       ├── facilities/      # M03 danh sách/chi tiết cơ sở theo scope
 │   │       ├── search/          # UC-SYS-01 tìm kiếm toàn hệ thống
-│   │       └── dashboard/       # UC-SYS-02 dashboard
+│   │       ├── dashboard/       # UC-SYS-02 dashboard
+│   │       ├── audit/           # Service audit dùng chung + UC-SYS-05 nhật ký hệ thống
+│   │       └── legal-documents/ # M05 kho văn bản pháp luật/quy chuẩn (UC-DOC-01/02)
 │   ├── test/                # *.test.js — chạy bằng `pnpm test`
 │   └── .env.example
 ├── tests/auth-integration.test.mjs  # Test tích hợp pccc-FE build + pccc-BE
@@ -117,7 +119,7 @@ PR và mỗi push vào `main`. PR phải xanh CI mới được merge.
 ## 5. Trạng thái hiện tại
 
 - **Đã nối API thật:** đăng nhập, đổi mật khẩu, cấu hình vai trò/phạm vi (`/quan-tri/vai-tro`),
-  dashboard `/`, tra cứu `/tra-cuu`.
+  dashboard `/`, tra cứu `/tra-cuu`, kho văn bản `/van-ban`, nhật ký `/quan-tri/nhat-ky`.
 - **Còn dùng dữ liệu mẫu tĩnh:** các màn hình nghiệp vụ còn lại (`pccc-FE/src/data/mock.ts`); biểu mẫu chỉ
   log console + toast, điểm nối API ở `onSubmit`.
 - **Chưa chốt với người dùng:** Q01, Q02 (ma trận quyền — grants seed chỉ là mẫu), Q04–Q12, Q15.
@@ -158,7 +160,23 @@ Thêm mục mới **ở cuối** danh sách, theo mẫu ở §7.
 - **Ghi chú:** Tên cán bộ lấy từ bảng `accounts` đến khi có bảng cán bộ chung — khi đó chỉ thay view
   `officer_directory`.
 
-### F03 — Tái cấu trúc monorepo + modular monolith, CI, pnpm
+### F03 — Legal Document & Audit Log Management (UC-DOC-01, UC-DOC-02, UC-SYS-05)
+
+- **Người làm / branch:** KHAI — `feature/Legal-Document-&-Audit-Log-Management` (PR #4)
+- **Mô tả:** Kho văn bản M05: tìm kiếm/lọc, thêm/sửa/phân loại, đính kèm PDF hoặc link, lịch sử thay
+  đổi; nhật ký hệ thống đọc audit thật, lọc theo người dùng/thời gian/feature/thao tác. Chi tiết quyền
+  và API ở [pccc-BE/LEGAL_DOCUMENTS.md](pccc-BE/LEGAL_DOCUMENTS.md).
+- **Backend:** `migrations/004-legal-documents-audit.sql`; modules `legal-documents`, `audit`
+  (`writeAudit`/`audit` dùng chung cho mọi module); API `/api/legal-documents*`,
+  `/api/legal-document-categories`, `/api/audit-logs` (có bộ lọc). Seed cấp M05.
+- **Frontend (`pccc-FE`):** `/van-ban` (danh sách, `[id]`, `them`, `[id]/sua`), `/quan-tri/nhat-ky`,
+  `legal-document-editor.tsx`, `audit-history.tsx`, `src/lib/legal-document-*.ts`, `use-api-data.ts`.
+- **Test:** `pccc-BE/test/legal-documents.test.js` (7 test: nâng cấp DB cũ, seed, quyền/scope,
+  validation, PDF, lịch sử, audit), mở rộng `tests/auth-integration.test.mjs`.
+- **Ghi chú:** Biến PostgreSQL trong `.env.example` chỉ là chuẩn bị, backend chưa đọc. Khi merge vào
+  cấu trúc mới (F04), route của `app.js` được chuyển sang `legal-documents.routes.js`/`audit.routes.js`.
+
+### F04 — Tái cấu trúc monorepo + modular monolith, CI, pnpm
 
 - **Người làm / branch:** HUY — `ci` (PR #3)
 - **Mô tả:** CI GitHub Actions (format, lint, typecheck, test, check, build, integration); chuyển npm

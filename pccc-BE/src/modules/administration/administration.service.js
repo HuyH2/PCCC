@@ -5,7 +5,7 @@ import {
   permissionsFor,
   scopesFor,
 } from "../authorization/authorization.service.js";
-import { audit } from "../auth/auth.service.js";
+import { audit } from "../audit/audit.service.js";
 import { transaction } from "../../core/database.js";
 
 function preserveAdministrator(db) {
@@ -194,17 +194,6 @@ export function listScopeOptions(db, kind, { page, pageSize }) {
       .prepare(`SELECT id,name FROM ${table} ORDER BY id LIMIT ? OFFSET ?`)
       .all(pageSize, (page - 1) * pageSize),
     total: db.prepare(`SELECT count(*) AS total FROM ${table}`).get().total,
-    page,
-    pageSize,
-  };
-}
-
-export function listAuditLogs(db, { page, pageSize }) {
-  return {
-    items: db
-      .prepare("SELECT * FROM audit_logs ORDER BY id DESC LIMIT ? OFFSET ?")
-      .all(pageSize, (page - 1) * pageSize),
-    total: db.prepare("SELECT count(*) AS total FROM audit_logs").get().total,
     page,
     pageSize,
   };

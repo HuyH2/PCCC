@@ -1,5 +1,6 @@
 import { hashPassword } from "./password.js";
 import { transaction } from "./database.js";
+import { seedLegalDocuments } from "./seed-legal-documents.js";
 
 export const roleNames = {
   A01: "Chỉ huy/Đội trưởng",
@@ -70,12 +71,12 @@ export async function seedDemo(db, password) {
       ).run(id, `Cơ sở ${id} (dữ liệu mẫu)`, "Địa chỉ giả lập", region, officer);
     }
     const grants = {
-      A01: ["M03.view", "M03.approve", "M03.export", "M10.view"],
-      A02: ["M03.view", "M10.view"],
-      A03: ["M03.view", "M03.create", "M03.edit", "M10.view"],
-      A04: ["M03.view", "M03.export", "M10.view"],
-      A05: ["M01.view", "M01.edit", "M03.view", "M10.view"],
-      A06: ["M03.view", "M10.view"],
+      A01: ["M03.view", "M03.approve", "M03.export", "M10.view", "M05.view"],
+      A02: ["M03.view", "M10.view", "M05.view"],
+      A03: ["M03.view", "M03.create", "M03.edit", "M10.view", "M05.view"],
+      A04: ["M03.view", "M03.export", "M10.view", "M05.view"],
+      A05: ["M01.view", "M01.edit", "M03.view", "M10.view", "M05.view", "M05.create", "M05.edit"],
+      A06: ["M03.view", "M10.view", "M05.view"],
     };
     const usernames = {
       A01: "demo.chi-huy",
@@ -101,5 +102,6 @@ export async function seedDemo(db, password) {
         "INSERT INTO account_scopes(account_id,kind,unit_id,region_id) VALUES (?,?,?,?)",
       ).run(id, kind, kind === "unit" ? "DV-KV10" : null, kind === "region" ? "KP01" : null);
     }
+    seedLegalDocuments(db);
   });
 }

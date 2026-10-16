@@ -9,7 +9,6 @@ import {
 import {
   findAccount,
   listAccounts,
-  listAuditLogs,
   listRoles,
   listScopeOptions,
   updateAccountAuthorization,
@@ -74,14 +73,6 @@ export const administrationRoutes = [
       requireAdministrator(ctx.user, "M01.view");
       const paging = pagination(ctx.url);
       return listScopeOptions(ctx.db, ctx.url.searchParams.get("kind"), paging);
-    },
-  },
-  {
-    method: "GET",
-    path: "/api/audit-logs",
-    handle(ctx) {
-      requireAdministrator(ctx.user, "M01.view");
-      return listAuditLogs(ctx.db, pagination(ctx.url));
     },
   },
 ];

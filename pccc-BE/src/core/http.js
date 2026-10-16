@@ -8,7 +8,7 @@ export function cookieValue(request, name) {
     ?.slice(name.length + 1);
 }
 
-export async function readJson(request) {
+export async function readJson(request, limit = 16384) {
   assert(
     request.headers["content-type"]?.split(";")[0].trim() === "application/json",
     415,
@@ -19,7 +19,7 @@ export async function readJson(request) {
   let size = 0;
   for await (const chunk of request) {
     size += chunk.length;
-    assert(size <= 16384, 413, "BODY_TOO_LARGE", "Dữ liệu gửi lên quá lớn.");
+    assert(size <= limit, 413, "BODY_TOO_LARGE", "Dữ liệu gửi lên quá lớn.");
     chunks.push(chunk);
   }
   try {
@@ -31,6 +31,8 @@ export async function readJson(request) {
 
 /**
  * Route: { method, path: string | RegExp, public?: true, handle(ctx, match) → response body }.
+ * The body is sent as JSON with ctx.status (default 200); a handler that streams its own
+ * response (e.g. a file download) ends ctx.response itself and nothing more is sent.
  * Returns the first route whose method and path match, plus the RegExp match (if any).
  */
 export function findRoute(routes, method, path) {

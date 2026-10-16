@@ -26,11 +26,19 @@ export const roleNames: Record<ActorCode, string> = {
 
 /** Preserve existing demo screens. Backend enforces permissions on its APIs. */
 export function canVisit(user: AuthUser, path: string) {
-  if (path === "/quan-tri/vai-tro") {
+  if (path === "/quan-tri/vai-tro" || path === "/quan-tri/nhat-ky") {
     return (
       user.permissions.includes("M01.view") &&
       user.role === "A05" &&
       user.scopes.some((scope) => scope.kind === "all")
+    );
+  }
+  if (path === "/van-ban" || path.startsWith("/van-ban/")) {
+    if (!user.permissions.includes("M05.view") || !user.scopes.length) return false;
+    const action = path === "/van-ban/them" ? "create" : path.endsWith("/sua") ? "edit" : null;
+    return (
+      !action ||
+      (user.permissions.includes(`M05.${action}`) && user.scopes.some((s) => s.kind === "all"))
     );
   }
   return true;
