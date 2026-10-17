@@ -75,7 +75,7 @@ pccc/
 │   ├── next.config.ts, tsconfig.json, components.json, postcss.config.mjs
 │   └── .env.example         # BACKEND_URL
 ├── pccc-BE/                 # Backend Node.js API (package pccc-be)
-│   ├── migrations/          # 001-auth.sql, 003-search-dashboard.sql, 004-legal-documents-audit.sql, 005-inspections.sql, 006-inspection-checklist-authoring.sql, 007-inspection-results-submission.sql … (không sửa migration đã phát hành)
+│   ├── migrations/          # 001-auth.sql … 008-inspection-planning.sql (không sửa migration đã phát hành)
 │   ├── scripts/             # migrate.js, seed.js, check.js
 │   ├── src/
 │   │   ├── app.js           # Tạo HTTP server, middleware chung, đăng ký routes các module
@@ -90,7 +90,8 @@ pccc/
 │   │       ├── dashboard/       # UC-SYS-02 dashboard
 │   │       ├── audit/           # Service audit dùng chung + UC-SYS-05 nhật ký hệ thống
 │   │       ├── legal-documents/ # M05 kho văn bản pháp luật/quy chuẩn (UC-DOC-01/02)
-│   │       └── inspections/     # M06 thực hiện kiểm tra, biên bản, kết luận, hậu kiểm (UC-INS-06..09)
+│   │       ├── inspections/     # M06 thực hiện kiểm tra, biên bản, kết luận, hậu kiểm (UC-INS-06..09)
+│   │       └── inspection-planning/ # M06 kế hoạch, chỉ tiêu, lịch, thông báo, dời lịch (UC-INS-01..05)
 │   ├── test/                # *.test.js — chạy bằng `pnpm test`
 │   └── .env.example
 ├── tests/auth-integration.test.mjs  # Test tích hợp pccc-FE build + pccc-BE
@@ -121,7 +122,8 @@ PR và mỗi push vào `main`. PR phải xanh CI mới được merge.
 
 - **Đã nối API thật:** đăng nhập, đổi mật khẩu, cấu hình vai trò/phạm vi (`/quan-tri/vai-tro`),
   dashboard `/`, tra cứu `/tra-cuu`, kho văn bản `/van-ban`, nhật ký `/quan-tri/nhat-ky`,
-  thực hiện kiểm tra `/kiem-tra/thuc-hien`, checklist `/kiem-tra/checklist`.
+  kế hoạch/chỉ tiêu `/kiem-tra/ke-hoach`, hồ sơ định kỳ `/kiem-tra/cuoc-kiem-tra`, lịch/thông báo
+  `/kiem-tra/lich`, thực hiện kiểm tra `/kiem-tra/thuc-hien`, checklist `/kiem-tra/checklist`.
 - **Còn dùng dữ liệu mẫu tĩnh:** các màn hình nghiệp vụ còn lại (`pccc-FE/src/data/mock.ts`); biểu mẫu chỉ
   log console + toast, điểm nối API ở `onSubmit`.
 - **Chưa chốt với người dùng:** Q01, Q02 (ma trận quyền — grants seed chỉ là mẫu), Q04–Q12, Q15.
@@ -213,10 +215,30 @@ Thêm mục mới **ở cuối** danh sách, theo mẫu ở §7.
 - **Test:** `pccc-BE/test/inspections.test.js` (6 test: migration/seed idempotent + constraint,
   luồng đầy đủ + audit, validate input/file/state/version, 401/403, scope list/detail/file/mutation
   và scope rỗng, tạo checklist chỉ A01/A02 + validate/trùng tên/audit). Hai test cũ đổi số migration cứng thành đếm file `migrations/*.sql`.
-- **Ghi chú:** Repo chưa có bảng `inspections` của người 3 nên tạo bản tối thiểu làm điểm tích hợp
-  chung (người 3 mở rộng bằng migration mới). Checklist seed là mẫu (Q04); loại cơ sở chưa có trong
-  `facilities` nên lọc checklist qua tham số. Quyền M06 seed là mẫu (Q02) và không áp vào DB đã có
-  tài khoản. Màn hình `/kiem-tra/cuoc-kiem-tra` (UC-INS-03) vẫn là mock.
+- **Ghi chú:** Checklist seed là mẫu (Q04); loại cơ sở chưa có trong `facilities` nên lọc checklist
+  qua tham số. Quyền M06 seed là mẫu (Q02) và không áp vào DB đã có tài khoản. Bảng `inspections`
+  được F06 mở rộng bằng migration mới, không tạo nguồn hồ sơ song song.
+
+### F06 — Inspection Planning & Scheduling (UC-INS-01, UC-INS-02, UC-INS-03, UC-INS-04, UC-INS-05)
+
+- **Người làm / branch:** Codex — `feature/inspection-planning-scheduling`
+- **Mô tả:** Luồng kế hoạch năm → phân bổ chỉ tiêu tháng/tuần/cán bộ/địa bàn → chọn cơ sở theo
+  scope → tạo hồ sơ kiểm tra định kỳ và lịch → lập/gửi thông báo → dời lịch bắt buộc lý do. Chỉ
+  tiêu là mức tối thiểu, số thực hiện được phép vượt; ngày cũ/ngày mới, lý do, actor và thời gian
+  dời lịch được giữ append-only; mọi mutation quan trọng có audit và khóa lạc quan bằng `version`.
+- **Backend:** `migrations/002-organization.sql`, `008-inspection-planning.sql`; module
+  `inspection-planning`; các bảng `officers`, `inspection_plans`, `inspection_targets`,
+  `inspection_schedules`, `inspection_reschedules`, `inspection_notices`,
+  `inspection_planning_documents`; API `/api/inspection-plans*`, `/api/inspection-schedules`,
+  `/api/inspections/:id/planning|schedule|notice|reschedules|lead-officer`. Quyền M06 kết hợp actor
+  UC và scope đơn vị/cơ sở; file PDF/JPEG/PNG kiểm tra định dạng, kích thước và quyền tải.
+- **Frontend (`pccc-FE`):** `/kiem-tra/ke-hoach`, `/kiem-tra/cuoc-kiem-tra`,
+  `/kiem-tra/cuoc-kiem-tra/[id]`, `/kiem-tra/lich`; `inspection-planning-contract.ts`; màn hình lập
+  kế hoạch, phân bổ chỉ tiêu, tạo hồ sơ/lịch, thông báo, popup dời lịch và lịch sử thay đổi.
+- **Test:** `pccc-BE/test/inspection-planning.test.js` (3 test: kế hoạch/phân bổ và giới hạn tổng;
+  luồng chọn cơ sở → hồ sơ → thông báo → dời lịch/history; 401/403/actor/scope).
+- **Ghi chú:** Không hard-code chu kỳ kiểm tra hoặc công thức nợ KPI vì Q08/Q09 chưa chốt. Trường
+  `carryover_count` giữ chỗ dữ liệu chuyển kỳ; việc tự động tính/chấp nhận nợ cần quyết định Q09.
 
 ## 7. Quy tắc khi làm feature
 

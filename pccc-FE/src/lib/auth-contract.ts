@@ -45,6 +45,14 @@ export function canVisit(user: AuthUser, path: string) {
   }
   if (path === "/kiem-tra/checklist/tao") return canCreateChecklist(user);
   if (
+    path === "/kiem-tra/ke-hoach" ||
+    path === "/kiem-tra/cuoc-kiem-tra" ||
+    path.startsWith("/kiem-tra/cuoc-kiem-tra/") ||
+    path === "/kiem-tra/lich"
+  ) {
+    return user.permissions.includes("M06.view") && user.scopes.length > 0;
+  }
+  if (
     path === "/kiem-tra/checklist" ||
     path === "/kiem-tra/thuc-hien" ||
     path.startsWith("/kiem-tra/thuc-hien/")
