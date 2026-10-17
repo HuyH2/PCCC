@@ -79,6 +79,7 @@ export const navGroups: NavGroup[] = [
         items: [
           { title: "Kế hoạch & chỉ tiêu", href: "/kiem-tra/ke-hoach", icon: Target, useCases: ["UC-INS-01", "UC-INS-02"] },
           { title: "Cuộc kiểm tra", href: "/kiem-tra/cuoc-kiem-tra", icon: ClipboardList, useCases: ["UC-INS-03"] },
+          { title: "Lịch & thông báo", href: "/kiem-tra/lich", icon: CalendarClock, useCases: ["UC-INS-04", "UC-INS-05"] },
           { title: "Thực hiện kiểm tra", href: "/kiem-tra/thuc-hien", icon: ClipboardCheck, useCases: ["UC-INS-07", "UC-INS-08", "UC-INS-09"] },
           { title: "Checklist kiểm tra", href: "/kiem-tra/checklist", icon: ScrollText, useCases: ["UC-INS-06"] },
         ],

@@ -2,6 +2,7 @@ import { hashPassword } from "./password.js";
 import { transaction } from "./database.js";
 import { seedLegalDocuments } from "./seed-legal-documents.js";
 import { seedInspections } from "./seed-inspections.js";
+import { seedInspectionPlanning } from "./seed-inspection-planning.js";
 
 export const roleNames = {
   A01: "Chỉ huy/Đội trưởng",
@@ -36,31 +37,35 @@ export async function seedDemo(db, password) {
           action,
         );
       }
-    db.prepare("INSERT OR IGNORE INTO units VALUES (?,?,?)").run("DV-PC07", "PC07 (mẫu)", null);
-    db.prepare("INSERT OR IGNORE INTO units VALUES (?,?,?)").run(
-      "DV-KV10",
-      "Đội khu vực 10 (mẫu)",
-      "DV-PC07",
-    );
-    db.prepare("INSERT OR IGNORE INTO units VALUES (?,?,?)").run(
-      "DV-KV11",
-      "Đội khu vực 11 (mẫu)",
-      "DV-PC07",
-    );
-    db.prepare("INSERT OR IGNORE INTO regions VALUES (?,?,?)").run(
+    db.prepare(
+      "INSERT OR IGNORE INTO units(id,name,parent_id,code,level,status) VALUES (?,?,?,?,?,?)",
+    ).run("DV-PC07", "PC07 (mẫu)", null, "DV-PC07", "ROOT", "ACTIVE");
+    db.prepare(
+      "INSERT OR IGNORE INTO units(id,name,parent_id,code,level,status) VALUES (?,?,?,?,?,?)",
+    ).run("DV-KV10", "Đội khu vực 10 (mẫu)", "DV-PC07", "DV-KV10", "AREA", "ACTIVE");
+    db.prepare(
+      "INSERT OR IGNORE INTO units(id,name,parent_id,code,level,status) VALUES (?,?,?,?,?,?)",
+    ).run("DV-KV11", "Đội khu vực 11 (mẫu)", "DV-PC07", "DV-KV11", "AREA", "ACTIVE");
+    db.prepare("INSERT OR IGNORE INTO regions(id,name,unit_id,code,status) VALUES (?,?,?,?,?)").run(
       "KP01",
       "Khu phố 01 (mẫu)",
       "DV-KV10",
+      "KP01",
+      "ACTIVE",
     );
-    db.prepare("INSERT OR IGNORE INTO regions VALUES (?,?,?)").run(
+    db.prepare("INSERT OR IGNORE INTO regions(id,name,unit_id,code,status) VALUES (?,?,?,?,?)").run(
       "KP02",
       "Khu phố 02 (mẫu)",
       "DV-KV10",
+      "KP02",
+      "ACTIVE",
     );
-    db.prepare("INSERT OR IGNORE INTO regions VALUES (?,?,?)").run(
+    db.prepare("INSERT OR IGNORE INTO regions(id,name,unit_id,code,status) VALUES (?,?,?,?,?)").run(
       "KP03",
       "Khu phố 03 (mẫu)",
       "DV-KV11",
+      "KP03",
+      "ACTIVE",
     );
     for (const [id, region, officer] of [
       ["CS001", "KP01", "CB-A03"],
@@ -120,7 +125,32 @@ export async function seedDemo(db, password) {
         "INSERT INTO account_scopes(account_id,kind,unit_id,region_id) VALUES (?,?,?,?)",
       ).run(id, kind, kind === "unit" ? "DV-KV10" : null, kind === "region" ? "KP01" : null);
     }
+    const now = Date.now();
+    for (const [index, role] of Object.keys(usernames).entries()) {
+      const officerId = `CB-${role}`;
+      db.prepare(
+        `INSERT OR IGNORE INTO officers(
+          id,officer_code,full_name,rank,position,phone,email,notes,unit_id,business_role,
+          status,created_at,updated_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      ).run(
+        officerId,
+        officerId,
+        `${roleNames[role]} (mẫu)`,
+        "Cấp bậc mẫu",
+        roleNames[role],
+        `09000000${index + 1}`,
+        `demo-${role.toLowerCase()}@example.invalid`,
+        "Dữ liệu mẫu không dùng trong vận hành thật",
+        "DV-KV10",
+        role,
+        "ACTIVE",
+        now,
+        now,
+      );
+    }
     seedLegalDocuments(db);
     seedInspections(db);
+    seedInspectionPlanning(db);
   });
 }
