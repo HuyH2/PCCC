@@ -3,6 +3,7 @@ import { transaction } from "./database.js";
 import { seedLegalDocuments } from "./seed-legal-documents.js";
 import { seedInspections } from "./seed-inspections.js";
 import { seedFacilityViolations } from "./seed-facility-violations.js";
+import { seedTasks } from "./seed-tasks.js";
 
 export const roleNames = {
   A01: "Chỉ huy/Đội trưởng",
@@ -74,6 +75,9 @@ export async function seedDemo(db, password) {
     }
     const grants = {
       A01: [
+        "M07.view",
+        "M07.create",
+        "M07.edit",
         "M03.view",
         "M03.approve",
         "M03.export",
@@ -84,8 +88,21 @@ export async function seedDemo(db, password) {
         "M06.view",
         "M06.create",
       ],
-      A02: ["M03.view", "M10.view", "M05.view", "M06.view", "M06.create", "M06.edit"],
+      A02: [
+        "M03.view",
+        "M10.view",
+        "M05.view",
+        "M06.view",
+        "M06.create",
+        "M06.edit",
+        "M07.view",
+        "M07.create",
+        "M07.edit",
+      ],
       A03: [
+        "M07.view",
+        "M07.create",
+        "M07.edit",
         "M03.view",
         "M03.create",
         "M03.edit",
@@ -95,8 +112,28 @@ export async function seedDemo(db, password) {
         "M06.create",
         "M06.edit",
       ],
-      A04: ["M03.view", "M03.export", "M10.view", "M05.view", "M06.view"],
-      A05: ["M01.view", "M01.edit", "M03.view", "M10.view", "M05.view", "M05.create", "M05.edit"],
+      A04: [
+        "M03.view",
+        "M03.export",
+        "M10.view",
+        "M05.view",
+        "M06.view",
+        "M07.view",
+        "M07.create",
+        "M07.edit",
+      ],
+      A05: [
+        "M01.view",
+        "M01.edit",
+        "M03.view",
+        "M10.view",
+        "M05.view",
+        "M05.create",
+        "M05.edit",
+        "M07.view",
+        "M07.create",
+        "M07.edit",
+      ],
       A06: ["M03.view", "M10.view", "M05.view", "M06.view"],
     };
     const usernames = {
@@ -123,6 +160,17 @@ export async function seedDemo(db, password) {
         "INSERT INTO account_scopes(account_id,kind,unit_id,region_id) VALUES (?,?,?,?)",
       ).run(id, kind, kind === "unit" ? "DV-KV10" : null, kind === "region" ? "KP01" : null);
     }
+    // Existing demo installations had no M07 grants. Add sample grants only
+    // when M07 has never been configured; preserve any administrator choices.
+    if (
+      !db.prepare("SELECT 1 FROM role_permissions WHERE permission_code LIKE 'M07.%' LIMIT 1").get()
+    )
+      for (const role of ["A01", "A02", "A03", "A04", "A05"])
+        for (const action of ["view", "create", "edit"])
+          db.prepare("INSERT OR IGNORE INTO role_permissions VALUES (?,?)").run(
+            role,
+            `M07.${action}`,
+          );
     // Demo assignments only. Preserve existing ownership after a transfer or later seed run.
     for (const [regionId, accountId] of [
       ["KP01", "DEMO-A03"],
@@ -134,5 +182,6 @@ export async function seedDemo(db, password) {
     seedLegalDocuments(db);
     seedInspections(db);
     seedFacilityViolations(db);
+    seedTasks(db);
   });
 }

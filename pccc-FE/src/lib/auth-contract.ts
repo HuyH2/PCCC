@@ -61,6 +61,8 @@ export function canVisit(user: AuthUser, path: string) {
     );
   }
   if (path === "/kiem-tra/checklist/tao") return canCreateChecklist(user);
+  if (path === "/cong-viec/giao-viec" || path.startsWith("/cong-viec/giao-viec/"))
+    return user.permissions.includes("M07.view") && user.scopes.length > 0;
   if (
     path === "/kiem-tra/checklist" ||
     path === "/kiem-tra/thuc-hien" ||
