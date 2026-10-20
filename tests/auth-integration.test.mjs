@@ -277,8 +277,21 @@ test(
       ).status,
       200,
     );
+    const commanderAssignPage = await request("/to-chuc/phan-cong", { cookie: commanderCookie });
+    assert.equal(commanderAssignPage.status, 200);
+    assert.match(await commanderAssignPage.text(), /Phân công/);
+    const viewerLogin = await request("/api/auth/login", {
+      method: "POST",
+      body: { username: "demo.tong-hop", password },
+    });
+    const viewerCookie = viewerLogin.headers.get("set-cookie").split(";")[0];
+    assert.equal(
+      (await request("/api/auth/skip-password-change", { method: "POST", cookie: viewerCookie }))
+        .status,
+      200,
+    );
     assert.ok(
-      (await request("/to-chuc/phan-cong", { cookie: commanderCookie })).headers
+      (await request("/to-chuc/phan-cong", { cookie: viewerCookie })).headers
         .get("location")
         .endsWith("/khong-co-quyen"),
     );
@@ -287,7 +300,7 @@ test(
     assert.match(await accountPage.text(), /Quản lý tài khoản người dùng/);
     const transferPage = await request("/to-chuc/phan-cong", { cookie: adminCookie });
     assert.equal(transferPage.status, 200);
-    assert.match(await transferPage.text(), /Chuyển giao địa bàn và cơ sở/);
+    assert.match(await transferPage.text(), /Phân công và chuyển giao địa bàn/);
     const transferResult = await request("/api/account-transfers", {
       method: "POST",
       cookie: adminCookie,
