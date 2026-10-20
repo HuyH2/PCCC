@@ -60,6 +60,26 @@ Response lỗi thống nhất: `{ "error": { "code": "FORBIDDEN", "message": "..
 | GET    | `/api/audit-logs`                            | A05 + all + M01.view; chỉ đọc, phân trang                   |
 | GET    | `/api/facilities`                            | M03.view + lọc scope trước search/count/pagination          |
 | GET    | `/api/facilities/:id`                        | M03.view; ngoài scope trả 404                               |
+
+### Vi phạm, đình chỉ và khắc phục (M04)
+
+`002-violations.sql` bổ sung hồ sơ vi phạm, quyết định đình chỉ, lần cập nhật khắc phục, bằng chứng và lịch sử trạng thái. Các API áp dụng quyền M04 và lọc phạm vi theo cơ sở ở backend.
+
+| Method | Endpoint | Quyền / mục đích |
+| --- | --- | --- |
+| GET | `/api/violations?page=1&pageSize=20&facilityId=&type=&status=&search=` | M04.view; danh sách, bộ lọc và thống kê trong scope |
+| GET | `/api/violations/facilities?page=1&pageSize=100&search=` | M04.create; lựa chọn cơ sở trong scope |
+| POST | `/api/violations` | M04.create; ghi nhận vi phạm/không phép/không đủ điều kiện |
+| GET / PUT | `/api/violations/:id` | M04.view / M04.edit; xem và cập nhật thông tin |
+| POST / PUT | `/api/violations/:id/suspension` | M04.edit; tạo hoặc cập nhật quyết định đình chỉ |
+| POST | `/api/violations/:id/remediation` | M04.edit; `{note, progress}` |
+| POST | `/api/violations/:id/evidences` | M04.edit; metadata + base64 file |
+| GET | `/api/violations/:id/evidences/:evidenceId` | M04.view; tải tệp sau khi xác minh scope |
+| POST | `/api/violations/:id/submit-approval` | M04.edit; yêu cầu có cập nhật khắc phục và ít nhất một evidence |
+| POST | `/api/violations/:id/approve` | M04.approve; hoàn thành và khôi phục trạng thái cơ sở trước đình chỉ |
+| POST | `/api/violations/:id/reject` | M04.approve; yêu cầu lý do, trả hồ sơ về trạng thái cần xử lý |
+
+Giới hạn upload hiện là chính sách mẫu để có thể chạy end-to-end: PDF/JPEG/PNG tối đa 5 MB mỗi tệp, lưu BLOB trong SQLite; có thể đổi bằng `VIOLATION_EVIDENCE_MAX_BYTES` (tối đa 20 MB). Q12/NFR-07/12 yêu cầu đơn vị/hạ tầng xác nhận định dạng, dung lượng và quét an toàn trước khi dùng dữ liệu thật. `seedDemo` tạo hồ sơ `VP-DEMO-001` giả lập. Ma trận quyền M04 của tài khoản đã tồn tại không bị seed ghi đè; quản trị viên cần cấp quyền M04 qua màn hình vai trò.
 | GET    | `/api/dashboard`                             | M10.view + M03.view; count từ cùng truy vấn scope           |
 
 Danh sách hỗ trợ `page` (mặc định 1), `pageSize` (mặc định 20, tối đa 100). Cơ sở hỗ trợ `search` tên/địa chỉ, tối đa 100 ký tự. Scope options phân trang để tra ID hợp lệ.

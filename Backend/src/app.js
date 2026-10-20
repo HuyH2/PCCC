@@ -10,6 +10,11 @@ import {
 } from "./authorization.js";
 import { updateAccountAuthorization, updateRolePermissions } from "./administration.js";
 import { object, pagination, text } from "./validation.js";
+import {
+  addEvidence, addRemediation, createSuspension, createViolation, decideApproval,
+  evidenceBodyMaxBytes, listViolationFacilities, listViolations, readEvidence, submitApproval, updateSuspension, updateViolation,
+  violationDetail,
+} from "./violations.js";
 
 function cookieToken(request) {
   return (request.headers.cookie || "")
@@ -19,7 +24,7 @@ function cookieToken(request) {
     ?.slice(COOKIE_NAME.length + 1);
 }
 
-async function readJson(request) {
+async function readJson(request, maxBytes = 16384) {
   assert(
     request.headers["content-type"]?.split(";")[0].trim() === "application/json",
     415,
@@ -30,7 +35,7 @@ async function readJson(request) {
   let size = 0;
   for await (const chunk of request) {
     size += chunk.length;
-    assert(size <= 16384, 413, "BODY_TOO_LARGE", "Dữ liệu gửi lên quá lớn.");
+    assert(size <= maxBytes, 413, "BODY_TOO_LARGE", "Dữ liệu gửi lên quá lớn.");
     chunks.push(chunk);
   }
   try {
@@ -136,6 +141,37 @@ export function createApp(
       }
       const user = authenticate(db, token);
       if (method === "GET" && path === "/api/auth/me") return send(200, { user });
+      if (method === "GET" && path === "/api/violations")
+        return send(200, listViolations(db, user, url));
+      if (method === "GET" && path === "/api/violations/facilities")
+        return send(200, listViolationFacilities(db, user, url));
+      if (method === "POST" && path === "/api/violations")
+        return send(201, { violation: createViolation(db, user, await readJson(request), ip) });
+      const violationMatch = path.match(/^\/api\/violations\/([^/]+)(?:\/(suspension|remediation|evidences|submit-approval|approve|reject)(?:\/([^/]+))?)?$/);
+      if (violationMatch) {
+        const id = decodeURIComponent(violationMatch[1]);
+        const action = violationMatch[2];
+        const subId = violationMatch[3] ? decodeURIComponent(violationMatch[3]) : null;
+        if (!action && method === "GET") return send(200, violationDetail(db, user, id));
+        if (!action && method === "PUT") return send(200, { violation: updateViolation(db, user, id, await readJson(request), ip) });
+        if (action === "suspension" && method === "POST") return send(201, { suspension: createSuspension(db, user, id, await readJson(request), ip) });
+        if (action === "suspension" && method === "PUT") return send(200, { suspension: updateSuspension(db, user, id, await readJson(request), ip) });
+        if (action === "remediation" && method === "POST") return send(201, { remediation: addRemediation(db, user, id, await readJson(request), ip) });
+        if (action === "evidences" && method === "POST") return send(201, { evidence: addEvidence(db, user, id, await readJson(request, evidenceBodyMaxBytes), ip) });
+        if (action === "evidences" && subId && method === "GET") {
+          const evidence = readEvidence(db, user, id, subId);
+          response.setHeader("Content-Type", evidence.media_type);
+          response.setHeader("Content-Length", evidence.file_size);
+          response.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(evidence.file_name)}`);
+          response.setHeader("X-Content-Type-Options", "nosniff");
+          response.statusCode = 200;
+          response.end(evidence.content);
+          return;
+        }
+        if (action === "submit-approval" && method === "POST") return send(200, { violation: submitApproval(db, user, id, ip) });
+        if (action === "approve" && method === "POST") return send(200, { violation: decideApproval(db, user, id, await readJson(request), true, ip) });
+        if (action === "reject" && method === "POST") return send(200, { violation: decideApproval(db, user, id, await readJson(request), false, ip) });
+      }
       if (method === "POST" && path === "/api/auth/skip-password-change") {
         auth.skipPasswordChange(user, ip);
         return send(200, {

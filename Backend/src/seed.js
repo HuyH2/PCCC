@@ -70,12 +70,12 @@ export async function seedDemo(db, password) {
       ).run(id, `Cơ sở ${id} (dữ liệu mẫu)`, "Địa chỉ giả lập", region, officer);
     }
     const grants = {
-      A01: ["M03.view", "M03.approve", "M03.export", "M10.view"],
-      A02: ["M03.view", "M10.view"],
-      A03: ["M03.view", "M03.create", "M03.edit", "M10.view"],
-      A04: ["M03.view", "M03.export", "M10.view"],
-      A05: ["M01.view", "M01.edit", "M03.view", "M10.view"],
-      A06: ["M03.view", "M10.view"],
+      A01: ["M03.view", "M03.approve", "M03.export", "M04.view", "M04.approve", "M10.view"],
+      A02: ["M03.view", "M04.view", "M10.view"],
+      A03: ["M03.view", "M03.create", "M03.edit", "M04.view", "M04.create", "M04.edit", "M10.view"],
+      A04: ["M03.view", "M03.export", "M04.view", "M10.view"],
+      A05: ["M01.view", "M01.edit", "M03.view", "M04.view", "M04.create", "M04.edit", "M04.approve", "M10.view"],
+      A06: ["M03.view", "M04.view", "M10.view"],
     };
     const usernames = {
       A01: "demo.chi-huy",
@@ -100,6 +100,19 @@ export async function seedDemo(db, password) {
       db.prepare(
         "INSERT INTO account_scopes(account_id,kind,unit_id,region_id) VALUES (?,?,?,?)",
       ).run(id, kind, kind === "unit" ? "DV-KV10" : null, kind === "region" ? "KP01" : null);
+    }
+    const sampleFacility = db.prepare("SELECT id,officer_id FROM facilities WHERE id='CS001'").get();
+    const sampleActor = db.prepare("SELECT id FROM accounts WHERE role_code='A03' ORDER BY id LIMIT 1").get();
+    if (sampleFacility && sampleActor && !db.prepare("SELECT 1 FROM violations WHERE id='VP-DEMO-001'").get()) {
+      const now = Date.now();
+      const detectedOn = new Date(now).toISOString().slice(0, 10);
+      const deadline = new Date(now + 20 * 86400000).toISOString().slice(0, 10);
+      db.prepare(`INSERT INTO violations(id,facility_id,violation_type,severity,detected_on,description,facility_condition,remediation_deadline,tracked_officer_id,status,created_by,created_at,updated_at)
+        VALUES ('VP-DEMO-001',?,'Thiếu hồ sơ/phương án','Trung bình',?,'Thiếu tài liệu phương án PCCC trong hồ sơ mẫu.','violation',?,?,'remediation',?,?,?)`)
+        .run(sampleFacility.id, detectedOn, deadline, sampleFacility.officer_id, sampleActor.id, now, now);
+      db.prepare("INSERT INTO remediation_records(id,violation_id,note,progress,created_by,created_at) VALUES ('VR-DEMO-001','VP-DEMO-001','Đã yêu cầu cơ sở bổ sung tài liệu.',40,?,?)").run(sampleActor.id, now);
+      db.prepare("INSERT INTO violation_status_history(violation_id,from_status,to_status,reason,actor_id,occurred_at) VALUES ('VP-DEMO-001',NULL,'recorded','Ghi nhận dữ liệu mẫu',?,?)").run(sampleActor.id, now - 1);
+      db.prepare("INSERT INTO violation_status_history(violation_id,from_status,to_status,reason,actor_id,occurred_at) VALUES ('VP-DEMO-001','recorded','remediation','Khởi tạo tiến độ khắc phục mẫu',?,?)").run(sampleActor.id, now);
     }
   });
 }
