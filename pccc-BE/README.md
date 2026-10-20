@@ -46,32 +46,43 @@ Lần đầu hiển thị trang đổi mật khẩu với nút **Bỏ qua, đổ
 
 Response lỗi thống nhất: `{ "error": { "code": "FORBIDDEN", "message": "..." } }`.
 
-| Method | Path                                         | Điều kiện                                                                      |
-| ------ | -------------------------------------------- | ------------------------------------------------------------------------------ |
-| GET    | `/api/health`                                | Public, không trả thông tin nội bộ                                             |
-| POST   | `/api/auth/login`                            | `{username,password}`; tài khoản và vai trò hoạt động                          |
-| POST   | `/api/auth/logout`                           | Thu hồi session; idempotent                                                    |
-| GET    | `/api/auth/me`                               | Session hợp lệ; trả identity, permissions, scopes                              |
-| POST   | `/api/auth/change-password`                  | `{currentPassword,newPassword}`; session hợp lệ                                |
-| GET    | `/api/authorization/roles`                   | A05 + all + M01.view                                                           |
-| PUT    | `/api/authorization/roles/:role/permissions` | A05 + all + M01.edit; `{permissions:["M03.view"]}`                             |
-| GET    | `/api/authorization/accounts`                | A05 + all + M01.view; phân trang                                               |
-| GET    | `/api/authorization/accounts/:id`            | A05 + all + M01.view                                                           |
-| PUT    | `/api/authorization/accounts/:id`            | A05 + all + M01.edit; role + scopes                                            |
-| POST   | `/api/authorization/accounts/:id/lock`       | A05 + all + M01.edit; khóa và thu hồi session                                  |
-| POST   | `/api/authorization/accounts/:id/unlock`     | A05 + all + M01.edit; mở tài khoản đã khóa                                     |
-| GET    | `/api/authorization/scope-options?kind=unit` | A05 + all + M01.view; kind unit/region/facility, phân trang                    |
-| GET    | `/api/account-transfers/candidates`          | A05 + all + M01.view; tài khoản có thể chọn                                    |
-| GET    | `/api/account-transfers/assignments`         | A05 + all + M01.view; phạm vi hiện phụ trách theo `sourceAccountId`            |
-| POST   | `/api/account-transfers`                     | A05 + all + M01.edit; chuyển giao trong transaction                            |
-| GET    | `/api/account-transfers`                     | A05 + all + M01.view; lịch sử phân trang                                       |
-| GET    | `/api/audit-logs`                            | A05 + all + M01.view; chỉ đọc, phân trang                                      |
-| GET    | `/api/facilities`                            | M03.view + lọc scope trước search/count/pagination                             |
-| GET    | `/api/facilities/:id`                        | M03.view; ngoài scope trả 404                                                  |
-| GET    | `/api/dashboard`                             | M10.view + M03.view; `facilityCount`, `regionCount`, `officerCount` theo scope |
-| GET    | `/api/dashboard/facilities-by-region`        | M10.view + M03.view; số cơ sở theo khu vực, phân trang                         |
-| GET    | `/api/dashboard/facilities-by-officer`       | M10.view + M03.view; số cơ sở theo cán bộ, phân trang                          |
-| GET    | `/api/search?q=&limit=`                      | M10.view; tìm không dấu, nhóm kết quả theo loại và scope                       |
+| Method | Path                                             | Điều kiện                                                                      |
+| ------ | ------------------------------------------------ | ------------------------------------------------------------------------------ |
+| GET    | `/api/health`                                    | Public, không trả thông tin nội bộ                                             |
+| POST   | `/api/auth/login`                                | `{username,password}`; tài khoản và vai trò hoạt động                          |
+| POST   | `/api/auth/logout`                               | Thu hồi session; idempotent                                                    |
+| GET    | `/api/auth/me`                                   | Session hợp lệ; trả identity, permissions, scopes                              |
+| POST   | `/api/auth/change-password`                      | `{currentPassword,newPassword}`; session hợp lệ                                |
+| GET    | `/api/authorization/roles`                       | A05 + all + M01.view                                                           |
+| PUT    | `/api/authorization/roles/:role/permissions`     | A05 + all + M01.edit; `{permissions:["M03.view"]}`                             |
+| GET    | `/api/authorization/accounts`                    | A05 + all + M01.view; phân trang, `search`                                     |
+| GET    | `/api/authorization/accounts/:id`                | A05 + all + M01.view                                                           |
+| POST   | `/api/authorization/accounts`                    | A05 + all + M01.edit; tạo tài khoản + role + scope + mật khẩu tạm              |
+| PUT    | `/api/authorization/accounts/:id`                | A05 + all + M01.edit; role, scopes, fullName, officerId                        |
+| POST   | `/api/authorization/accounts/:id/status`         | A05 + all + M01.edit; `{status: active\|locked\|inactive}`                     |
+| POST   | `/api/authorization/accounts/:id/reset-password` | A05 + all + M01.edit; thu hồi session, bắt đổi ở lần đăng nhập tới             |
+| POST   | `/api/authorization/accounts/:id/lock`           | A05 + all + M01.edit; khóa và thu hồi session                                  |
+| POST   | `/api/authorization/accounts/:id/unlock`         | A05 + all + M01.edit; mở tài khoản đã khóa                                     |
+| GET    | `/api/authorization/scope-options?kind=unit`     | A05 + all + M01.view; kind unit/region/facility, phân trang                    |
+| GET    | `/api/account-transfers/candidates`              | A05 + all + M01.view; tài khoản có thể chọn                                    |
+| GET    | `/api/account-transfers/assignments`             | A05 + all + M01.view; phạm vi hiện phụ trách theo `sourceAccountId`            |
+| POST   | `/api/account-transfers`                         | A05 + all + M01.edit; chuyển giao trong transaction                            |
+| GET    | `/api/account-transfers`                         | A05 + all + M01.view; lịch sử phân trang                                       |
+| GET    | `/api/audit-logs`                                | A05 + all + M01.view; chỉ đọc, phân trang                                      |
+| GET    | `/api/regions`                                   | M02.view + scope; phân trang, `search`, `unitId`                               |
+| POST   | `/api/regions`                                   | M02.create; `{id,name,unitId}`                                                 |
+| GET    | `/api/regions/:id`                               | M02.view; chi tiết, cơ sở, cán bộ liên quan và lịch sử phân công               |
+| PUT    | `/api/regions/:id`                               | M02.edit; `{name,unitId}`                                                      |
+| POST   | `/api/regions/:id/assignment`                    | M02.edit; `{accountId\|null,effectiveDate,note}`                               |
+| GET    | `/api/regions/officers`                          | M02.edit; tài khoản có thể phân công                                           |
+| GET    | `/api/regions/:id/officers`                      | M02.view; cán bộ phụ trách khu vực và cơ sở trong khu vực                      |
+| GET    | `/api/units`                                     | M02.view; danh mục đơn vị cho biểu mẫu                                         |
+| GET    | `/api/facilities`                                | M03.view + lọc scope trước search/count/pagination                             |
+| GET    | `/api/facilities/:id`                            | M03.view; ngoài scope trả 404                                                  |
+| GET    | `/api/dashboard`                                 | M10.view + M03.view; `facilityCount`, `regionCount`, `officerCount` theo scope |
+| GET    | `/api/dashboard/facilities-by-region`            | M10.view + M03.view; số cơ sở theo khu vực, phân trang                         |
+| GET    | `/api/dashboard/facilities-by-officer`           | M10.view + M03.view; số cơ sở theo cán bộ, phân trang                          |
+| GET    | `/api/search?q=&limit=`                          | M10.view; tìm không dấu, nhóm kết quả theo loại và scope                       |
 
 API thực hiện kiểm tra M06 (`/api/inspections*`, `/api/inspection-checklists*`): xem [INSPECTIONS.md](INSPECTIONS.md).
 Schema, payload và giới hạn chuyển giao: [ACCOUNT_TRANSFERS.md](ACCOUNT_TRANSFERS.md).
@@ -124,7 +135,9 @@ Repo chưa có bảng tài khoản thật nên migration cung cấp **một bả
 
 Không hard-delete tài khoản có lịch sử. API khóa tài khoản đã xóa sessions cùng transaction để
 phiên cũ không sống lại khi mở khóa. Reset mật khẩu cũng phải thu hồi sessions và ghi audit.
-Chưa cung cấp CRUD tài khoản ngoài phạm vi hiện tại.
+Đã cung cấp CRUD tài khoản (tạo, sửa hồ sơ/vai trò/phạm vi, khóa/ngưng, đặt lại mật khẩu) trong phạm vi
+A05 + `M01.edit`; không xóa vật lý tài khoản có lịch sử. Chi tiết phân công địa bàn xem
+[AREA_ASSIGNMENT.md](AREA_ASSIGNMENT.md).
 
 `units`, `regions`, `facilities` là catalog tích hợp tối thiểu để kiểm chứng scope. Khi người phụ trách nghiệp vụ hoàn thành schema dùng chung, nối các FK/query vào nguồn đó bằng migration, không duy trì hai nguồn dữ liệu thật.
 

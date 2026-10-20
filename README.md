@@ -1,5 +1,21 @@
 # Hệ thống Quản lý công tác PCCC & CNCH
 
+## Phân công địa bàn và quản lý tài khoản — UC-ORG-03, UC-ADM-02
+
+`/to-chuc/khu-vuc` đã nối API thật: danh sách khu vực theo phạm vi, tạo/sửa khu vực (A05), phân công
+cán bộ kèm ngày hiệu lực/ghi chú và xem lịch sử. `/to-chuc/phan-cong` có thêm tab **Phân công** cho
+A01/A02; tab **Chuyển giao** giữ nguyên cho A05. `/quan-tri/tai-khoan` cho tạo tài khoản, gán vai trò +
+đơn vị, khóa/ngưng và đặt lại mật khẩu.
+
+Thử nhanh sau khi chạy dự án:
+
+1. Đăng nhập `demo.chi-huy` (A01) → `/to-chuc/phan-cong` → tab **Phân công** → chọn khu phố.
+2. Chọn cán bộ, nhập ngày hiệu lực và ghi chú → xác nhận; kiểm tra **Lịch sử phân công** bên dưới.
+3. Đăng nhập `demo.admin` (A05) → `/to-chuc/khu-vuc` tạo khu phố mới; `/quan-tri/tai-khoan` tạo tài
+   khoản với mật khẩu tạm, sau đó đăng nhập bằng tài khoản mới để kiểm tra bước đổi mật khẩu bắt buộc.
+
+Chi tiết schema, quyền và API: [pccc-BE/AREA_ASSIGNMENT.md](pccc-BE/AREA_ASSIGNMENT.md).
+
 ## Khóa tài khoản và chuyển giao phạm vi — UC-ADM-04
 
 `/quan-tri/tai-khoan` đã nối API để khóa/mở khóa tài khoản; `/to-chuc/phan-cong` đã nối API
