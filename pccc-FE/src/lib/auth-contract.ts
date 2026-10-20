@@ -34,6 +34,16 @@ export function canCreateChecklist(user: AuthUser) {
   );
 }
 
+/** UC-DOC-02 — management is limited to Commander and Admin with an active scope and grant. */
+export function canManageDocuments(user: AuthUser, action: "create" | "edit") {
+  return (
+    (user.role === "A01" || user.role === "A05") &&
+    user.scopes.length > 0 &&
+    user.permissions.includes("M05.view") &&
+    user.permissions.includes(`M05.${action}`)
+  );
+}
+
 /** Preserve existing demo screens. Backend enforces permissions on its APIs. */
 export function canVisit(user: AuthUser, path: string) {
   if (path === "/quan-tri/vai-tro" || path === "/quan-tri/nhat-ky") {
@@ -55,10 +65,7 @@ export function canVisit(user: AuthUser, path: string) {
   if (path === "/van-ban" || path.startsWith("/van-ban/")) {
     if (!user.permissions.includes("M05.view") || !user.scopes.length) return false;
     const action = path === "/van-ban/them" ? "create" : path.endsWith("/sua") ? "edit" : null;
-    return (
-      !action ||
-      (user.permissions.includes(`M05.${action}`) && user.scopes.some((s) => s.kind === "all"))
-    );
+    return !action || canManageDocuments(user, action);
   }
   return true;
 }

@@ -25,15 +25,15 @@ Seed tạo 6 loại và 6 văn bản **giả lập, không có giá trị pháp 
 Seed không ghi đè văn bản đã có, mật khẩu, scope hoặc grants đã được quản trị cấu hình.
 
 - Đọc kho chung, danh mục, chi tiết, file và lịch sử: `M05.view` + scope không rỗng.
-- Tạo: `M05.view` + `M05.create` + scope `all`.
-- Sửa, phân loại, thay file: `M05.view` + `M05.edit` + scope `all`.
+- Tạo: vai trò A01/A05 + `M05.view` + `M05.create` + scope không rỗng.
+- Sửa, phân loại, thay file: vai trò A01/A05 + `M05.view` + `M05.edit` + scope không rỗng.
 - Nhật ký toàn hệ thống: giữ quy tắc hiện có `A05` + `M01.view` + scope `all`.
-- Khi seed database mới, A01–A06 có quyền đọc M05, A05 có thêm quyền tạo/sửa. Đây là cấu hình demo,
-  không phải ma trận Q02 chính thức. **Database đã có tài khoản không tự được mở rộng quyền**:
-  quản trị vào `/quan-tri/vai-tro` cấp các quyền M05 cần thiết, bảo toàn grants hiện có.
+- Khi seed database mới, A01–A06 có quyền đọc M05; A01 và A05 có thêm quyền tạo/sửa.
+  Migration `008-legal-document-management-permissions.sql` cấp các quyền M05 tương ứng cho
+  hai vai trò đã tồn tại, ghi audit, không đổi tài khoản, scope hoặc quyền phân hệ khác.
 
 Kho văn bản pháp luật được xem là danh mục dùng chung toàn hệ thống, không thuộc riêng một cơ sở.
-Do đó scope địa bàn cho phép đọc kho chung, nhưng mutation kho chung đòi scope toàn hệ thống.
+Scope địa bàn của Chỉ huy cho phép quản lý kho chung theo yêu cầu UC-DOC-02 đã xác nhận.
 Không áp dụng quy tắc này cho dữ liệu nghiệp vụ khác; nếu cần kho riêng từng đơn vị phải thiết kế
 ownership và bộ lọc scope tương ứng trước khi mở rộng.
 
@@ -174,3 +174,13 @@ search/filter/pagination, version conflict, PDF và audit atomicity/append-only/
   trên màn hình đã kiểm tra. Không dùng database thật hoặc dừng server của người dùng.
 - Self-check: phạm vi yêu cầu, permission/scope, validation, audit nguyên tử và hồi quy PASS.
   Quét malware đầy đủ, lưu nội dung các phiên bản PDF cũ và triển khai production không thuộc phạm vi.
+
+### Kiểm chứng lại sau tái cấu trúc ngày 20/10/2026
+
+- Backend: 42/42 test PASS, gồm nâng cấp quyền trên DB đã có, Chỉ huy scope đơn vị và chặn vai trò khác.
+- Integration Next/backend: PASS trên cổng 4100/3200 với SQLite in-memory; kiểm form và API của Chỉ huy.
+- UI trên database QA độc lập: Chỉ huy thêm/sửa văn bản và thấy lịch sử; Admin thấy nút thêm;
+  cán bộ đọc được danh sách nhưng bị chặn khi vào trang thêm trực tiếp. Đã dọn database QA.
+- Lint, TypeScript, backend syntax, Prettier phạm vi thay đổi và build Webpack: PASS.
+- Database local có sẵn quyền M05 của A01/A05 từ lần sửa trước; không chạy migration trên dữ liệu đó
+  chỉ để kiểm thử. Khi ứng dụng mở database, các migration còn thiếu được áp dụng theo tên file.

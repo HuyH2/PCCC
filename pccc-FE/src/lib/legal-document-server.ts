@@ -1,13 +1,14 @@
 import { redirect, notFound } from "next/navigation";
 import { backendFetch, requirePage } from "./backend";
 import type { DocumentCategory, LegalDocument } from "./legal-document-contract";
+import { canManageDocuments } from "./auth-contract";
 
-export async function documentPageUser(action = "view") {
+export async function documentPageUser(action: "view" | "create" | "edit" = "view") {
   const user = await requirePage(`M05.${action}`);
   if (
     !user.permissions.includes("M05.view") ||
     !user.scopes.length ||
-    (action !== "view" && !user.scopes.some((s) => s.kind === "all"))
+    (action !== "view" && !canManageDocuments(user, action))
   )
     redirect("/khong-co-quyen");
   return user;

@@ -105,7 +105,7 @@ async function fixture(t) {
   return { db, request, login };
 }
 
-test("document access requires session, M05 permissions, nonempty scope; shared writes need all scope", async (t) => {
+test("document access requires session, M05 permissions and scope; writes require Commander or Admin", async (t) => {
   const { db, request, login } = await fixture(t);
   assert.equal((await request("/api/legal-documents")).status, 401);
   const reader = await login("demo.can-bo");
@@ -120,9 +120,22 @@ test("document access requires session, M05 permissions, nonempty scope; shared 
     403,
   );
   db.prepare("INSERT INTO role_permissions VALUES ('A03','M05.create')").run();
+  db.prepare("INSERT INTO role_permissions VALUES ('A03','M05.edit')").run();
+  db.prepare("DELETE FROM account_scopes WHERE account_id='DEMO-A03'").run();
+  db.prepare("INSERT INTO account_scopes(account_id,kind) VALUES ('DEMO-A03','all')").run();
   assert.equal(
     (await request("/api/legal-documents", { method: "POST", cookie: reader, body: payload() }))
       .status,
+    403,
+  );
+  assert.equal(
+    (
+      await request("/api/legal-documents/DEMO-DOC-1", {
+        method: "PUT",
+        cookie: reader,
+        body: payload({ version: 1 }),
+      })
+    ).status,
     403,
   );
   db.prepare("DELETE FROM account_scopes WHERE account_id='DEMO-A03'").run();
@@ -139,6 +152,151 @@ test("document access requires session, M05 permissions, nonempty scope; shared 
     "DELETE FROM role_permissions WHERE role_code='A05' AND permission_code='M05.view'",
   ).run();
   assert.equal((await request("/api/legal-documents", { cookie: admin })).status, 403);
+});
+
+test("Commander manages documents with unit scope; grants, role and scope are enforced on every write", async (t) => {
+  const { db, request, login } = await fixture(t);
+  const commander = await login("demo.chi-huy");
+  const created = await request("/api/legal-documents", {
+    method: "POST",
+    cookie: commander,
+    body: payload({ reference_number: "COMMANDER-01/2026" }),
+  });
+  assert.equal(created.status, 201, JSON.stringify(created.data));
+  const id = created.data.document.id;
+  const updated = await request(`/api/legal-documents/${id}`, {
+    method: "PUT",
+    cookie: commander,
+    body: payload({ reference_number: "COMMANDER-01/2026", version: 1, status: "expired" }),
+  });
+  assert.equal(updated.status, 200);
+  assert.equal(updated.data.document.status, "expired");
+  assert.equal(
+    (await request(`/api/legal-documents/${id}/history`, { cookie: commander })).data.total,
+    2,
+  );
+
+  db.prepare(
+    "DELETE FROM role_permissions WHERE role_code='A01' AND permission_code='M05.edit'",
+  ).run();
+  assert.equal(
+    (
+      await request(`/api/legal-documents/${id}`, {
+        method: "PUT",
+        cookie: commander,
+        body: payload({ reference_number: "COMMANDER-01/2026", version: 2 }),
+      })
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await request(`/api/legal-documents/${id}/file`, {
+        method: "POST",
+        cookie: commander,
+        raw: pdf,
+        headers: { "Content-Type": "application/pdf" },
+      })
+    ).status,
+    403,
+  );
+  db.prepare("DELETE FROM account_scopes WHERE account_id='DEMO-A01'").run();
+  assert.equal(
+    (
+      await request("/api/legal-documents", {
+        method: "POST",
+        cookie: commander,
+        body: payload({ reference_number: "COMMANDER-02/2026" }),
+      })
+    ).status,
+    403,
+  );
+});
+
+test("permission migration upgrades existing roles without changing accounts or unrelated grants", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "pccc-document-grants-"));
+  const path = join(directory, "upgrade.sqlite");
+  let db;
+  try {
+    db = openDatabase(path);
+    await seedDemo(db, password);
+    db.prepare(
+      "DELETE FROM role_permissions WHERE role_code='A01' AND permission_code IN ('M05.create','M05.edit')",
+    ).run();
+    db.prepare(
+      "DELETE FROM role_permissions WHERE role_code='A05' AND permission_code='M05.edit'",
+    ).run();
+    db.prepare(
+      "DELETE FROM schema_migrations WHERE name='008-legal-document-management-permissions.sql'",
+    ).run();
+    const accountsBefore = db
+      .prepare("SELECT id,username,password_hash,role_code FROM accounts ORDER BY id")
+      .all();
+    const scopesBefore = db
+      .prepare(
+        "SELECT account_id,kind,unit_id,region_id,facility_id FROM account_scopes ORDER BY id",
+      )
+      .all();
+    const otherGrantsBefore = db
+      .prepare(
+        "SELECT role_code,permission_code FROM role_permissions WHERE permission_code NOT LIKE 'M05.%' ORDER BY role_code,permission_code",
+      )
+      .all();
+    db.close();
+
+    db = openDatabase(path);
+    for (const role of ["A01", "A05"])
+      assert.deepEqual(
+        db
+          .prepare(
+            "SELECT permission_code FROM role_permissions WHERE role_code=? AND permission_code LIKE 'M05.%' ORDER BY permission_code",
+          )
+          .all(role)
+          .map((row) => row.permission_code),
+        ["M05.create", "M05.edit", "M05.view"],
+      );
+    assert.deepEqual(
+      db.prepare("SELECT id,username,password_hash,role_code FROM accounts ORDER BY id").all(),
+      accountsBefore,
+    );
+    assert.deepEqual(
+      db
+        .prepare(
+          "SELECT account_id,kind,unit_id,region_id,facility_id FROM account_scopes ORDER BY id",
+        )
+        .all(),
+      scopesBefore,
+    );
+    assert.deepEqual(
+      db
+        .prepare(
+          "SELECT role_code,permission_code FROM role_permissions WHERE permission_code NOT LIKE 'M05.%' ORDER BY role_code,permission_code",
+        )
+        .all(),
+      otherGrantsBefore,
+    );
+    assert.equal(
+      db
+        .prepare(
+          "SELECT count(*) AS n FROM audit_logs WHERE action='authorization.legal_document_management_enabled'",
+        )
+        .get().n,
+      2,
+    );
+    db.close();
+    db = openDatabase(path);
+    assert.equal(
+      db
+        .prepare(
+          "SELECT count(*) AS n FROM audit_logs WHERE action='authorization.legal_document_management_enabled'",
+        )
+        .get().n,
+      2,
+    );
+  } finally {
+    db?.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test("create, detail, accent search, combined filters, pagination and versioned update with history", async (t) => {

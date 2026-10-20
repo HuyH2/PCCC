@@ -218,6 +218,19 @@ Thêm mục mới **ở cuối** danh sách, theo mẫu ở §7.
   `facilities` nên lọc checklist qua tham số. Quyền M06 seed là mẫu (Q02) và không áp vào DB đã có
   tài khoản. Màn hình `/kiem-tra/cuoc-kiem-tra` (UC-INS-03) vẫn là mock.
 
+### F06 — Khôi phục quyền quản lý kho văn bản sau tái cấu trúc (UC-DOC-02)
+
+- **Mô tả:** Chỉ huy (A01) và Quản trị (A05) có nút và trang thêm/sửa văn bản khi có quyền M05
+  tương ứng và scope được cấp; cán bộ khác chỉ tra cứu. Kiểm tra quyền ở cả frontend lẫn backend.
+- **Backend:** Migration `008-legal-document-management-permissions.sql` bổ sung grant cho vai trò
+  đang tồn tại, giữ tài khoản/scope/quyền khác và ghi audit. Seed mới cấp M05.create/edit cho A01.
+  API tạo/sửa/upload xác thực vai trò, grant và scope không rỗng.
+- **Frontend:** `/van-ban` và trang chi tiết hiển thị thao tác theo helper `canManageDocuments`;
+  trang thêm/sửa và proxy dùng cùng quy tắc. Integration test định vị Next CLI qua module resolution
+  để chạy trong workspace pnpm mới.
+- **Test:** `pccc-BE/test/legal-documents.test.js` kiểm migration trên DB cũ, Chỉ huy scope đơn vị,
+  thu hồi grant/scope và chặn vai trò khác; `tests/auth-integration.test.mjs` kiểm nút, form và API.
+
 ## 7. Quy tắc khi làm feature
 
 Bắt buộc với mọi feature mới (người hoặc AI agent):

@@ -78,6 +78,8 @@ export async function seedDemo(db, password) {
         "M03.export",
         "M10.view",
         "M05.view",
+        "M05.create",
+        "M05.edit",
         "M06.view",
         "M06.create",
       ],
