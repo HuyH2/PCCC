@@ -48,6 +48,8 @@ Monorepo pnpm (`pnpm-workspace.yaml`) gồm hai ứng dụng; backend theo modul
   ký), `legal-documents` (kho văn bản M05; hợp đồng API, PDF và quyền ở `pccc-BE/LEGAL_DOCUMENTS.md`),
   `inspections` (thực hiện kiểm tra M06; API, trạng thái và giả định ở `pccc-BE/INSPECTIONS.md`).
 - `pccc-BE/migrations/*.sql`: migration theo thứ tự tên file.
+- Chuyển giao tài khoản/phạm vi UC-ADM-04 dùng module `administration/account-transfer.service.js`,
+  `region_assignments`, `account_transfers` và `account_transfer_items`; xem `pccc-BE/ACCOUNT_TRANSFERS.md`.
 - `pccc-BE/test/*.test.js`: kiểm thử bằng `node:test`, HTTP và SQLite; `tests/auth-integration.test.mjs`:
   tích hợp frontend production với backend.
 

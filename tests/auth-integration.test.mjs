@@ -277,5 +277,33 @@ test(
       ).status,
       200,
     );
+    assert.ok(
+      (await request("/to-chuc/phan-cong", { cookie: commanderCookie })).headers
+        .get("location")
+        .endsWith("/khong-co-quyen"),
+    );
+    const accountPage = await request("/quan-tri/tai-khoan", { cookie: adminCookie });
+    assert.equal(accountPage.status, 200);
+    assert.match(await accountPage.text(), /Quản lý tài khoản người dùng/);
+    const transferPage = await request("/to-chuc/phan-cong", { cookie: adminCookie });
+    assert.equal(transferPage.status, 200);
+    assert.match(await transferPage.text(), /Chuyển giao địa bàn và cơ sở/);
+    const transferResult = await request("/api/account-transfers", {
+      method: "POST",
+      cookie: adminCookie,
+      body: {
+        sourceAccountId: "DEMO-A03",
+        targetAccountId: "DEMO-A04",
+        regionIds: ["KP01"],
+        facilityIds: ["CS001"],
+        reason: "Kiểm thử tích hợp (dữ liệu mẫu)",
+      },
+    });
+    assert.equal(transferResult.status, 201);
+    const transferHistory = await (
+      await request("/api/account-transfers", { cookie: adminCookie })
+    ).json();
+    assert.equal(transferHistory.total, 1);
+    assert.equal(transferHistory.items[0].items.length, 2);
   },
 );

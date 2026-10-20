@@ -1,5 +1,37 @@
 # Hệ thống Quản lý công tác PCCC & CNCH
 
+## Khóa tài khoản và chuyển giao phạm vi — UC-ADM-04
+
+`/quan-tri/tai-khoan` đã nối API để khóa/mở khóa tài khoản; `/to-chuc/phan-cong` đã nối API
+để chuyển giao một phần hoặc toàn bộ khu vực/cơ sở và xem lịch sử. Chỉ quản trị A05 có
+`M01.view` và scope `all` được xem; thao tác cần thêm `M01.edit`. Xem
+[schema, quyền và API chuyển giao](pccc-BE/ACCOUNT_TRANSFERS.md).
+
+**Thử trên UI sau khi chạy dự án (mục “Chạy dự án”):**
+
+1. Đăng nhập `demo.admin` (A05) bằng mật khẩu demo ở mục 5. Lần đầu có thể chọn **Bỏ qua, đổi sau**.
+   Nếu vừa cập nhật mã nguồn khi hai server đang chạy, khởi động lại backend và frontend.
+2. Mở **Tổ chức – Cán bộ → Phân công phụ trách** (`/to-chuc/phan-cong`). Chọn
+   `demo.can-bo` (CB-A03); seed mới gán khu phố KP01 và cơ sở CS001 cho tài khoản này.
+3. Chọn riêng CS001 để thử chuyển giao một phần, hoặc bấm **Chọn toàn bộ** để chuyển cả KP01 và
+   CS001. Chọn `demo.tong-hop` (CB-A04), nhập lý do, bấm **Xác nhận chuyển giao** và xác nhận
+   hộp thoại. Thao tác có hiệu lực ngay và sẽ thu hồi phiên của hai tài khoản liên quan.
+4. Kiểm tra mục đã chuyển không còn trong danh sách của CB-A03; chọn CB-A04 làm cán bộ chuyển
+   giao để thấy mục đó đang thuộc CB-A04. Bên dưới form có **Lịch sử chuyển giao** với cán bộ
+   cũ/mới, phạm vi, lý do, thời gian, người thực hiện và mã audit. Có thể mở
+   `/quan-tri/nhat-ky` để đối chiếu log.
+5. Mở **Quản trị → Tài khoản** (`/quan-tri/tai-khoan`), khóa một tài khoản demo khác tài khoản
+   đang đăng nhập và kiểm tra trạng thái **Đã khóa**; bấm **Mở khóa** để khôi phục.
+
+Tài khoản `demo.chi-huy` trong ảnh minh họa là A01, không có quyền vào hai màn hình này.
+`/co-so` hiện vẫn hiển thị dữ liệu mẫu frontend nên không dùng trang đó để kiểm tra kết quả
+chuyển giao. Seed không ghi đè mật khẩu hoặc phân công đã thay đổi; trên database demo đã dùng
+lâu, danh sách CB-A03 có thể khác ví dụ. Migration tự chạy khi backend khởi động. Nếu chưa seed
+database demo, kiểm tra đúng `DATABASE_PATH` trong `pccc-BE/.env` rồi chạy `pnpm seed` tại root;
+seed không khôi phục phân công hoặc mật khẩu đã thay đổi.
+Chuyển giao cập nhật người phụ trách; quyền xem rộng theo khu vực/đơn vị/toàn hệ thống cần quản trị
+rà soát riêng ở `/quan-tri/vai-tro` nếu cán bộ cũ không còn được xem dữ liệu đó.
+
 ## Kho văn bản và nhật ký — UC-DOC-01, UC-DOC-02, UC-SYS-05
 
 `/van-ban` đã kết nối API: tìm kiếm/lọc, thêm/sửa/phân loại, xem chi tiết, tải PDF hoặc mở link,

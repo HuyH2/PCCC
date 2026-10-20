@@ -58,7 +58,13 @@ Response lỗi thống nhất: `{ "error": { "code": "FORBIDDEN", "message": "..
 | GET    | `/api/authorization/accounts`                | A05 + all + M01.view; phân trang                                               |
 | GET    | `/api/authorization/accounts/:id`            | A05 + all + M01.view                                                           |
 | PUT    | `/api/authorization/accounts/:id`            | A05 + all + M01.edit; role + scopes                                            |
+| POST   | `/api/authorization/accounts/:id/lock`       | A05 + all + M01.edit; khóa và thu hồi session                                  |
+| POST   | `/api/authorization/accounts/:id/unlock`     | A05 + all + M01.edit; mở tài khoản đã khóa                                     |
 | GET    | `/api/authorization/scope-options?kind=unit` | A05 + all + M01.view; kind unit/region/facility, phân trang                    |
+| GET    | `/api/account-transfers/candidates`          | A05 + all + M01.view; tài khoản có thể chọn                                    |
+| GET    | `/api/account-transfers/assignments`         | A05 + all + M01.view; phạm vi hiện phụ trách theo `sourceAccountId`            |
+| POST   | `/api/account-transfers`                     | A05 + all + M01.edit; chuyển giao trong transaction                            |
+| GET    | `/api/account-transfers`                     | A05 + all + M01.view; lịch sử phân trang                                       |
 | GET    | `/api/audit-logs`                            | A05 + all + M01.view; chỉ đọc, phân trang                                      |
 | GET    | `/api/facilities`                            | M03.view + lọc scope trước search/count/pagination                             |
 | GET    | `/api/facilities/:id`                        | M03.view; ngoài scope trả 404                                                  |
@@ -68,6 +74,7 @@ Response lỗi thống nhất: `{ "error": { "code": "FORBIDDEN", "message": "..
 | GET    | `/api/search?q=&limit=`                      | M10.view; tìm không dấu, nhóm kết quả theo loại và scope                       |
 
 API thực hiện kiểm tra M06 (`/api/inspections*`, `/api/inspection-checklists*`): xem [INSPECTIONS.md](INSPECTIONS.md).
+Schema, payload và giới hạn chuyển giao: [ACCOUNT_TRANSFERS.md](ACCOUNT_TRANSFERS.md).
 
 Danh sách hỗ trợ `page` (mặc định 1), `pageSize` (mặc định 20, tối đa 100). Cơ sở hỗ trợ `search` tên/địa chỉ, tối đa 100 ký tự. Scope options phân trang để tra ID hợp lệ.
 
@@ -115,13 +122,20 @@ Repo chưa có bảng tài khoản thật nên migration cung cấp **một bả
 | must_change_password      | 1 khi cấp/reset, 0 sau đổi mật khẩu hoặc chọn bỏ qua                     |
 | last_login_at, created_at | Unix milliseconds                                                        |
 
-Không hard-delete tài khoản có lịch sử. Khi khóa/ngưng, API từ chối ngay; người 3 cần xóa sessions cùng transaction để phiên cũ không sống lại khi mở khóa. Reset mật khẩu cũng phải thu hồi sessions và ghi audit. Các thao tác này thuộc UC-ADM-02/04, không cung cấp CRUD tài khoản ngoài scope task.
+Không hard-delete tài khoản có lịch sử. API khóa tài khoản đã xóa sessions cùng transaction để
+phiên cũ không sống lại khi mở khóa. Reset mật khẩu cũng phải thu hồi sessions và ghi audit.
+Chưa cung cấp CRUD tài khoản ngoài phạm vi hiện tại.
 
 `units`, `regions`, `facilities` là catalog tích hợp tối thiểu để kiểm chứng scope. Khi người phụ trách nghiệp vụ hoàn thành schema dùng chung, nối các FK/query vào nguồn đó bằng migration, không duy trì hai nguồn dữ liệu thật.
 
 ## Frontend và giới hạn bàn giao
 
-Đã nối `/dang-nhap`, `/doi-mat-khau` và `/quan-tri/vai-tro`. Reload dùng cookie server; không còn localStorage chứa danh tính hay tài khoản mặc định. Proxy kiểm tra đăng nhập và quyền vào trang cấu hình phân quyền; API kiểm tra quyền/phạm vi độc lập. Sidebar và các màn hình nghiệp vụ giữ nguyên UI, dữ liệu mẫu ban đầu; chủ module tiếp tục tích hợp API. `/tong-quan` và `/du-lieu/co-so` chuyển về `/` và `/co-so`. Logout/login dùng full navigation để bỏ router cache tài khoản cũ.
+Đã nối `/dang-nhap`, `/doi-mat-khau`, `/quan-tri/vai-tro`, `/quan-tri/tai-khoan` và
+`/to-chuc/phan-cong`. Reload dùng cookie server; không còn localStorage chứa danh tính hay tài khoản
+mặc định. Proxy kiểm tra đăng nhập và quyền vào các trang quản trị; API kiểm tra quyền/phạm vi độc
+lập. Nhiều màn hình nghiệp vụ khác vẫn dùng dữ liệu mẫu; riêng `/co-so` chưa phản ánh kết quả chuyển
+giao. `/tong-quan` và `/du-lieu/co-so` chuyển về `/` và `/co-so`. Logout/login dùng full navigation
+để bỏ router cache tài khoản cũ. Luồng thử trên UI nằm ở [README root](../README.md#khóa-tài-khoản-và-chuyển-giao-phạm-vi--uc-adm-04).
 
 Mã các màn hình nghiệp vụ tĩnh cũ vẫn được giữ. Chúng bị ẩn/chặn đến khi chủ module nối API có kiểm soát scope. Cấp quyền M04–M11 trong ma trận không tự mở các màn hình chưa tích hợp. Đây là giới hạn rõ ràng của phần tích hợp, không phải quyền chính thức đã chốt. Không đưa dữ liệu thật vào `src/data/mock.ts`, vì đó là module dữ liệu công khai của giao diện demo.
 

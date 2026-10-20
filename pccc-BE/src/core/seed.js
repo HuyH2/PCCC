@@ -122,6 +122,14 @@ export async function seedDemo(db, password) {
         "INSERT INTO account_scopes(account_id,kind,unit_id,region_id) VALUES (?,?,?,?)",
       ).run(id, kind, kind === "unit" ? "DV-KV10" : null, kind === "region" ? "KP01" : null);
     }
+    // Demo assignments only. Preserve existing ownership after a transfer or later seed run.
+    for (const [regionId, accountId] of [
+      ["KP01", "DEMO-A03"],
+      ["KP02", "DEMO-A01"],
+    ])
+      db.prepare(
+        "INSERT OR IGNORE INTO region_assignments(region_id,account_id,assigned_at) VALUES (?,?,?)",
+      ).run(regionId, accountId, Date.now());
     seedLegalDocuments(db);
     seedInspections(db);
   });

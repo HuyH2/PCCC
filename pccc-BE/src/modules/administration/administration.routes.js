@@ -14,6 +14,13 @@ import {
   updateAccountAuthorization,
   updateRolePermissions,
 } from "./administration.service.js";
+import {
+  changeAccountStatus,
+  createTransfer,
+  listTransfers,
+  managedAssignments,
+  transferCandidates,
+} from "./account-transfer.service.js";
 
 // UC-ADM-03 — role grants and account scopes; only system-wide administrators.
 async function accountDetail(ctx, match, permission) {
@@ -30,6 +37,49 @@ async function accountDetail(ctx, match, permission) {
 const ACCOUNT_PATH = /^\/api\/authorization\/accounts\/([^/]+)$/;
 
 export const administrationRoutes = [
+  {
+    method: "POST",
+    path: /^\/api\/authorization\/accounts\/([^/]+)\/(lock|unlock)$/,
+    handle(ctx, match) {
+      return {
+        account: changeAccountStatus(
+          ctx.db,
+          ctx.user,
+          decodeURIComponent(match[1]),
+          match[2],
+          ctx.ip,
+        ),
+      };
+    },
+  },
+  {
+    method: "GET",
+    path: "/api/account-transfers/candidates",
+    handle: (ctx) => transferCandidates(ctx.db, ctx.user),
+  },
+  {
+    method: "GET",
+    path: "/api/account-transfers/assignments",
+    handle(ctx) {
+      const sourceId = ctx.url.searchParams.get("sourceAccountId");
+      assert(sourceId, 400, "INVALID_INPUT", "Chọn cán bộ chuyển giao.");
+      return managedAssignments(ctx.db, ctx.user, sourceId);
+    },
+  },
+  {
+    method: "GET",
+    path: "/api/account-transfers",
+    handle: (ctx) => listTransfers(ctx.db, ctx.user, ctx.url),
+  },
+  {
+    method: "POST",
+    path: "/api/account-transfers",
+    async handle(ctx) {
+      const payload = await ctx.readJson();
+      ctx.status = 201;
+      return { transfer: createTransfer(ctx.db, ctx.user, payload, ctx.ip) };
+    },
+  },
   {
     method: "GET",
     path: "/api/authorization/roles",

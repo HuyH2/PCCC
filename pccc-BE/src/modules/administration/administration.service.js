@@ -8,7 +8,7 @@ import {
 import { audit } from "../audit/audit.service.js";
 import { transaction } from "../../core/database.js";
 
-function preserveAdministrator(db) {
+export function preserveAdministrator(db) {
   const row = db
     .prepare(
       `SELECT count(*) AS total FROM accounts a JOIN roles r ON r.code=a.role_code

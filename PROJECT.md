@@ -231,6 +231,25 @@ Thêm mục mới **ở cuối** danh sách, theo mẫu ở §7.
 - **Test:** `pccc-BE/test/legal-documents.test.js` kiểm migration trên DB cũ, Chỉ huy scope đơn vị,
   thu hồi grant/scope và chặn vai trò khác; `tests/auth-integration.test.mjs` kiểm nút, form và API.
 
+### F07 — Khóa tài khoản và chuyển giao phạm vi quản lý (UC-ADM-04)
+
+- **Mô tả:** Admin khóa/mở tài khoản, chọn cán bộ cũ → khu vực/cơ sở (một phần hoặc toàn bộ) →
+  cán bộ mới → xác nhận. Giao dịch cập nhật người phụ trách hiện tại, quyền truy cập trực tiếp,
+  thu hồi phiên liên quan và giữ lịch sử/audit trước–sau.
+- **Backend:** `009-account-transfers.sql`, `010-region-assignment-backfill.sql`;
+  `account-transfer.service.js` và routes trong module administration. Chỉ A05, M01.view/edit và
+  scope all; khóa tài khoản hiện hành/last admin bị chặn. Chi tiết và ánh xạ schema ở
+  [pccc-BE/ACCOUNT_TRANSFERS.md](pccc-BE/ACCOUNT_TRANSFERS.md).
+- **Frontend:** `/quan-tri/tai-khoan` dùng API thật để khóa/mở; `/to-chuc/phan-cong` có form chọn
+  cán bộ/phạm vi, xác nhận và lịch sử thật. Menu ẩn các trang chỉ dành cho quản trị.
+- **Test:** `pccc-BE/test/account-transfer.test.js` kiểm migration/seed, quyền 401/403, khóa/mở,
+  chuyển một phần/toàn bộ, phạm vi, audit và transaction rollback; integration kiểm route/UI/API.
+  UI QA trên database tách biệt kiểm xác nhận/hủy, chuyển liên tiếp, lịch sử, khóa/mở, thu hồi
+  phiên, quyền A05/A06 và bộ lọc audit. Danh sách cán bộ làm mới ngay sau chuyển giao.
+- **Giới hạn:** Schema hiện chưa có `users/officers/areas/officer_assignments`; dùng bảng hiện hữu.
+  Scope rộng `region`/`unit`/`all` cần quản trị rà soát riêng sau chuyển giao; không có lịch chuyển
+  tương lai. Trang `/co-so` vẫn dùng dữ liệu mẫu frontend.
+
 ## 7. Quy tắc khi làm feature
 
 Bắt buộc với mọi feature mới (người hoặc AI agent):

@@ -122,7 +122,13 @@ export function AppHeader({ user }: { user: AuthUser }) {
       </Button>
 
       {canVisit(user, "/canh-bao") && (
-        <Button variant="ghost" size="icon-sm" asChild className="relative" aria-label="Cảnh báo">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          asChild
+          className="relative"
+          aria-label={chuaDoc > 0 ? `Cảnh báo (${chuaDoc})` : "Cảnh báo"}
+        >
           <Link href="/canh-bao">
             <Bell className="size-4" />
             {chuaDoc > 0 && (
