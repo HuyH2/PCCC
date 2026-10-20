@@ -1,24 +1,18 @@
 import { ApiError, assert } from "../../core/errors.js";
+import { sendFile } from "../../core/http.js";
+import { requireInspectionAccess, scopedInspection } from "./inspections.service.js";
 import {
-  checklistDetail,
-  completeFollowUp,
-  completeInspection,
-  createChecklist,
-  requireChecklistAuthor,
-  createFollowUp,
-  createInspection,
-  documentFile,
-  inspectionDetail,
-  listChecklists,
   listInspections,
-  requireInspectionAccess,
-  saveConclusion,
+  createInspection,
+  inspectionDetail,
   saveResults,
-  scopedInspection,
-  uploadDocument,
-  INSPECTION_FILE_SIZE_MESSAGE,
-  MAX_INSPECTION_FILE_BYTES,
+  saveConclusion,
+  completeInspection,
 } from "./inspections.service.js";
+import { validateInspectionFile, uploadDocument, documentFile } from "./documents.service.js";
+import { createFollowUp, completeFollowUp } from "./follow-ups.service.js";
+import { checklistRoutes } from "./checklists.routes.js";
+import { MAX_INSPECTION_FILE_BYTES, INSPECTION_FILE_SIZE_MESSAGE } from "./inspections.constants.js";
 
 const ID = "([a-zA-Z0-9-]+)";
 const INSPECTION = `^\\/api\\/inspections\\/${ID}`;
@@ -69,40 +63,9 @@ async function upload(ctx, id) {
   };
 }
 
-function download(ctx, id, documentId) {
-  const file = documentFile(ctx.db, ctx.user, id, documentId);
-  const { response } = ctx;
-  response.statusCode = 200;
-  response.setHeader("Content-Type", file.content_type);
-  response.setHeader(
-    "Content-Disposition",
-    `attachment; filename="document"; filename*=UTF-8''${encodeURIComponent(file.file_name)}`,
-  );
-  response.setHeader("Content-Security-Policy", "sandbox; default-src 'none'");
-  response.end(Buffer.from(file.file_data));
-}
 
-export const inspectionsRoutes = [
-  {
-    method: "GET",
-    path: "/api/inspection-checklists",
-    handle: (ctx) => listChecklists(ctx.db, ctx.user, ctx.url),
-  },
-  {
-    method: "POST",
-    path: "/api/inspection-checklists",
-    async handle(ctx) {
-      requireChecklistAuthor(ctx.user);
-      const payload = await ctx.readJson(262144);
-      ctx.status = 201;
-      return createChecklist(ctx.db, ctx.user, payload, ctx.ip);
-    },
-  },
-  {
-    method: "GET",
-    path: new RegExp(`^\\/api\\/inspection-checklists\\/${ID}$`),
-    handle: (ctx, match) => checklistDetail(ctx.db, ctx.user, match[1]),
-  },
+
+const inspectionOnlyRoutes = [
   {
     method: "GET",
     path: "/api/inspections",
@@ -153,7 +116,8 @@ export const inspectionsRoutes = [
   {
     method: "GET",
     path: path(`\\/documents\\/${ID}\\/file`),
-    handle: (ctx, match) => download(ctx, match[1], match[2]),
+    handle: (ctx, match) =>
+      sendFile(ctx.response, documentFile(ctx.db, ctx.user, match[1], match[2])),
   },
   {
     method: "POST",
@@ -177,3 +141,6 @@ export const inspectionsRoutes = [
     },
   },
 ];
+
+// Combined export: checklists + inspections — app.js imports this as inspectionsRoutes.
+export const inspectionsRoutes = [...checklistRoutes, ...inspectionOnlyRoutes];
