@@ -26,7 +26,8 @@ export const regionsRoutes = [
   {
     method: "GET",
     path: "/api/regions/officers",
-    handle: (ctx) => assignableOfficers(ctx.db, ctx.user),
+    handle: (ctx) =>
+      assignableOfficers(ctx.db, ctx.user, ctx.url.searchParams.get("regionId") ?? ""),
   },
   {
     method: "POST",

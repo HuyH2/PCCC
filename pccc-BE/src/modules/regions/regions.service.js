@@ -2,17 +2,26 @@ import { assert } from "../../core/errors.js";
 import { object, text } from "../../core/validation.js";
 import { transaction } from "../../core/database.js";
 import { writeAudit } from "../audit/audit.service.js";
-import { regionScope, requirePermission } from "../authorization/authorization.service.js";
+import {
+  accountScope,
+  facilityScope,
+  regionScope,
+  requirePermission,
+  unitScope,
+} from "../authorization/authorization.service.js";
 
 // UC-ORG-03 — region catalogue and officer assignment. One region has one owner (Q03);
 // every change is appended to assignment_events (BR-03).
-const REGION_SELECT = `
+function regionSelect(principal) {
+  const facilities = facilityScope(principal);
+  return {
+    sql: `
   SELECT r.id,r.name,r.unit_id,u.name AS unit_name,
     ra.account_id AS officer_account_id,
     oa.full_name AS officer_name,
     oa.officer_id AS officer_code,
     ra.assigned_at,
-    (SELECT count(*) FROM facilities f WHERE f.region_id=r.id) AS facility_count,
+    (SELECT count(*) FROM facilities f WHERE f.region_id=r.id AND ${facilities.sql}) AS facility_count,
     ev.effective_date,
     ev.reason AS assignment_note
   FROM regions r
@@ -21,12 +30,18 @@ const REGION_SELECT = `
   LEFT JOIN accounts oa ON oa.id=ra.account_id
   LEFT JOIN assignment_events ev ON ev.id=(
     SELECT max(e.id) FROM assignment_events e WHERE e.region_id=r.id AND e.action='assign'
-  )`;
+  )`,
+    params: facilities.params,
+  };
+}
 
 function regionRow(db, principal, id, permission = "M02.view") {
   requirePermission(principal, permission);
+  const select = regionSelect(principal);
   const scope = regionScope(principal);
-  const row = db.prepare(`${REGION_SELECT} WHERE r.id=? AND ${scope.sql}`).get(id, ...scope.params);
+  const row = db
+    .prepare(`${select.sql} WHERE r.id=? AND ${scope.sql}`)
+    .get(...select.params, id, ...scope.params);
   assert(row, 404, "NOT_FOUND", "Không tìm thấy khu vực trong phạm vi được cấp.");
   return row;
 }
@@ -36,24 +51,27 @@ const SEARCH = "(instr(fold(r.name),fold(?))>0 OR instr(fold(r.id),fold(?))>0)";
 export function listRegions(db, principal, { page, pageSize, search, unitId }) {
   requirePermission(principal, "M02.view");
   assert(search.length <= 100, 400, "INVALID_INPUT", "Từ khóa tìm kiếm quá dài.");
+  const select = regionSelect(principal);
   const scope = regionScope(principal);
   const clauses = [scope.sql];
-  const params = [...scope.params];
+  const filterParams = [];
   if (search) {
     clauses.push(SEARCH);
-    params.push(search, search);
+    filterParams.push(search, search);
   }
   if (unitId) {
     text(unitId, "Đơn vị", 1, 100);
     clauses.push("r.unit_id=?");
-    params.push(unitId);
+    filterParams.push(unitId);
   }
   const where = clauses.join(" AND ");
   return {
     items: db
-      .prepare(`${REGION_SELECT} WHERE ${where} ORDER BY u.name,r.name LIMIT ? OFFSET ?`)
-      .all(...params, pageSize, (page - 1) * pageSize),
-    total: db.prepare(`SELECT count(*) AS n FROM regions r WHERE ${where}`).get(...params).n,
+      .prepare(`${select.sql} WHERE ${where} ORDER BY u.name,r.name,r.id LIMIT ? OFFSET ?`)
+      .all(...select.params, ...scope.params, ...filterParams, pageSize, (page - 1) * pageSize),
+    total: db
+      .prepare(`SELECT count(*) AS n FROM regions r WHERE ${where}`)
+      .get(...scope.params, ...filterParams).n,
     page,
     pageSize,
   };
@@ -61,15 +79,16 @@ export function listRegions(db, principal, { page, pageSize, search, unitId }) {
 
 export function getRegion(db, principal, id) {
   const region = regionRow(db, principal, id);
+  const facilities = facilityScope(principal);
   return {
     region,
     facilities: db
       .prepare(
         `SELECT f.id,f.name,f.address,f.status,f.officer_id,o.full_name AS officer_name
       FROM facilities f LEFT JOIN officer_directory o ON o.officer_id=f.officer_id
-      WHERE f.region_id=? ORDER BY f.name,f.id`,
+      WHERE f.region_id=? AND ${facilities.sql} ORDER BY f.name,f.id`,
       )
-      .all(id),
+      .all(id, ...facilities.params),
     officers: regionOfficers(db, principal, id).officers,
     history: db
       .prepare(
@@ -168,11 +187,16 @@ function grantDirectScope(db, accountId, kind, targetId) {
 function dateOnly(value, field) {
   if (value == null || value === "") return null;
   text(value, field, 10, 10);
+  const parsed = new Date(`${value}T00:00:00Z`);
+  const roundTrip = !Number.isNaN(parsed.getTime()) ? parsed.toISOString().slice(0, 10) : "";
   assert(
-    /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`)),
+    /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+      roundTrip === value &&
+      parsed.getUTCFullYear() >= 1900 &&
+      parsed.getUTCFullYear() <= 2999,
     400,
     "INVALID_INPUT",
-    `${field} phải có dạng YYYY-MM-DD.`,
+    `${field} phải là ngày hợp lệ có dạng YYYY-MM-DD.`,
   );
   return value;
 }
@@ -181,7 +205,6 @@ export function assignRegion(db, principal, id, payload, ip) {
   requirePermission(principal, "M02.view");
   requirePermission(principal, "M02.edit");
   object(payload, ["accountId", "effectiveDate", "note"]);
-  const region = regionRow(db, principal, id, "M02.edit");
   const accountId =
     payload.accountId == null || payload.accountId === ""
       ? null
@@ -191,14 +214,15 @@ export function assignRegion(db, principal, id, payload, ip) {
     payload.note == null || payload.note === ""
       ? null
       : text(payload.note.trim(), "Ghi chú", 1, 500);
-  assert(
-    accountId !== region.officer_account_id,
-    409,
-    "ASSIGNMENT_UNCHANGED",
-    accountId ? "Cán bộ này đã phụ trách khu vực." : "Khu vực hiện chưa có cán bộ phụ trách.",
-  );
 
   return transaction(db, () => {
+    const region = regionRow(db, principal, id, "M02.edit");
+    assert(
+      accountId !== region.officer_account_id,
+      409,
+      "ASSIGNMENT_UNCHANGED",
+      accountId ? "Cán bộ này đã phụ trách khu vực." : "Khu vực hiện chưa có cán bộ phụ trách.",
+    );
     const now = Date.now();
     if (accountId) {
       const account = db
@@ -208,6 +232,15 @@ export function assignRegion(db, principal, id, payload, ip) {
         )
         .get(accountId);
       assert(account, 409, "ACCOUNT_UNAVAILABLE", "Tài khoản cán bộ không hoạt động.");
+      const visible = accountScope(principal);
+      assert(
+        db
+          .prepare(`SELECT 1 FROM accounts a WHERE a.id=? AND ${visible.sql}`)
+          .get(accountId, ...visible.params),
+        403,
+        "ACCOUNT_OUT_OF_SCOPE",
+        "Tài khoản cán bộ ngoài phạm vi được cấp.",
+      );
       assert(
         db.prepare("SELECT count(*) AS n FROM accounts WHERE officer_id=?").get(account.officer_id)
           .n === 1,
@@ -272,41 +305,60 @@ export function assignRegion(db, principal, id, payload, ip) {
 
 export function regionOfficers(db, principal, id) {
   regionRow(db, principal, id);
-  return {
-    officers: db
-      .prepare(
-        `SELECT o.officer_id,od.full_name,a.id AS account_id,a.role_code,a.status
-      FROM (
-        SELECT f.officer_id FROM facilities f WHERE f.region_id=?
-        UNION
-        SELECT a2.officer_id FROM region_assignments ra
-        JOIN accounts a2 ON a2.id=ra.account_id WHERE ra.region_id=?
-      ) o
-      LEFT JOIN officer_directory od ON od.officer_id=o.officer_id
-      LEFT JOIN accounts a ON a.officer_id=o.officer_id
-      ORDER BY o.officer_id`,
-      )
-      .all(id, id),
-  };
+  const facilities = facilityScope(principal);
+  const rows = db
+    .prepare(
+      `SELECT f.officer_id,a.full_name,a.id AS account_id,a.role_code,a.status
+      FROM facilities f LEFT JOIN accounts a ON a.officer_id=f.officer_id
+      WHERE f.region_id=? AND ${facilities.sql} ORDER BY f.officer_id`,
+    )
+    .all(id, ...facilities.params);
+  const owner = db
+    .prepare(
+      `SELECT a.officer_id,a.full_name,a.id AS account_id,a.role_code,a.status
+      FROM region_assignments ra JOIN accounts a ON a.id=ra.account_id
+      WHERE ra.region_id=?`,
+    )
+    .get(id);
+  const officers = [];
+  const seen = new Set();
+  if (owner) {
+    seen.add(owner.officer_id);
+    officers.push(owner);
+  }
+  for (const row of rows) {
+    if (seen.has(row.officer_id)) continue;
+    seen.add(row.officer_id);
+    officers.push(row);
+  }
+  return { officers };
 }
 
-export function assignableOfficers(db, principal) {
+export function assignableOfficers(db, principal, regionId = "") {
   requirePermission(principal, "M02.edit");
+  if (regionId) regionRow(db, principal, regionId, "M02.edit");
+  const scope = accountScope(principal);
   return {
     items: db
       .prepare(
         `SELECT a.id,a.full_name,a.officer_id,a.role_code,
       (SELECT count(*) FROM region_assignments ra WHERE ra.account_id=a.id) AS region_count
       FROM accounts a JOIN roles r ON r.code=a.role_code
-      WHERE a.status='active' AND r.enabled=1 ORDER BY a.full_name,a.id`,
+      WHERE a.status='active' AND r.enabled=1 AND ${scope.sql}
+      ORDER BY a.full_name,a.id`,
       )
-      .all(),
+      .all(...scope.params),
   };
 }
 
 export function listUnits(db, principal) {
   requirePermission(principal, "M02.view");
+  const scope = unitScope(principal);
   return {
-    items: db.prepare("SELECT id,name,parent_id FROM units ORDER BY parent_id,id").all(),
+    items: db
+      .prepare(
+        `SELECT u.id,u.name,u.parent_id FROM units u WHERE ${scope.sql} ORDER BY u.parent_id,u.id`,
+      )
+      .all(...scope.params),
   };
 }

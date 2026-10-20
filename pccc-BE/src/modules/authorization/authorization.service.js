@@ -83,3 +83,46 @@ export function regionScope(principal) {
 export function unitScope(principal) {
   return scopeFilter(principal, { unit: `u.id IN (${unitDescendants})` });
 }
+
+/**
+ * Accounts on alias a: an account is visible when one of its direct scopes is inside the
+ * caller's scope. Accounts with an `all` scope are only visible to callers that also have
+ * `all`, so unit/region commanders cannot enumerate system administrators.
+ */
+export function accountScope(principal) {
+  if (principal.scopes.some((s) => s.kind === "all")) return { sql: "1=1", params: [] };
+  const clauses = [];
+  const params = [];
+  for (const scope of principal.scopes) {
+    if (scope.kind === "unit") {
+      clauses.push(`(
+        a.id IN (SELECT s.account_id FROM account_scopes s
+          WHERE s.kind='unit' AND s.unit_id IN (${unitDescendants}))
+        OR a.id IN (SELECT s.account_id FROM account_scopes s
+          WHERE s.kind='region' AND s.region_id IN
+            (SELECT id FROM regions WHERE unit_id IN (${unitDescendants})))
+        OR a.id IN (SELECT s.account_id FROM account_scopes s
+          WHERE s.kind='facility' AND s.facility_id IN
+            (SELECT id FROM facilities WHERE region_id IN
+              (SELECT id FROM regions WHERE unit_id IN (${unitDescendants}))))
+      )`);
+      params.push(scope.targetId, scope.targetId, scope.targetId);
+    } else if (scope.kind === "region") {
+      clauses.push(`(
+        a.id IN (SELECT s.account_id FROM account_scopes s
+          WHERE s.kind='region' AND s.region_id=?)
+        OR a.id IN (SELECT s.account_id FROM account_scopes s
+          WHERE s.kind='facility' AND s.facility_id IN
+            (SELECT id FROM facilities WHERE region_id=?))
+      )`);
+      params.push(scope.targetId, scope.targetId);
+    } else if (scope.kind === "facility") {
+      clauses.push(
+        `a.id IN (SELECT s.account_id FROM account_scopes s
+          WHERE s.kind='facility' AND s.facility_id=?)`,
+      );
+      params.push(scope.targetId);
+    }
+  }
+  return { sql: clauses.length ? `(${clauses.join(" OR ")})` : "0=1", params };
+}

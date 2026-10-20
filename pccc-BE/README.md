@@ -70,13 +70,13 @@ Response lỗi thống nhất: `{ "error": { "code": "FORBIDDEN", "message": "..
 | GET    | `/api/account-transfers`                         | A05 + all + M01.view; lịch sử phân trang                                       |
 | GET    | `/api/audit-logs`                                | A05 + all + M01.view; chỉ đọc, phân trang                                      |
 | GET    | `/api/regions`                                   | M02.view + scope; phân trang, `search`, `unitId`                               |
-| POST   | `/api/regions`                                   | M02.create; `{id,name,unitId}`                                                 |
-| GET    | `/api/regions/:id`                               | M02.view; chi tiết, cơ sở, cán bộ liên quan và lịch sử phân công               |
+| POST   | `/api/regions`                                   | M02.view + M02.create; `{id,name,unitId}`                                      |
+| GET    | `/api/regions/:id`                               | M02.view; chi tiết + cơ sở + cán bộ theo scope, lịch sử phân công              |
 | PUT    | `/api/regions/:id`                               | M02.edit; `{name,unitId}`                                                      |
-| POST   | `/api/regions/:id/assignment`                    | M02.edit; `{accountId\|null,effectiveDate,note}`                               |
-| GET    | `/api/regions/officers`                          | M02.edit; tài khoản có thể phân công                                           |
-| GET    | `/api/regions/:id/officers`                      | M02.view; cán bộ phụ trách khu vực và cơ sở trong khu vực                      |
-| GET    | `/api/units`                                     | M02.view; danh mục đơn vị cho biểu mẫu                                         |
+| POST   | `/api/regions/:id/assignment`                    | M02.edit; `{accountId\|null,effectiveDate,note}`; tài khoản đích trong scope   |
+| GET    | `/api/regions/officers?regionId=`                | M02.edit; tài khoản có thể phân công, lọc theo `accountScope`                  |
+| GET    | `/api/regions/:id/officers`                      | M02.view; cán bộ phụ trách khu vực và cơ sở theo scope                         |
+| GET    | `/api/units`                                     | M02.view; danh mục đơn vị theo scope                                           |
 | GET    | `/api/facilities`                                | M03.view + lọc scope trước search/count/pagination                             |
 | GET    | `/api/facilities/:id`                            | M03.view; ngoài scope trả 404                                                  |
 | GET    | `/api/dashboard`                                 | M10.view + M03.view; `facilityCount`, `regionCount`, `officerCount` theo scope |

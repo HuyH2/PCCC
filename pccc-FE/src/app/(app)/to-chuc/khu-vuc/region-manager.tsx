@@ -76,25 +76,30 @@ export function RegionManager({ canEdit, canCreate }: { canEdit: boolean; canCre
       .catch(() => setUnits([]));
   }, []);
 
-  React.useEffect(() => {
-    if (!canEdit) return;
-    regionApi<{ items: AssignableOfficer[] }>("/api/regions/officers")
-      .then((data) => setOfficers(data.items))
-      .catch(() => setOfficers([]));
-  }, [canEdit]);
-
-  const openDetail = React.useCallback(async (id: string) => {
-    setError(null);
-    setMessage(null);
-    try {
-      const data = await regionApi<RegionDetail>(`/api/regions/${encodeURIComponent(id)}`);
-      setDetail(data);
-      setEdit({ name: data.region.name, unitId: data.region.unit_id });
-      setAssignment({ accountId: "", effectiveDate: "", note: "" });
-    } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "Không thể tải chi tiết khu vực.");
-    }
-  }, []);
+  const openDetail = React.useCallback(
+    async (id: string) => {
+      setError(null);
+      setMessage(null);
+      try {
+        const data = await regionApi<RegionDetail>(`/api/regions/${encodeURIComponent(id)}`);
+        setDetail(data);
+        setEdit({ name: data.region.name, unitId: data.region.unit_id });
+        setAssignment({ accountId: "", effectiveDate: "", note: "" });
+        if (!canEdit) {
+          setOfficers([]);
+          return;
+        }
+        // Candidate accounts are resolved per region so the backend can apply the caller scope.
+        const candidates = await regionApi<{ items: AssignableOfficer[] }>(
+          `/api/regions/officers?regionId=${encodeURIComponent(id)}`,
+        );
+        setOfficers(candidates.items);
+      } catch (failure) {
+        setError(failure instanceof Error ? failure.message : "Không thể tải chi tiết khu vực.");
+      }
+    },
+    [canEdit],
+  );
 
   async function submitCreate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -138,17 +143,17 @@ export function RegionManager({ canEdit, canCreate }: { canEdit: boolean; canCre
     }
   }
 
-  async function submitAssignment(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function assign(accountId: string | null) {
     if (!detail) return;
-    const target = officers.find((item) => item.id === assignment.accountId);
-    const label = target ? target.full_name : "bỏ phân công";
-    if (
-      !window.confirm(
-        `${target ? `Giao ${detail.region.name} cho ${label}?` : `Bỏ phân công ${detail.region.name}?`} Khu vực đang có ${detail.region.facility_count} cơ sở.`,
-      )
-    )
+    const target = accountId ? officers.find((item) => item.id === accountId) : null;
+    if (accountId && !target) {
+      setError("Vui lòng chọn cán bộ phụ trách.");
       return;
+    }
+    const question = target
+      ? `Giao ${detail.region.name} cho ${target.full_name}? Khu vực đang có ${detail.region.facility_count} cơ sở.`
+      : `Bỏ phân công ${detail.region.name}? Khu vực đang có ${detail.region.facility_count} cơ sở.`;
+    if (!window.confirm(question)) return;
     setBusy(true);
     setError(null);
     setMessage(null);
@@ -157,8 +162,8 @@ export function RegionManager({ canEdit, canCreate }: { canEdit: boolean; canCre
         `/api/regions/${encodeURIComponent(detail.region.id)}/assignment`,
         "POST",
         {
-          accountId: assignment.accountId || null,
-          effectiveDate: assignment.effectiveDate || null,
+          accountId,
+          effectiveDate: accountId ? assignment.effectiveDate || null : null,
           note: assignment.note.trim() || null,
         },
       );
@@ -171,6 +176,11 @@ export function RegionManager({ canEdit, canCreate }: { canEdit: boolean; canCre
     } finally {
       setBusy(false);
     }
+  }
+
+  function submitAssignment(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void assign(assignment.accountId || null);
   }
 
   return (
@@ -375,10 +385,7 @@ export function RegionManager({ canEdit, canCreate }: { canEdit: boolean; canCre
                   <p className="text-muted-foreground text-sm">Chưa phân công cán bộ.</p>
                 )}
                 {canEdit && (
-                  <form
-                    onSubmit={(event) => void submitAssignment(event)}
-                    className="space-y-3 border-t pt-3"
-                  >
+                  <form onSubmit={submitAssignment} className="space-y-3 border-t pt-3">
                     <div className="space-y-1">
                       <Label htmlFor="assign-account">Cán bộ phụ trách</Label>
                       <select
@@ -389,7 +396,9 @@ export function RegionManager({ canEdit, canCreate }: { canEdit: boolean; canCre
                           setAssignment({ ...assignment, accountId: event.target.value })
                         }
                       >
-                        <option value="">— Bỏ phân công —</option>
+                        <option value="" disabled>
+                          — Chọn cán bộ —
+                        </option>
                         {officers
                           .filter((item) => item.id !== detail.region.officer_account_id)
                           .map((item) => (
@@ -423,9 +432,22 @@ export function RegionManager({ canEdit, canCreate }: { canEdit: boolean; canCre
                         />
                       </div>
                     </div>
-                    <Button type="submit" size="sm" disabled={busy}>
-                      Xác nhận phân công
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="submit" size="sm" disabled={busy || !assignment.accountId}>
+                        Xác nhận phân công
+                      </Button>
+                      {detail.region.officer_account_id && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() => void assign(null)}
+                        >
+                          Bỏ phân công
+                        </Button>
+                      )}
+                    </div>
                   </form>
                 )}
               </div>

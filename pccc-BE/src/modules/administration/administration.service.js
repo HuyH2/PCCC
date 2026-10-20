@@ -162,14 +162,40 @@ export function updateAccountAuthorization(db, principal, id, payload, ip) {
     payload.officerId === undefined
       ? account.officer_id
       : text(payload.officerId?.trim(), "Mã cán bộ", 1, 64);
-  if (officerId !== account.officer_id) uniqueOfficer(db, officerId, id);
-  transaction(db, () => {
+  if (officerId !== account.officer_id) {
+    uniqueOfficer(db, officerId, id);
+    assert(
+      !db.prepare("SELECT 1 FROM region_assignments WHERE account_id=?").get(id),
+      409,
+      "ACCOUNT_ASSIGNED",
+      "Cán bộ đang phụ trách khu vực; hãy phân công người khác trước khi đổi mã cán bộ.",
+    );
+    assert(
+      !db.prepare("SELECT 1 FROM facilities WHERE officer_id=?").get(account.officer_id),
+      409,
+      "ACCOUNT_ASSIGNED",
+      "Cán bộ đang phụ trách cơ sở; hãy chuyển giao trước khi đổi mã cán bộ.",
+    );
+  }
+  return transaction(db, () => {
     const before = {
       role: account.role_code,
       fullName: account.full_name,
       officerId: account.officer_id,
       scopes: scopesFor(db, id),
     };
+    // A region assignment and its `region` scope are one invariant. Removing that scope
+    // through PUT would leave an owner who cannot read the region, so the assignment is
+    // removed with an explicit history entry instead of keeping a broken link.
+    const assignedRegions = db
+      .prepare("SELECT region_id FROM region_assignments WHERE account_id=?")
+      .all(id)
+      .map((row) => row.region_id);
+    const removedRegionIds = scopes.some((scope) => scope.kind === "all")
+      ? []
+      : assignedRegions.filter(
+          (regionId) => !scopes.some((s) => s.kind === "region" && s.targetId === regionId),
+        );
     db.prepare("UPDATE accounts SET role_code=?,full_name=?,officer_id=? WHERE id=?").run(
       role,
       fullName,
@@ -180,15 +206,39 @@ export function updateAccountAuthorization(db, principal, id, payload, ip) {
     preserveAdministrator(db);
     // Force the affected account to log in again after role/scope changes.
     db.prepare("DELETE FROM sessions WHERE account_id=?").run(id);
-    audit(
-      db,
-      principal.id,
-      "authorization.account_changed",
-      id,
+    const auditId = writeAudit(db, {
+      actorId: principal.id,
+      feature: "M01.authorization",
+      objectType: "account",
+      objectId: id,
+      action: "authorization.account_changed",
       before,
-      { role, fullName, officerId, scopes },
+      after: { role, fullName, officerId, scopes, removedRegionIds },
       ip,
-    );
+    });
+    const now = Date.now();
+    const effectiveDate = new Date(now).toISOString().slice(0, 10);
+    for (const regionId of removedRegionIds) {
+      const removed = db
+        .prepare("DELETE FROM region_assignments WHERE region_id=? AND account_id=?")
+        .run(regionId, id);
+      if (!removed.changes) continue;
+      db.prepare(
+        `INSERT INTO assignment_events
+        (region_id,from_account_id,to_account_id,action,reason,effective_date,
+          performed_by,occurred_at,audit_log_id)
+        VALUES (?,?,NULL,'unassign',?,?,?,?,?)`,
+      ).run(
+        regionId,
+        id,
+        "Thu hồi qua cập nhật phạm vi",
+        effectiveDate,
+        principal.id,
+        now,
+        auditId,
+      );
+    }
+    return { scopes: scopesFor(db, id), removedRegionIds };
   });
 }
 
@@ -200,19 +250,22 @@ export async function createAccount(db, principal, payload, ip) {
   const username = text(payload.username?.trim().toLowerCase(), "Tên đăng nhập", 1, 100);
   assert(USERNAME.test(username), 400, "INVALID_INPUT", "Tên đăng nhập không đúng định dạng.");
   const fullName = text(payload.fullName?.trim(), "Họ tên", 1, 200);
-  const officerId = uniqueOfficer(db, text(payload.officerId?.trim(), "Mã cán bộ", 1, 64));
+  const officerId = text(payload.officerId?.trim(), "Mã cán bộ", 1, 64);
   const role = activeRole(db, payload.role);
   const password = text(payload.password, "Mật khẩu", 12, 256);
   const scopes = normalizeScopes(db, payload.scopes ?? []);
-  assert(
-    !db.prepare("SELECT 1 FROM accounts WHERE username=?").get(username),
-    409,
-    "DUPLICATE_USERNAME",
-    "Tên đăng nhập đã tồn tại.",
-  );
   const passwordHash = await hashPassword(password);
   const id = `ACC-${randomUUID()}`;
   return transaction(db, () => {
+    // Both checks run after the async hash, inside the write transaction, so concurrent
+    // requests cannot create duplicate usernames or officer ids.
+    uniqueOfficer(db, officerId);
+    assert(
+      !db.prepare("SELECT 1 FROM accounts WHERE username=?").get(username),
+      409,
+      "DUPLICATE_USERNAME",
+      "Tên đăng nhập đã tồn tại.",
+    );
     db.prepare(
       `INSERT INTO accounts(id,username,password_hash,full_name,officer_id,role_code,status,
         must_change_password,created_at) VALUES (?,?,?,?,?,?,'active',1,?)`,
