@@ -51,6 +51,9 @@ export interface RegionDetail {
   facilities: RegionFacility[];
   officers: RegionOfficer[];
   history: AssignmentEvent[];
+  history_total: number;
+  history_page: number;
+  history_page_size: number;
 }
 
 export interface AssignableOfficer {

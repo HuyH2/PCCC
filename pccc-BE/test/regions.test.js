@@ -203,6 +203,32 @@ test("region and account writes validate input, permissions and lifecycle", asyn
     400,
   );
 
+  assert.equal(
+    (
+      await request("/api/regions", {
+        method: "POST",
+        cookie: commander,
+        body: { id: "KP11", name: "Ngoài đơn vị", unitId: "DV-KV11" },
+      })
+    ).status,
+    403,
+    "Commander must not create a region in another unit",
+  );
+  assert.equal(
+    (
+      await request("/api/regions/KP01", {
+        method: "PUT",
+        cookie: commander,
+        body: { name: "Khu phố 01", unitId: "DV-KV11" },
+      })
+    ).status,
+    403,
+    "Commander must not move a region to another unit",
+  );
+  const badUri = await request("/api/regions/%E0%A4%A", { cookie: admin });
+  assert.equal(badUri.status, 400);
+  assert.equal(badUri.data.error.code, "INVALID_INPUT");
+
   const account = {
     username: "canbo.moi",
     fullName: "Cán bộ mới",
@@ -211,6 +237,13 @@ test("region and account writes validate input, permissions and lifecycle", asyn
     password: "Temp-password-2026",
     scopes: [{ kind: "unit", targetId: "DV-KV10" }],
   };
+  const noScope = await request("/api/authorization/accounts", {
+    method: "POST",
+    cookie: admin,
+    body: { ...account, username: "khong.pham.vi", officerId: "CB-NOSCOPE", scopes: [] },
+  });
+  assert.equal(noScope.status, 400);
+  assert.equal(noScope.data.error.code, "SCOPE_REQUIRED");
   const newAccount = await request("/api/authorization/accounts", {
     method: "POST",
     cookie: admin,
@@ -329,7 +362,7 @@ function accountBody(overrides = {}) {
     officerId: "CB-TEST",
     role: "A03",
     password: "Temp-password-2026",
-    scopes: [],
+    scopes: [{ kind: "unit", targetId: "DV-KV10" }],
     ...overrides,
   };
 }
@@ -459,6 +492,8 @@ test("account changes cannot break assignment links or leave an owner without ac
     body: { role: "A03", fullName: "Cán bộ A03", officerId: "CB-A03", scopes: [] },
   });
   assert.equal(update.status, 200, JSON.stringify(update.data));
+  assert.equal(update.data.account.full_name, "Cán bộ A03");
+  assert.equal(update.data.account.officer_id, "CB-A03");
   assert.deepEqual(update.data.scopes, []);
   assert.deepEqual(update.data.removedRegionIds, ["KP01"]);
   assert.equal(
@@ -515,6 +550,17 @@ test("transfers append assignment history instead of inheriting old notes", asyn
     db.prepare("SELECT count(*) AS n FROM assignment_events WHERE region_id='KP01'").get().n,
     2,
   );
+
+  const historyPage1 = await request("/api/regions/KP01?page=1&pageSize=1", { cookie: admin });
+  assert.equal(historyPage1.data.history_total, 2);
+  assert.equal(historyPage1.data.history_page, 1);
+  assert.equal(historyPage1.data.history_page_size, 1);
+  assert.equal(historyPage1.data.history.length, 1);
+  assert.equal(historyPage1.data.history[0].reason, "Điều động cán bộ");
+  const historyPage2 = await request("/api/regions/KP01?page=2&pageSize=1", { cookie: admin });
+  assert.equal(historyPage2.data.history.length, 1);
+  assert.equal(historyPage2.data.history[0].action, "assign");
+  assert.equal(historyPage2.data.history[0].effective_date, "2026-11-01");
 });
 
 test("assignment dates are calendar-valid", async (t) => {
@@ -609,6 +655,78 @@ test("status guards and an audit failure roll back the assignment", async (t) =>
     db.prepare("SELECT count(*) AS n FROM assignment_events WHERE region_id='KP01'").get().n,
     0,
   );
+});
+
+test("schema enforces unique officer codes and append-only assignment history", async (t) => {
+  const { db, request, login } = await fixture(t);
+  const admin = await login();
+  assert.ok(
+    db
+      .prepare("SELECT 1 FROM sqlite_master WHERE type='index' AND name='accounts_officer_unique'")
+      .get(),
+    "accounts.officer_id must have a unique index",
+  );
+  assert.throws(
+    () =>
+      db
+        .prepare(
+          `INSERT INTO accounts(id,username,password_hash,full_name,officer_id,role_code,
+            status,must_change_password,created_at)
+          VALUES ('ACC-DUP','dup.user','x','Trùng mã','CB-A03','A03','active',0,?)`,
+        )
+        .run(Date.now()),
+    /UNIQUE/,
+  );
+
+  const assigned = await request("/api/regions/KP02/assignment", {
+    method: "POST",
+    cookie: admin,
+    body: { accountId: "DEMO-A04", note: "test" },
+  });
+  assert.equal(assigned.status, 200);
+  assert.throws(
+    () => db.prepare("UPDATE assignment_events SET reason='x' WHERE region_id='KP02'").run(),
+    /append-only/,
+  );
+  assert.throws(
+    () => db.prepare("DELETE FROM assignment_events WHERE region_id='KP02'").run(),
+    /append-only/,
+  );
+});
+
+test("a region-scoped officer can assign within the region's unit", async (t) => {
+  const { db, request, login } = await fixture(t);
+  const admin = await login();
+  db.prepare("INSERT OR IGNORE INTO role_permissions VALUES ('A03','M02.view')").run();
+  db.prepare("INSERT OR IGNORE INTO role_permissions VALUES ('A03','M02.edit')").run();
+  const created = await request("/api/authorization/accounts", {
+    method: "POST",
+    cookie: admin,
+    body: accountBody({
+      username: "region.manager",
+      officerId: "CB-REGION",
+      scopes: [{ kind: "region", targetId: "KP01" }],
+    }),
+  });
+  assert.equal(created.status, 201, JSON.stringify(created.data));
+  db.prepare("UPDATE accounts SET must_change_password=0 WHERE id=?").run(created.data.account.id);
+  const regionManager = await login("region.manager", "Temp-password-2026");
+
+  const candidates = await request("/api/regions/officers?regionId=KP01", {
+    cookie: regionManager,
+  });
+  assert.equal(candidates.status, 200);
+  assert.ok(
+    candidates.data.items.some((item) => item.id === "DEMO-A04"),
+    "officer of the region's unit must be assignable",
+  );
+  const assigned = await request("/api/regions/KP01/assignment", {
+    method: "POST",
+    cookie: regionManager,
+    body: { accountId: "DEMO-A04" },
+  });
+  assert.equal(assigned.status, 200, JSON.stringify(assigned.data));
+  assert.equal(assigned.data.region.officer_account_id, "DEMO-A04");
 });
 
 test("business date follows Vietnam time around the UTC midnight boundary", () => {

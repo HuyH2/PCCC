@@ -32,10 +32,14 @@ async function accountDetail(ctx, match, permission) {
   assert(findAccount(ctx.db, id), 404, "NOT_FOUND", "Không tìm thấy tài khoản.");
   if (ctx.method === "PUT") {
     const payload = await ctx.readJson();
-    return {
-      account: findAccount(ctx.db, id),
-      ...updateAccountAuthorization(ctx.db, authenticate(ctx.db, ctx.token), id, payload, ctx.ip),
-    };
+    const result = updateAccountAuthorization(
+      ctx.db,
+      authenticate(ctx.db, ctx.token),
+      id,
+      payload,
+      ctx.ip,
+    );
+    return { account: findAccount(ctx.db, id), ...result };
   }
   return { account: findAccount(ctx.db, id), scopes: scopesFor(ctx.db, id) };
 }

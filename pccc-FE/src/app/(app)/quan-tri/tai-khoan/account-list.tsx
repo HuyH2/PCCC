@@ -333,16 +333,22 @@ export function AccountList({
               <select
                 id="account-unit"
                 className={selectClass}
+                required
                 value={draft.unitId}
                 onChange={(event) => setDraft({ ...draft, unitId: event.target.value })}
               >
-                <option value="">Không gán phạm vi đơn vị</option>
+                <option value="" disabled>
+                  Chọn đơn vị
+                </option>
                 {units.map((unit) => (
                   <option key={unit.id} value={unit.id}>
                     {unit.name}
                   </option>
                 ))}
               </select>
+              <p className="text-muted-foreground text-xs">
+                Bắt buộc: tài khoản cần thuộc một đơn vị để A01/A02 có thể phân công.
+              </p>
             </div>
             <div className="space-y-1">
               <Label htmlFor="account-password">Mật khẩu tạm</Label>
@@ -357,7 +363,7 @@ export function AccountList({
               />
             </div>
             <div className="flex items-end gap-2 md:col-span-3">
-              <Button type="submit" size="sm" disabled={busy}>
+              <Button type="submit" size="sm" disabled={busy || !draft.unitId}>
                 Lưu tài khoản
               </Button>
               <Button type="button" size="sm" variant="ghost" onClick={() => setShowCreate(false)}>

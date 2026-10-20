@@ -18,6 +18,12 @@ Migration `011-area-assignment.sql` bổ sung:
 - Quyền `M02.view/edit` cho A01, A02; `M02.view/create/edit` cho A05. Migration cấp quyền vì seed
   giữ nguyên grant đã chỉnh trên database đang chạy.
 
+Migration `012-account-integrity.sql` bổ sung:
+
+- Unique index `accounts_officer_unique` trên `accounts.officer_id` (một mã cán bộ chỉ một tài khoản).
+- Trigger chặn `UPDATE`/`DELETE` trên `assignment_events`, biến lịch sử thành append-only như
+  `audit_logs` (BR-03).
+
 ## Quyền và phạm vi
 
 | Hành động                              | Điều kiện                                            |
@@ -35,12 +41,16 @@ A01/A02 thao tác trong đơn vị được cấp; A05 có scope `all` quản tr
 thể phân công dùng `accountScope`: tài khoản phải có scope `unit`/`region`/`facility` nằm trong phạm
 vi người gọi; tài khoản chỉ có scope `all` (quản trị, người xem toàn hệ thống) không hiện với A01/A02.
 Khi phân công, backend kiểm tra lại tài khoản đích; người không có `all` không thể giao khu vực cho
-tài khoản ngoài phạm vi (trả `403 ACCOUNT_OUT_OF_SCOPE`).
+tài khoản ngoài phạm vi (trả `403 ACCOUNT_OUT_OF_SCOPE`). Với người chỉ có scope `region`, danh sách
+ứng viên và kiểm tra đích được nới cho các tài khoản có scope `unit` nằm trong chuỗi đơn vị của khu
+vực (đơn vị chứa khu vực hoặc cấp trên), để họ vẫn phân công được cho cán bộ cùng đơn vị.
 
 ## Phân công
 
 `POST /api/regions/:id/assignment` nhận `{accountId, effectiveDate, note}`; `accountId = null` là bỏ
 phân công. Tài khoản phải đang hoạt động, vai trò đang bật và mỗi `officer_id` chỉ gắn một tài khoản.
+Chi tiết khu vực trả lịch sử theo trang qua `?page=&pageSize=` (mặc định 20, tối đa 100) kèm
+`history_total`, `history_page`, `history_page_size`; UI có phân trang thay vì cắt cứng 50 dòng.
 
 Trong một transaction, API cập nhật `region_assignments`, scope `region` trực tiếp của cán bộ mới,
 gỡ scope `region` của cán bộ cũ (giữ scope `facility` cho các cơ sở cũ còn phụ trách), ghi audit và
@@ -59,15 +69,18 @@ hình tại `/quan-tri/vai-tro` (UC-ADM-03).
 ## Tài khoản — UC-ADM-02
 
 `POST /api/authorization/accounts` tạo tài khoản với `{username, fullName, officerId, role, password,
-scopes}`, mật khẩu băm scrypt, `must_change_password = 1`. Kiểm tra trùng username/`officer_id` chạy
-bên trong transaction sau khi băm mật khẩu, nên hai request đồng thời không tạo được bản ghi trùng.
+scopes}`, mật khẩu băm scrypt, `must_change_password = 1`. `scopes` phải có ít nhất một phần tử
+(`400 SCOPE_REQUIRED`): tài khoản không có đơn vị/khu vực/cơ sở sẽ không thể được A01/A02 phân công.
+Kiểm tra trùng username/`officer_id` chạy bên trong transaction sau khi băm mật khẩu, nên hai request
+đồng thời không tạo được bản ghi trùng; unique index `accounts_officer_unique` là lớp bảo vệ thứ hai.
 
 `PUT /api/authorization/accounts/:id` sửa họ tên, mã cán bộ, vai trò và phạm vi. Không được đổi
 `officerId` khi tài khoản đang phụ trách khu vực hoặc cơ sở (trả `409 ACCOUNT_ASSIGNED`) vì
 `region_assignments`/`facilities.officer_id` tham chiếu mã cũ. Nếu PUT bỏ scope `region` của một khu
 vực tài khoản đang phụ trách, backend gỡ phân công khu vực đó và ghi `assignment_events` `unassign`
 (reason "Thu hồi qua cập nhật phạm vi") trong cùng transaction, để không còn người phụ trách nhưng
-không có quyền đọc dữ liệu.
+không có quyền đọc dữ liệu. Form hiện giữ nguyên scope `region`/`facility` khi sửa tài khoản, nên
+đường này chủ yếu dành cho API trực tiếp hoặc khi bỏ toàn bộ scope.
 
 `POST .../status` chuyển `active|locked|inactive` (không xóa vật lý); `POST .../reset-password` đặt
 mật khẩu tạm và thu hồi mọi phiên. Mọi thay đổi vai trò, phạm vi, mật khẩu hoặc trạng thái đều ghi
@@ -77,6 +90,6 @@ audit và buộc đăng nhập lại (trừ kích hoạt lại tài khoản đan
 
 `pccc-BE/test/regions.test.js` kiểm tra: lọc theo scope (kể cả `facility`), 403 khi thiếu `M02`,
 danh sách cán bộ và tài khoản đích không vượt phạm vi, phân công/bỏ phân công kèm lịch sử và đồng bộ
-scope, chuyển giao ghi thêm lịch sử, ngày hiệu lực hợp lệ, chặn đổi mã cán bộ đang phụ trách, giữ
-scope `region` khi cập nhật tài khoản, chống trùng khi tạo đồng thời, chặn tự khóa và rollback khi
-audit lỗi.
+scope, chuyển giao ghi thêm lịch sử, ngày hiệu lực hợp lệ, chặn đổi mã cán bộ đang phụ trách, gỡ
+phân công + ghi lịch sử khi thu hồi scope `region`, chống trùng khi tạo đồng thời, unique index,
+append-only history, chặn tự khóa và rollback khi audit lỗi.

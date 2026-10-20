@@ -17,11 +17,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { canBoDiaBan, coSoList, NGAY_HE_THONG } from "@/data/mock";
 import { cuocKiemTraSchema, type CuocKiemTraFormValues } from "@/data/schemas";
+import { toBusinessDate } from "@/lib/date";
 
 function congNgay(n: number) {
   const d = new Date(NGAY_HE_THONG);
   d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+  return toBusinessDate(d);
 }
 
 /** Biểu mẫu tạo hồ sơ cuộc kiểm tra định kỳ/đột xuất (UC-INS-03, UC-INS-09). */

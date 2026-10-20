@@ -77,7 +77,7 @@ export function listRegions(db, principal, { page, pageSize, search, unitId }) {
   };
 }
 
-export function getRegion(db, principal, id) {
+export function getRegion(db, principal, id, { page = 1, pageSize = 20 } = {}) {
   const region = regionRow(db, principal, id);
   const facilities = facilityScope(principal);
   return {
@@ -90,6 +90,11 @@ export function getRegion(db, principal, id) {
       )
       .all(id, ...facilities.params),
     officers: regionOfficers(db, principal, id).officers,
+    history_total: db
+      .prepare("SELECT count(*) AS n FROM assignment_events WHERE region_id=?")
+      .get(id).n,
+    history_page: page,
+    history_page_size: pageSize,
     history: db
       .prepare(
         `SELECT e.id,e.action,e.reason,e.effective_date,e.occurred_at,
@@ -98,9 +103,9 @@ export function getRegion(db, principal, id) {
       LEFT JOIN accounts af ON af.id=e.from_account_id
       LEFT JOIN accounts at ON at.id=e.to_account_id
       LEFT JOIN accounts p ON p.id=e.performed_by
-      WHERE e.region_id=? ORDER BY e.occurred_at DESC,e.id DESC LIMIT 50`,
+      WHERE e.region_id=? ORDER BY e.occurred_at DESC,e.id DESC LIMIT ? OFFSET ?`,
       )
-      .all(id),
+      .all(id, pageSize, (page - 1) * pageSize),
   };
 }
 
@@ -113,6 +118,16 @@ function assertUnit(db, unitId) {
     "Đơn vị không tồn tại.",
   );
   return unitId;
+}
+
+function assertUnitInScope(db, principal, unitId) {
+  const scope = unitScope(principal);
+  assert(
+    db.prepare(`SELECT 1 FROM units u WHERE u.id=? AND ${scope.sql}`).get(unitId, ...scope.params),
+    403,
+    "UNIT_OUT_OF_SCOPE",
+    "Đơn vị ngoài phạm vi được cấp.",
+  );
 }
 
 export function createRegion(db, principal, payload, ip) {
@@ -128,6 +143,7 @@ export function createRegion(db, principal, payload, ip) {
   );
   const name = text(payload.name?.trim(), "Tên khu vực", 1, 200);
   const unitId = assertUnit(db, payload.unitId);
+  assertUnitInScope(db, principal, unitId);
   return transaction(db, () => {
     assert(
       !db.prepare("SELECT 1 FROM regions WHERE id=?").get(id),
@@ -156,6 +172,7 @@ export function updateRegion(db, principal, id, payload, ip) {
   object(payload, ["name", "unitId"]);
   const name = text(payload.name?.trim(), "Tên khu vực", 1, 200);
   const unitId = assertUnit(db, payload.unitId);
+  assertUnitInScope(db, principal, unitId);
   return transaction(db, () => {
     db.prepare("UPDATE regions SET name=?,unit_id=? WHERE id=?").run(name, unitId, id);
     const after = regionRow(db, principal, id, "M02.edit");
@@ -182,6 +199,33 @@ function grantDirectScope(db, accountId, kind, targetId) {
     kind,
     targetId,
   );
+}
+
+function unitChain(db, unitId) {
+  const ids = [];
+  const seen = new Set();
+  let current = unitId;
+  while (current && !seen.has(current)) {
+    seen.add(current);
+    ids.push(current);
+    current = db.prepare("SELECT parent_id FROM units WHERE id=?").get(current)?.parent_id ?? null;
+  }
+  return ids;
+}
+
+// A region-scoped commander can still hand a region to an officer of the same unit
+// (or a parent unit), even though that officer has no region scope yet.
+function assignmentAccountScope(db, principal, region) {
+  const base = accountScope(principal);
+  const unitIds = unitChain(db, region.unit_id);
+  const placeholders = unitIds.map(() => "?").join(",");
+  return {
+    sql: `(${base.sql} OR a.id IN (
+      SELECT account_id FROM account_scopes
+      WHERE kind='unit' AND unit_id IN (${placeholders})
+    ))`,
+    params: [...base.params, ...unitIds],
+  };
 }
 
 function dateOnly(value, field) {
@@ -232,7 +276,7 @@ export function assignRegion(db, principal, id, payload, ip) {
         )
         .get(accountId);
       assert(account, 409, "ACCOUNT_UNAVAILABLE", "Tài khoản cán bộ không hoạt động.");
-      const visible = accountScope(principal);
+      const visible = assignmentAccountScope(db, principal, region);
       assert(
         db
           .prepare(`SELECT 1 FROM accounts a WHERE a.id=? AND ${visible.sql}`)
@@ -336,8 +380,13 @@ export function regionOfficers(db, principal, id) {
 
 export function assignableOfficers(db, principal, regionId = "") {
   requirePermission(principal, "M02.edit");
-  if (regionId) regionRow(db, principal, regionId, "M02.edit");
-  const scope = accountScope(principal);
+  let scope;
+  if (regionId) {
+    const region = regionRow(db, principal, regionId, "M02.edit");
+    scope = assignmentAccountScope(db, principal, region);
+  } else {
+    scope = accountScope(principal);
+  }
   return {
     items: db
       .prepare(

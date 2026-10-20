@@ -37,6 +37,10 @@ export function RegionManager({ canEdit, canCreate }: { canEdit: boolean; canCre
   const [page, setPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(20);
   const [total, setTotal] = React.useState(0);
+  const [historyPage, setHistoryPage] = React.useState(1);
+  const [historyPageSize, setHistoryPageSize] = React.useState(20);
+  const historyPageSizeRef = React.useRef(20);
+  const detailRequest = React.useRef(0);
   const [loading, setLoading] = React.useState(true);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -77,28 +81,47 @@ export function RegionManager({ canEdit, canCreate }: { canEdit: boolean; canCre
   }, []);
 
   const openDetail = React.useCallback(
-    async (id: string) => {
+    async (id: string, nextPage = 1, nextPageSize = historyPageSize) => {
+      const requestId = ++detailRequest.current;
       setError(null);
       setMessage(null);
+      setOfficers([]);
+      let data: RegionDetail;
       try {
-        const data = await regionApi<RegionDetail>(`/api/regions/${encodeURIComponent(id)}`);
-        setDetail(data);
-        setEdit({ name: data.region.name, unitId: data.region.unit_id });
-        setAssignment({ accountId: "", effectiveDate: "", note: "" });
-        if (!canEdit) {
-          setOfficers([]);
-          return;
-        }
-        // Candidate accounts are resolved per region so the backend can apply the caller scope.
+        data = await regionApi<RegionDetail>(
+          `/api/regions/${encodeURIComponent(id)}?page=${nextPage}&pageSize=${nextPageSize}`,
+        );
+      } catch (failure) {
+        if (requestId === detailRequest.current)
+          setError(failure instanceof Error ? failure.message : "Không thể tải chi tiết khu vực.");
+        return;
+      }
+      if (requestId !== detailRequest.current) return;
+      setDetail(data);
+      setHistoryPage(data.history_page);
+      setHistoryPageSize(data.history_page_size);
+      historyPageSizeRef.current = data.history_page_size;
+      setEdit({ name: data.region.name, unitId: data.region.unit_id });
+      setAssignment({ accountId: "", effectiveDate: "", note: "" });
+      if (!canEdit) return;
+      // Candidate accounts are resolved per region so the backend can apply the caller scope.
+      try {
         const candidates = await regionApi<{ items: AssignableOfficer[] }>(
           `/api/regions/officers?regionId=${encodeURIComponent(id)}`,
         );
-        setOfficers(candidates.items);
+        if (requestId === detailRequest.current) setOfficers(candidates.items);
       } catch (failure) {
-        setError(failure instanceof Error ? failure.message : "Không thể tải chi tiết khu vực.");
+        if (requestId === detailRequest.current) {
+          setOfficers([]);
+          setError(
+            failure instanceof Error
+              ? failure.message
+              : "Không thể tải danh sách cán bộ có thể phân công.",
+          );
+        }
       }
     },
-    [canEdit],
+    [canEdit, historyPageSize],
   );
 
   async function submitCreate(event: React.FormEvent<HTMLFormElement>) {
@@ -168,6 +191,9 @@ export function RegionManager({ canEdit, canCreate }: { canEdit: boolean; canCre
         },
       );
       setDetail(data);
+      setHistoryPage(data.history_page);
+      setHistoryPageSize(data.history_page_size);
+      historyPageSizeRef.current = data.history_page_size;
       setAssignment({ accountId: "", effectiveDate: "", note: "" });
       setMessage("Đã cập nhật phân công và lưu lịch sử.");
       await load();
@@ -546,6 +572,17 @@ export function RegionManager({ canEdit, canCreate }: { canEdit: boolean; canCre
                       ))}
                     </TableBody>
                   </Table>
+                  <DataPagination
+                    tong={detail.history_total}
+                    trang={historyPage}
+                    soDong={historyPageSize}
+                    onDoiTrang={(next) =>
+                      void openDetail(detail.region.id, next, historyPageSizeRef.current)
+                    }
+                    onDoiSoDong={(size) => {
+                      historyPageSizeRef.current = size;
+                    }}
+                  />
                 </div>
               )}
             </div>

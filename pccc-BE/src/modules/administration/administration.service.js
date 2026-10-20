@@ -255,6 +255,12 @@ export async function createAccount(db, principal, payload, ip) {
   const role = activeRole(db, payload.role);
   const password = text(payload.password, "Mật khẩu", 12, 256);
   const scopes = normalizeScopes(db, payload.scopes ?? []);
+  assert(
+    scopes.length > 0,
+    400,
+    "SCOPE_REQUIRED",
+    "Tài khoản phải có ít nhất một phạm vi (đơn vị/khu vực/cơ sở) để có thể được phân công.",
+  );
   const passwordHash = await hashPassword(password);
   const id = `ACC-${randomUUID()}`;
   return transaction(db, () => {
