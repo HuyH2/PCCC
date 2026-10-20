@@ -13,8 +13,8 @@ import { MAX_DOCUMENT_BYTES } from "../src/modules/legal-documents/legal-documen
 
 const password = "Documents-test-password-2026";
 const origin = "http://localhost:3000";
-const migrationCount = readdirSync(new URL("../migrations/", import.meta.url)).filter((f) =>
-  f.endsWith(".sql"),
+const migrationCount = readdirSync(new URL("../migrations/", import.meta.url)).filter(
+  (f) => f.endsWith(".sql") || f.endsWith(".cjs"),
 ).length;
 const pdf = Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n");
 const payload = (extra = {}) => ({
