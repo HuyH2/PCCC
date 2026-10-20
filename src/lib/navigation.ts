@@ -1,9 +1,31 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  AlertTriangle, BadgeCheck, Bell, Building2, CalendarClock, ClipboardCheck,
-  ClipboardList, Database, FileSearch, FileSpreadsheet, FileText, Flame,
-  Gauge, History, LayoutDashboard, Map, Scale, ScrollText, Search, Settings2,
-  ShieldAlert, Siren, Target, UserCog, Users, Workflow,
+  AlertTriangle,
+  BadgeCheck,
+  Bell,
+  Building2,
+  CalendarClock,
+  ClipboardCheck,
+  ClipboardList,
+  Database,
+  FileSearch,
+  FileSpreadsheet,
+  FileText,
+  Flame,
+  Gauge,
+  History,
+  LayoutDashboard,
+  Map,
+  Scale,
+  ScrollText,
+  Search,
+  Settings2,
+  ShieldAlert,
+  Siren,
+  Target,
+  UserCog,
+  Users,
+  Workflow,
 } from "lucide-react";
 
 import type { ModuleCode } from "@/data/types";
@@ -32,9 +54,27 @@ export const navGroups: NavGroup[] = [
   {
     label: "Điều hành",
     items: [
-      { title: "Tổng quan", href: "/", icon: LayoutDashboard, module: "M10", useCases: ["UC-SYS-02"] },
-      { title: "Tra cứu toàn hệ thống", href: "/tra-cuu", icon: Search, module: "M10", useCases: ["UC-SYS-01"] },
-      { title: "Cảnh báo & nhắc việc", href: "/canh-bao", icon: Bell, module: "M10", useCases: ["UC-SYS-03"] },
+      {
+        title: "Tổng quan",
+        href: "/",
+        icon: LayoutDashboard,
+        module: "M10",
+        useCases: ["UC-SYS-02"],
+      },
+      {
+        title: "Tra cứu toàn hệ thống",
+        href: "/tra-cuu",
+        icon: Search,
+        module: "M10",
+        useCases: ["UC-SYS-01"],
+      },
+      {
+        title: "Cảnh báo & nhắc việc",
+        href: "/canh-bao",
+        icon: Bell,
+        module: "M10",
+        useCases: ["UC-SYS-03"],
+      },
     ],
   },
   {
@@ -46,10 +86,30 @@ export const navGroups: NavGroup[] = [
         icon: Users,
         module: "M02",
         items: [
-          { title: "Cơ cấu đơn vị", href: "/to-chuc/don-vi", icon: Workflow, useCases: ["UC-ORG-01"] },
-          { title: "Danh bạ cán bộ", href: "/to-chuc/can-bo", icon: Users, useCases: ["UC-ORG-02"] },
-          { title: "Khu vực - Khu phố", href: "/to-chuc/khu-vuc", icon: Map, useCases: ["UC-ORG-03"] },
-          { title: "Phân công phụ trách", href: "/to-chuc/phan-cong", icon: UserCog, useCases: ["UC-ORG-03"] },
+          {
+            title: "Cơ cấu đơn vị",
+            href: "/to-chuc/don-vi",
+            icon: Workflow,
+            useCases: ["UC-ORG-01"],
+          },
+          {
+            title: "Danh bạ cán bộ",
+            href: "/to-chuc/can-bo",
+            icon: Users,
+            useCases: ["UC-ORG-02"],
+          },
+          {
+            title: "Khu vực - Khu phố",
+            href: "/to-chuc/khu-vuc",
+            icon: Map,
+            useCases: ["UC-ORG-03"],
+          },
+          {
+            title: "Phân công phụ trách",
+            href: "/to-chuc/phan-cong",
+            icon: UserCog,
+            useCases: ["UC-ORG-03"],
+          },
         ],
       },
       {
@@ -77,8 +137,18 @@ export const navGroups: NavGroup[] = [
         icon: ClipboardCheck,
         module: "M06",
         items: [
-          { title: "Kế hoạch & chỉ tiêu", href: "/kiem-tra/ke-hoach", icon: Target, useCases: ["UC-INS-01", "UC-INS-02"] },
-          { title: "Cuộc kiểm tra", href: "/kiem-tra/cuoc-kiem-tra", icon: ClipboardList, useCases: ["UC-INS-03"] },
+          {
+            title: "Kế hoạch & chỉ tiêu",
+            href: "/kiem-tra/ke-hoach",
+            icon: Target,
+            useCases: ["UC-INS-01", "UC-INS-02"],
+          },
+          {
+            title: "Cuộc kiểm tra",
+            href: "/kiem-tra/cuoc-kiem-tra",
+            icon: ClipboardList,
+            useCases: ["UC-INS-03"],
+          },
         ],
       },
       {
@@ -87,10 +157,30 @@ export const navGroups: NavGroup[] = [
         icon: CalendarClock,
         module: "M07",
         items: [
-          { title: "Lịch công tác", href: "/cong-viec/lich", icon: CalendarClock, useCases: ["UC-WRK-01"] },
-          { title: "Giao việc & tiến độ", href: "/cong-viec/giao-viec", icon: ClipboardList, useCases: ["UC-WRK-02", "UC-WRK-03"] },
-          { title: "KPI & nợ chỉ tiêu", href: "/cong-viec/kpi", icon: Gauge, useCases: ["UC-WRK-04"] },
-          { title: "Yêu cầu giải trình", href: "/cong-viec/giai-trinh", icon: FileSearch, useCases: ["UC-WRK-05"] },
+          {
+            title: "Lịch công tác",
+            href: "/cong-viec/lich",
+            icon: CalendarClock,
+            useCases: ["UC-WRK-01"],
+          },
+          {
+            title: "Giao việc & tiến độ",
+            href: "/cong-viec/giao-viec",
+            icon: ClipboardList,
+            useCases: ["UC-WRK-02", "UC-WRK-03"],
+          },
+          {
+            title: "KPI & nợ chỉ tiêu",
+            href: "/cong-viec/kpi",
+            icon: Gauge,
+            useCases: ["UC-WRK-04"],
+          },
+          {
+            title: "Yêu cầu giải trình",
+            href: "/cong-viec/giai-trinh",
+            icon: FileSearch,
+            useCases: ["UC-WRK-05"],
+          },
         ],
       },
       {
@@ -100,8 +190,34 @@ export const navGroups: NavGroup[] = [
         module: "M08",
         useCases: ["UC-RPT-01", "UC-RPT-03"],
       },
-      { title: "Sự cố cháy nổ - CNCH", href: "/su-co", icon: Siren, module: "M09", useCases: ["UC-INC-01"] },
-      { title: "Văn bản - Quy chuẩn", href: "/van-ban", icon: Scale, module: "M05", useCases: ["UC-DOC-01"] },
+      {
+        title: "Sự cố cháy nổ - CNCH",
+        href: "/su-co",
+        icon: Siren,
+        module: "M09",
+        useCases: ["UC-INC-01", "UC-INC-02", "UC-INC-03", "UC-INC-04", "UC-INC-05", "UC-INC-06"],
+        items: [
+          {
+            title: "Hồ sơ sự cố",
+            href: "/su-co",
+            icon: Siren,
+            useCases: ["UC-INC-01", "UC-INC-02", "UC-INC-03", "UC-INC-04", "UC-INC-05"],
+          },
+          {
+            title: "Thống kê R09/R10",
+            href: "/su-co/thong-ke",
+            icon: FileSpreadsheet,
+            useCases: ["UC-INC-06"],
+          },
+        ],
+      },
+      {
+        title: "Văn bản - Quy chuẩn",
+        href: "/van-ban",
+        icon: Scale,
+        module: "M05",
+        useCases: ["UC-DOC-01"],
+      },
     ],
   },
   {
@@ -113,8 +229,18 @@ export const navGroups: NavGroup[] = [
         icon: Database,
         module: "M11",
         items: [
-          { title: "Import Excel", href: "/tien-ich/import", icon: FileSpreadsheet, useCases: ["UC-FAC-07", "UC-SYS-04"] },
-          { title: "Kết xuất dữ liệu", href: "/tien-ich/export", icon: FileText, useCases: ["UC-RPT-06"] },
+          {
+            title: "Import Excel",
+            href: "/tien-ich/import",
+            icon: FileSpreadsheet,
+            useCases: ["UC-FAC-07", "UC-SYS-04"],
+          },
+          {
+            title: "Kết xuất dữ liệu",
+            href: "/tien-ich/export",
+            icon: FileText,
+            useCases: ["UC-RPT-06"],
+          },
         ],
       },
       {
@@ -123,9 +249,24 @@ export const navGroups: NavGroup[] = [
         icon: Settings2,
         module: "M01",
         items: [
-          { title: "Tài khoản", href: "/quan-tri/tai-khoan", icon: BadgeCheck, useCases: ["UC-ADM-02"] },
-          { title: "Vai trò & phạm vi", href: "/quan-tri/vai-tro", icon: UserCog, useCases: ["UC-ADM-03"] },
-          { title: "Nhật ký thao tác", href: "/quan-tri/nhat-ky", icon: History, useCases: ["UC-SYS-05"] },
+          {
+            title: "Tài khoản",
+            href: "/quan-tri/tai-khoan",
+            icon: BadgeCheck,
+            useCases: ["UC-ADM-02"],
+          },
+          {
+            title: "Vai trò & phạm vi",
+            href: "/quan-tri/vai-tro",
+            icon: UserCog,
+            useCases: ["UC-ADM-03"],
+          },
+          {
+            title: "Nhật ký thao tác",
+            href: "/quan-tri/nhat-ky",
+            icon: History,
+            useCases: ["UC-SYS-05"],
+          },
         ],
       },
     ],
@@ -167,9 +308,17 @@ export const tenPhanHe: Record<ModuleCode, string> = {
 };
 
 export const iconPhanHe: Record<ModuleCode, LucideIcon> = {
-  M01: Settings2, M02: Users, M03: Building2, M04: ShieldAlert, M05: ScrollText,
-  M06: ClipboardCheck, M07: CalendarClock, M08: FileSpreadsheet, M09: Flame,
-  M10: Gauge, M11: Database,
+  M01: Settings2,
+  M02: Users,
+  M03: Building2,
+  M04: ShieldAlert,
+  M05: ScrollText,
+  M06: ClipboardCheck,
+  M07: CalendarClock,
+  M08: FileSpreadsheet,
+  M09: Flame,
+  M10: Gauge,
+  M11: Database,
 };
 
 export const iconCanhBao = AlertTriangle;

@@ -481,14 +481,17 @@ function assertNoResponsibilities(db, officerId) {
       `SELECT
     (SELECT count(*) FROM units WHERE leader_officer_id=? AND status='ACTIVE') units,
     (SELECT count(*) FROM regions WHERE leader_officer_id=? AND status='ACTIVE') regions,
-    (SELECT count(*) FROM facilities WHERE officer_id=? AND status='active') facilities`,
+    (SELECT count(*) FROM facilities WHERE officer_id=? AND status='active') facilities,
+    (SELECT count(*) FROM incident_assignments a JOIN incidents i ON i.id=a.incident_id
+      WHERE a.officer_id=? AND a.status IN ('ASSIGNED','IN_PROGRESS')
+        AND i.processing_status IN ('NEW','IN_PROGRESS')) incident_tasks`,
     )
-    .get(officerId, officerId, officerId);
+    .get(officerId, officerId, officerId, officerId);
   assert(
-    involved.units + involved.regions + involved.facilities === 0,
+    Object.values(involved).every((count) => count === 0),
     409,
     "ACTIVE_RESPONSIBILITIES",
-    "Cán bộ còn phụ trách đơn vị, khu phố hoặc cơ sở đang hoạt động. Cần xử lý phân công trước khi thay đổi công tác; hệ thống không tự chuyển giao địa bàn.",
+    "Cán bộ còn phụ trách đơn vị, khu phố, cơ sở hoặc nhiệm vụ sự cố đang hoạt động. Cần xử lý phân công trước khi thay đổi công tác; hệ thống không tự chuyển giao địa bàn.",
   );
 }
 
@@ -521,14 +524,17 @@ function assertUnitDeactivation(db, id) {
     (SELECT count(*) FROM facilities f JOIN regions r ON r.id=f.region_id WHERE r.unit_id IN (${descendants}) AND f.status='active') facilities,
     (SELECT count(*) FROM account_scopes s JOIN accounts a ON a.id=s.account_id WHERE a.status='active' AND (
       s.unit_id IN (${descendants}) OR s.region_id IN (SELECT id FROM regions WHERE unit_id IN (${descendants}))
-      OR s.facility_id IN (SELECT f.id FROM facilities f JOIN regions r ON r.id=f.region_id WHERE r.unit_id IN (${descendants})))) scopes`,
+      OR s.facility_id IN (SELECT f.id FROM facilities f JOIN regions r ON r.id=f.region_id WHERE r.unit_id IN (${descendants})))) scopes,
+    (SELECT count(*) FROM incidents i WHERE i.unit_id IN (${descendants})
+      OR i.region_id IN (SELECT id FROM regions WHERE unit_id IN (${descendants}))
+      OR i.facility_id IN (SELECT f.id FROM facilities f JOIN regions r ON r.id=f.region_id WHERE r.unit_id IN (${descendants}))) incidents`,
     )
-    .get(id, id, id, id, id, id, id);
+    .get(id, id, id, id, id, id, id, id, id, id);
   assert(
     Object.values(counts).every((n) => n === 0),
     409,
     "ACTIVE_DEPENDENCIES",
-    "Đơn vị còn đơn vị/khu phố con, cán bộ, cơ sở hoặc phạm vi tài khoản đang hoạt động.",
+    "Đơn vị còn đơn vị/khu phố con, cán bộ, cơ sở, phạm vi tài khoản đang hoạt động hoặc hồ sơ sự cố cần bảo toàn địa bàn.",
   );
 }
 
@@ -537,14 +543,15 @@ function assertRegionDeactivation(db, id) {
     .prepare(
       `SELECT
     (SELECT count(*) FROM facilities WHERE region_id=? AND status='active') facilities,
-    (SELECT count(*) FROM account_scopes s JOIN accounts a ON a.id=s.account_id WHERE a.status='active' AND (s.region_id=? OR s.facility_id IN (SELECT id FROM facilities WHERE region_id=?))) scopes`,
+    (SELECT count(*) FROM account_scopes s JOIN accounts a ON a.id=s.account_id WHERE a.status='active' AND (s.region_id=? OR s.facility_id IN (SELECT id FROM facilities WHERE region_id=?))) scopes,
+    (SELECT count(*) FROM incidents WHERE region_id=? OR facility_id IN (SELECT id FROM facilities WHERE region_id=?)) incidents`,
     )
-    .get(id, id, id);
+    .get(id, id, id, id, id);
   assert(
     Object.values(counts).every((n) => n === 0),
     409,
     "ACTIVE_DEPENDENCIES",
-    "Khu phố còn cơ sở hoặc phạm vi tài khoản đang hoạt động.",
+    "Khu phố còn cơ sở, phạm vi tài khoản đang hoạt động hoặc hồ sơ sự cố cần bảo toàn địa bàn.",
   );
 }
 
@@ -555,14 +562,17 @@ function assertUnreferencedUnit(db, id) {
     (SELECT count(*) FROM units WHERE id IN (${descendants}) AND leader_officer_id IS NOT NULL) leaders,
     (SELECT count(*) FROM regions WHERE unit_id IN (${descendants})) regions,
     (SELECT count(*) FROM officers WHERE unit_id IN (${descendants})) officers,
-    (SELECT count(*) FROM account_scopes WHERE unit_id IN (${descendants})) scopes`,
+    (SELECT count(*) FROM account_scopes WHERE unit_id IN (${descendants})) scopes,
+    (SELECT count(*) FROM incidents i WHERE i.unit_id IN (${descendants})
+      OR i.region_id IN (SELECT id FROM regions WHERE unit_id IN (${descendants}))
+      OR i.facility_id IN (SELECT f.id FROM facilities f JOIN regions r ON r.id=f.region_id WHERE r.unit_id IN (${descendants}))) incidents`,
     )
-    .get(id, id, id, id);
+    .get(id, id, id, id, id, id, id);
   assert(
     Object.values(counts).every((n) => n === 0),
     409,
     "REPARENT_REFERENCED",
-    "Đơn vị có cán bộ, địa bàn hoặc phạm vi phân quyền. Đổi cha cần quy trình chuyển giao riêng để bảo toàn phạm vi hiện có.",
+    "Đơn vị có cán bộ, địa bàn, phạm vi phân quyền hoặc hồ sơ sự cố. Đổi cha cần quy trình chuyển giao riêng để bảo toàn phạm vi hiện có.",
   );
 }
 
@@ -638,14 +648,15 @@ function validateNode(db, principal, payload, before, kind) {
     } else {
       const linked = db
         .prepare(
-          "SELECT 1 FROM facilities WHERE region_id=? UNION SELECT 1 FROM account_scopes WHERE region_id=? LIMIT 1",
+          `SELECT 1 FROM facilities WHERE region_id=? UNION SELECT 1 FROM account_scopes WHERE region_id=?
+           UNION SELECT 1 FROM incidents WHERE region_id=? OR facility_id IN (SELECT id FROM facilities WHERE region_id=?) LIMIT 1`,
         )
-        .get(before.id, before.id);
+        .get(before.id, before.id, before.id, before.id);
       assert(
         !linked && !before.leader_officer_id,
         409,
         "REPARENT_REFERENCED",
-        "Khu phố có cơ sở, phân công hoặc phạm vi quyền; cần quy trình chuyển giao địa bàn riêng.",
+        "Khu phố có cơ sở, phân công, phạm vi quyền hoặc hồ sơ sự cố; cần quy trình chuyển giao địa bàn riêng.",
       );
     }
   }

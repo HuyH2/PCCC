@@ -6,12 +6,31 @@ import { usePathname } from "next/navigation";
 import { ChevronRight, Flame } from "lucide-react";
 
 import {
-  Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupLabel,
-  SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarMenuSub,
-  SidebarMenuSubButton, SidebarMenuSubItem, useSidebar,
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { navGroups, type NavItem } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
+import { canVisit, type AuthUser } from "@/lib/auth-contract";
+
+function visibleItems(items: NavItem[], user: AuthUser): NavItem[] {
+  return items.flatMap((item) => {
+    const children = item.items ? visibleItems(item.items, user) : undefined;
+    if (!canVisit(user, item.href) && !children?.length) return [];
+    return [{ ...item, items: children }];
+  });
+}
 
 function laDuongDanHoatDong(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
@@ -71,7 +90,7 @@ function MenuCoCapCon({ item, pathname }: { item: NavItem; pathname: string }) {
   );
 }
 
-export function AppSidebar() {
+export function AppSidebar({ user }: { user: AuthUser }) {
   const pathname = usePathname();
 
   return (
@@ -91,36 +110,40 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent className="py-1">
-        {navGroups.map((group) => (
-          <SidebarGroup key={group.label}>
-            <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
-            <SidebarMenu>
-              {group.items.map((item) =>
-                item.items?.length ? (
-                  <MenuCoCapCon key={item.href} item={item} pathname={pathname} />
-                ) : (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton
-                      asChild
-                      tooltip={item.title}
-                      isActive={laDuongDanHoatDong(pathname, item.href)}
-                    >
-                      <Link href={item.href}>
-                        {item.icon ? <item.icon /> : null}
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ),
-              )}
-            </SidebarMenu>
-          </SidebarGroup>
-        ))}
+        {navGroups
+          .map((group) => ({ ...group, items: visibleItems(group.items, user) }))
+          .filter((group) => group.items.length)
+          .map((group) => (
+            <SidebarGroup key={group.label}>
+              <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+              <SidebarMenu>
+                {group.items.map((item) =>
+                  item.items?.length ? (
+                    <MenuCoCapCon key={item.href} item={item} pathname={pathname} />
+                  ) : (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        asChild
+                        tooltip={item.title}
+                        isActive={laDuongDanHoatDong(pathname, item.href)}
+                      >
+                        <Link href={item.href}>
+                          {item.icon ? <item.icon /> : null}
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ),
+                )}
+              </SidebarMenu>
+            </SidebarGroup>
+          ))}
       </SidebarContent>
 
       <SidebarFooter className="border-sidebar-border border-t">
         <p className="text-sidebar-foreground/60 px-1 text-[11px] leading-relaxed group-data-[collapsible=icon]:hidden">
-          URD v1.0 · Bản demo dùng <strong className="font-semibold">dữ liệu mẫu</strong> theo NFR-02.
+          URD v1.0 · Bản demo dùng <strong className="font-semibold">dữ liệu mẫu</strong> theo
+          NFR-02.
         </p>
       </SidebarFooter>
     </Sidebar>

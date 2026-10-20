@@ -1,6 +1,8 @@
 node_modules
 .next
 .next-org-tests
+.next-m09-tests
+.playwright-mcp/
 out
 build
 .DS_Store
@@ -10,3 +12,5 @@ npm-debug.log*
 !.env.example
 next-env.d.ts
 *.tsbuildinfo
+incidents-demo-uploads/
+incidents-demo.sqlite*

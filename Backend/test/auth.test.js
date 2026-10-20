@@ -68,7 +68,7 @@ test("migration persists, reopens idempotently, and enforces FK/unique/audit con
         .prepare("SELECT name FROM schema_migrations ORDER BY name")
         .all()
         .map((row) => row.name),
-      ["001-auth.sql", "002-organization.sql"],
+      ["001-auth.sql", "002-organization.sql", "003-incidents.sql"],
     );
     assert.equal(db.prepare("SELECT count(*) AS n FROM accounts").get().n, 6);
     assert.throws(() =>

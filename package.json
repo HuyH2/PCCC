@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "npm --prefix Backend test",
-    "test:integration": "node --test tests/auth-integration.test.mjs",
+    "test:integration": "node --test --test-concurrency=1 tests/*-integration.test.mjs",
     "format:check": "node scripts/format-auth.mjs",
     "format:auth": "node scripts/format-auth.mjs --write"
   },

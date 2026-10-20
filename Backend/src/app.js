@@ -11,6 +11,7 @@ import {
 import { updateAccountAuthorization, updateRolePermissions } from "./administration.js";
 import { object, pagination, text } from "./validation.js";
 import { handleOrganization } from "./organization.js";
+import { handleIncidents } from "./incidents.js";
 
 function cookieToken(request) {
   return (request.headers.cookie || "")
@@ -20,7 +21,7 @@ function cookieToken(request) {
     ?.slice(COOKIE_NAME.length + 1);
 }
 
-async function readJson(request) {
+async function readJson(request, maxBytes = 16384) {
   assert(
     request.headers["content-type"]?.split(";")[0].trim() === "application/json",
     415,
@@ -31,7 +32,7 @@ async function readJson(request) {
   let size = 0;
   for await (const chunk of request) {
     size += chunk.length;
-    assert(size <= 16384, 413, "BODY_TOO_LARGE", "Dữ liệu gửi lên quá lớn.");
+    assert(size <= maxBytes, 413, "BODY_TOO_LARGE", "Dữ liệu gửi lên quá lớn.");
     chunks.push(chunk);
   }
   try {
@@ -48,6 +49,8 @@ export function createApp(
     secureCookie = false,
     ttlSeconds = 28800,
     logger = console,
+    uploadDirectory,
+    incidentNow = Date.now,
   } = {},
 ) {
   assert(
@@ -137,6 +140,24 @@ export function createApp(
       }
       const user = authenticate(db, token);
       if (method === "GET" && path === "/api/auth/me") return send(200, { user });
+      if (
+        await handleIncidents({
+          db,
+          user,
+          path,
+          method,
+          url,
+          ip,
+          send,
+          request,
+          response,
+          readBody: () => readJson(request, 131072),
+          authenticateAgain: () => authenticate(db, token),
+          uploadDirectory,
+          now: incidentNow,
+        })
+      )
+        return;
       if (
         await handleOrganization({
           db,

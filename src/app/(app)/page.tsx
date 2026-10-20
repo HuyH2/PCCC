@@ -1,10 +1,24 @@
 import Link from "next/link";
 import {
-  AlertTriangle, ArrowRight, Building2, CalendarClock, ClipboardCheck,
-  FileSpreadsheet, Flame, ShieldAlert, Target, Users,
+  AlertTriangle,
+  ArrowRight,
+  Building2,
+  CalendarClock,
+  ClipboardCheck,
+  FileSpreadsheet,
+  Flame,
+  ShieldAlert,
+  Target,
+  Users,
 } from "lucide-react";
 
-import { BieuDoLoaiHinh, BieuDoSuCo, BieuDoTheoPhuong, BieuDoTienDoKiemTra } from "@/components/charts/dashboard-charts";
+import {
+  BieuDoLoaiHinh,
+  BieuDoTheoPhuong,
+  BieuDoTienDoKiemTra,
+} from "@/components/charts/dashboard-charts";
+import { IncidentDashboard } from "@/components/incidents/incident-statistics";
+import { currentUser } from "@/lib/backend";
 import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { SectionCard } from "@/components/shared/section-card";
@@ -13,14 +27,34 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { canhBaoList, coSoTheoId, khuVucTheoId } from "@/data/mock";
 import {
-  baoCaoSapHan, chatLuongHoSo, coSoCanChuY, coSoTheoCanBo, coSoTheoLoaiHinh,
-  coSoTheoPhuong, coSoTheoTrangThai, congViecQuaHan, kiemTraSapToi,
-  kiemTraTheoTrangThai, suCoTheoThang, tenCanBo, thongKeBaoCao, thongKeCongViec,
-  thongKeGiaiTrinh, thongKeSuCo, thongKeViPham, tienDoKiemTraTheoThang,
-  tongCoSo, tongHopKeHoach,
+  baoCaoSapHan,
+  chatLuongHoSo,
+  coSoCanChuY,
+  coSoTheoCanBo,
+  coSoTheoLoaiHinh,
+  coSoTheoPhuong,
+  coSoTheoTrangThai,
+  congViecQuaHan,
+  kiemTraSapToi,
+  kiemTraTheoTrangThai,
+  tenCanBo,
+  thongKeBaoCao,
+  thongKeCongViec,
+  thongKeGiaiTrinh,
+  thongKeViPham,
+  tienDoKiemTraTheoThang,
+  tongCoSo,
+  tongHopKeHoach,
 } from "@/data/thong-ke";
 import { daysUntil, formatDate, formatNumber } from "@/lib/utils";
 
@@ -31,11 +65,14 @@ function MoTaHan({ iso }: { iso: string }) {
   if (con < 0)
     return <span className="text-destructive font-semibold">Quá hạn {Math.abs(con)} ngày</span>;
   if (con === 0) return <span className="text-destructive font-semibold">Đến hạn hôm nay</span>;
-  if (con <= 3) return <span className="text-warning-foreground font-semibold">Còn {con} ngày</span>;
+  if (con <= 3)
+    return <span className="text-warning-foreground font-semibold">Còn {con} ngày</span>;
   return <span className="text-muted-foreground">Còn {con} ngày</span>;
 }
 
-export default function TrangTongQuan() {
+export default async function TrangTongQuan() {
+  const user = await currentUser();
+  const canSeeIncidentStatistics = user.permissions.includes("M09.export");
   const tyLeThucHien = Math.round((tongHopKeHoach.daThucHien / tongHopKeHoach.chiTieuNam) * 100);
   const canhBaoUuTien = canhBaoList.filter((c) => c.mucDo === "Cao");
 
@@ -74,7 +111,10 @@ export default function TrangTongQuan() {
           <ul className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-1">
             {canhBaoUuTien.map((c) => (
               <li key={c.id} className="min-w-0">
-                <Link href={c.duongDan} className="hover:text-primary truncate text-[13px] underline-offset-4 hover:underline">
+                <Link
+                  href={c.duongDan}
+                  className="hover:text-primary truncate text-[13px] underline-offset-4 hover:underline"
+                >
                   {c.tieuDe}
                 </Link>
               </li>
@@ -106,13 +146,7 @@ export default function TrangTongQuan() {
           tone={tyLeThucHien >= 75 ? "success" : "warning"}
           hint={`${formatNumber(tongHopKeHoach.daThucHien)}/${formatNumber(tongHopKeHoach.chiTieuNam)} lượt · nợ ${tongHopKeHoach.noChiTieu}`}
         />
-        <StatCard
-          label="Sự cố đã ghi nhận"
-          value={thongKeSuCo.tong}
-          icon={Flame}
-          tone="warning"
-          hint={`${thongKeSuCo.chay} cháy · ${thongKeSuCo.cnch} CNCH · thiệt hại ${formatNumber(thongKeSuCo.thietHai)} triệu`}
-        />
+        <IncidentDashboard mode="kpi" enabled={canSeeIncidentStatistics} />
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -149,17 +183,19 @@ export default function TrangTongQuan() {
       {/* Biểu đồ */}
       <div className="grid gap-4 lg:grid-cols-2">
         <SectionCard
-          title="Tình hình sự cố 9 tháng gần nhất"
+          title="Tình hình sự cố theo tháng"
           description="R09 — thống kê theo thời gian và loại sự cố"
           action={
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/su-co">
-                Chi tiết <ArrowRight />
-              </Link>
-            </Button>
+            canSeeIncidentStatistics ? (
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/su-co/thong-ke">
+                  Chi tiết <ArrowRight />
+                </Link>
+              </Button>
+            ) : undefined
           }
         >
-          <BieuDoSuCo data={suCoTheoThang} />
+          <IncidentDashboard mode="chart" enabled={canSeeIncidentStatistics} />
         </SectionCard>
 
         <SectionCard
@@ -181,7 +217,10 @@ export default function TrangTongQuan() {
         <SectionCard title="Cơ sở theo loại hình" description="R01 — cơ cấu địa bàn Kv10">
           <BieuDoLoaiHinh data={coSoTheoLoaiHinh} />
         </SectionCard>
-        <SectionCard title="Cơ sở theo phường" description="R01 — phân bố và tình trạng theo địa bàn">
+        <SectionCard
+          title="Cơ sở theo phường"
+          description="R01 — phân bố và tình trạng theo địa bàn"
+        >
           <BieuDoTheoPhuong data={coSoTheoPhuong} />
         </SectionCard>
       </div>
@@ -219,7 +258,9 @@ export default function TrangTongQuan() {
                     <div className="text-muted-foreground text-xs">{r.capBac}</div>
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{r.soKhuPho}</TableCell>
-                  <TableCell className="text-right font-semibold tabular-nums">{formatNumber(r.tong)}</TableCell>
+                  <TableCell className="text-right font-semibold tabular-nums">
+                    {formatNumber(r.tong)}
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {r.viPham > 0 ? (
                       <span className="text-destructive font-semibold">{r.viPham}</span>
@@ -261,7 +302,10 @@ export default function TrangTongQuan() {
           }
         >
           {kiemTraSapToi.length === 0 ? (
-            <EmptyState title="Chưa có cuộc kiểm tra nào trong 14 ngày tới" description="Lập kế hoạch tại màn hình Kế hoạch & chỉ tiêu." />
+            <EmptyState
+              title="Chưa có cuộc kiểm tra nào trong 14 ngày tới"
+              description="Lập kế hoạch tại màn hình Kế hoạch & chỉ tiêu."
+            />
           ) : (
             <Table>
               <TableHeader>
@@ -278,7 +322,10 @@ export default function TrangTongQuan() {
                   return (
                     <TableRow key={k.id}>
                       <TableCell className="max-w-[220px]">
-                        <Link href={`/co-so/${cs.id}`} className="hover:text-primary font-medium hover:underline">
+                        <Link
+                          href={`/co-so/${cs.id}`}
+                          className="hover:text-primary font-medium hover:underline"
+                        >
                           {cs.ten}
                         </Link>
                         <div className="text-muted-foreground truncate text-xs">{cs.diaChi}</div>
@@ -373,12 +420,17 @@ export default function TrangTongQuan() {
               {coSoCanChuY.map((cs) => (
                 <TableRow key={cs.id}>
                   <TableCell className="max-w-[210px]">
-                    <Link href={`/co-so/${cs.id}`} className="hover:text-primary font-medium hover:underline">
+                    <Link
+                      href={`/co-so/${cs.id}`}
+                      className="hover:text-primary font-medium hover:underline"
+                    >
                       {cs.ten}
                     </Link>
                     <div className="text-muted-foreground truncate text-xs">{cs.loaiHinh}</div>
                   </TableCell>
-                  <TableCell className="text-[13px]">{khuVucTheoId.get(cs.khuVucId)?.ten}</TableCell>
+                  <TableCell className="text-[13px]">
+                    {khuVucTheoId.get(cs.khuVucId)?.ten}
+                  </TableCell>
                   <TableCell>
                     <StatusBadge value={cs.trangThai} />
                   </TableCell>
@@ -387,7 +439,9 @@ export default function TrangTongQuan() {
                       <Progress
                         value={cs.mucDoHoanThienHoSo}
                         className="h-1.5"
-                        indicatorClassName={cs.mucDoHoanThienHoSo < 60 ? "bg-destructive" : "bg-warning"}
+                        indicatorClassName={
+                          cs.mucDoHoanThienHoSo < 60 ? "bg-destructive" : "bg-warning"
+                        }
                       />
                       <span className="w-9 shrink-0 text-right text-xs font-semibold tabular-nums">
                         {cs.mucDoHoanThienHoSo}%
@@ -414,7 +468,10 @@ export default function TrangTongQuan() {
           }
         >
           {congViecQuaHan.length === 0 ? (
-            <EmptyState title="Không có công việc quá hạn" description="Toàn bộ công việc đang trong hạn xử lý." />
+            <EmptyState
+              title="Không có công việc quá hạn"
+              description="Toàn bộ công việc đang trong hạn xử lý."
+            />
           ) : (
             <Table>
               <TableHeader>

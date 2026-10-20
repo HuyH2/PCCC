@@ -3,7 +3,14 @@
 import * as React from "react";
 import Link from "next/link";
 import {
-  Building2, ClipboardCheck, FileSpreadsheet, Scale, Search, ShieldAlert, Siren, Users,
+  Building2,
+  ClipboardCheck,
+  FileSpreadsheet,
+  Scale,
+  Search,
+  ShieldAlert,
+  Siren,
+  Users,
 } from "lucide-react";
 
 import { EmptyState } from "@/components/shared/empty-state";
@@ -14,10 +21,20 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  baoCaoList, canBoList, canBoTheoId, coSoList, coSoTheoId, cuocKiemTraList,
-  khuVucTheoId, suCoList, vanBanList, viPhamList,
+  baoCaoList,
+  canBoList,
+  canBoTheoId,
+  coSoList,
+  coSoTheoId,
+  cuocKiemTraList,
+  khuVucTheoId,
+  vanBanList,
+  viPhamList,
 } from "@/data/mock";
 import { deaccent, formatDate } from "@/lib/utils";
+import { useIncidentSearch } from "@/components/incidents/incident-search";
+import { IncidentError, IncidentLoading, IncidentState } from "@/components/incidents/incident-ui";
+import { incidentTypeNames } from "@/lib/incident-contract";
 
 const GOI_Y = ["karaoke", "đình chỉ", "Hòa Hưng", "trạm xăng", "chung cư", "0903"];
 
@@ -25,32 +42,66 @@ export default function TrangTraCuu() {
   const [tuKhoa, setTuKhoa] = React.useState("");
   const q = deaccent(tuKhoa.trim());
   const coTuKhoa = q.length >= 2;
+  const incidents = useIncidentSearch(tuKhoa);
 
   const ketQua = React.useMemo(() => {
     if (!coTuKhoa) return null;
     return {
-      coSo: coSoList.filter(
-        (c) => deaccent(c.ten).includes(q) || deaccent(c.diaChi).includes(q) || c.ma.toLowerCase().includes(q) || deaccent(c.loaiHinh).includes(q),
-      ).slice(0, 30),
+      coSo: coSoList
+        .filter(
+          (c) =>
+            deaccent(c.ten).includes(q) ||
+            deaccent(c.diaChi).includes(q) ||
+            c.ma.toLowerCase().includes(q) ||
+            deaccent(c.loaiHinh).includes(q),
+        )
+        .slice(0, 30),
       canBo: canBoList.filter(
-        (c) => deaccent(c.hoTen).includes(q) || deaccent(c.chucVu).includes(q) || c.ma.toLowerCase().includes(q) || c.dienThoai.replace(/\s/g, "").includes(q),
+        (c) =>
+          deaccent(c.hoTen).includes(q) ||
+          deaccent(c.chucVu).includes(q) ||
+          c.ma.toLowerCase().includes(q) ||
+          c.dienThoai.replace(/\s/g, "").includes(q),
       ),
-      viPham: viPhamList.filter((v) => {
-        const cs = coSoTheoId.get(v.coSoId);
-        return v.ma.toLowerCase().includes(q) || deaccent(v.loai).includes(q) || (cs ? deaccent(cs.ten).includes(q) : false);
-      }).slice(0, 20),
-      kiemTra: cuocKiemTraList.filter((k) => {
-        const cs = coSoTheoId.get(k.coSoId);
-        return k.ma.toLowerCase().includes(q) || (cs ? deaccent(cs.ten).includes(q) : false);
-      }).slice(0, 20),
-      suCo: suCoList.filter((s) => s.ma.toLowerCase().includes(q) || deaccent(s.diaChi).includes(q) || deaccent(s.nguyenNhan).includes(q)).slice(0, 20),
-      baoCao: baoCaoList.filter((b) => deaccent(b.ten).includes(q) || b.ma.toLowerCase().includes(q) || deaccent(b.noiNhan).includes(q)).slice(0, 20),
-      vanBan: vanBanList.filter((v) => deaccent(v.trichYeu).includes(q) || v.soKyHieu.toLowerCase().includes(q)),
+      viPham: viPhamList
+        .filter((v) => {
+          const cs = coSoTheoId.get(v.coSoId);
+          return (
+            v.ma.toLowerCase().includes(q) ||
+            deaccent(v.loai).includes(q) ||
+            (cs ? deaccent(cs.ten).includes(q) : false)
+          );
+        })
+        .slice(0, 20),
+      kiemTra: cuocKiemTraList
+        .filter((k) => {
+          const cs = coSoTheoId.get(k.coSoId);
+          return k.ma.toLowerCase().includes(q) || (cs ? deaccent(cs.ten).includes(q) : false);
+        })
+        .slice(0, 20),
+      suCo: incidents.items,
+      baoCao: baoCaoList
+        .filter(
+          (b) =>
+            deaccent(b.ten).includes(q) ||
+            b.ma.toLowerCase().includes(q) ||
+            deaccent(b.noiNhan).includes(q),
+        )
+        .slice(0, 20),
+      vanBan: vanBanList.filter(
+        (v) => deaccent(v.trichYeu).includes(q) || v.soKyHieu.toLowerCase().includes(q),
+      ),
     };
-  }, [q, coTuKhoa]);
+  }, [q, coTuKhoa, incidents.items]);
 
   const tong = ketQua
-    ? ketQua.coSo.length + ketQua.canBo.length + ketQua.viPham.length + ketQua.kiemTra.length + ketQua.suCo.length + ketQua.baoCao.length + ketQua.vanBan.length
+    ? ketQua.coSo.length +
+      ketQua.canBo.length +
+      ketQua.viPham.length +
+      ketQua.kiemTra.length +
+      ketQua.suCo.length +
+      ketQua.baoCao.length +
+      ketQua.vanBan.length
     : 0;
 
   return (
@@ -99,9 +150,12 @@ export default function TrangTraCuu() {
             />
           </CardContent>
         </Card>
+      ) : tong === 0 && incidents.loading ? (
+        <IncidentLoading>Đang tra cứu sự cố…</IncidentLoading>
       ) : tong === 0 ? (
         <Card>
           <CardContent className="py-14">
+            {incidents.error && <IncidentError message={incidents.error} />}
             <EmptyState
               title={`Không tìm thấy kết quả cho “${tuKhoa}”`}
               description="Thử rút ngắn từ khóa hoặc bỏ dấu tiếng Việt."
@@ -155,7 +209,9 @@ export default function TrangTraCuu() {
                       <span className="font-semibold">{cs.ten}</span>
                       <StatusBadge value={cs.trangThai} />
                       <Badge variant="outline">{cs.loaiHinh}</Badge>
-                      <span className="text-muted-foreground ml-auto font-mono text-xs">{cs.ma}</span>
+                      <span className="text-muted-foreground ml-auto font-mono text-xs">
+                        {cs.ma}
+                      </span>
                     </div>
                     <p className="text-muted-foreground mt-0.5 text-[13px]">
                       {cs.diaChi} · {khuVucTheoId.get(cs.khuVucId)?.ten} · CB:{" "}
@@ -177,7 +233,10 @@ export default function TrangTraCuu() {
                   </div>
                   <p className="text-muted-foreground mt-0.5 text-[13px]">
                     {cb.capBac} · {cb.chucVu} ·{" "}
-                    <a href={`tel:${cb.dienThoai.replace(/\s/g, "")}`} className="text-primary hover:underline">
+                    <a
+                      href={`tel:${cb.dienThoai.replace(/\s/g, "")}`}
+                      className="text-primary hover:underline"
+                    >
                       {cb.dienThoai}
                     </a>
                   </p>
@@ -229,15 +288,26 @@ export default function TrangTraCuu() {
             </TabsContent>
 
             <TabsContent value="su-co" className="space-y-2">
+              {incidents.loading && <IncidentLoading>Đang tra cứu sự cố…</IncidentLoading>}
+              {incidents.error && <IncidentError message={incidents.error} />}
               {ketQua!.suCo.map((s) => (
                 <Card key={s.id} className="gap-0 p-3">
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <span className="font-mono text-xs">{s.ma}</span>
-                    <span className="font-semibold">{s.loai}</span>
-                    <StatusBadge value={s.trangThai} />
+                    <Link
+                      href={`/su-co/${encodeURIComponent(s.id)}`}
+                      className="text-primary font-mono text-xs hover:underline"
+                    >
+                      {s.incidentCode}
+                    </Link>
+                    <span className="font-semibold">
+                      {s.incidentType
+                        ? incidentTypeNames[s.incidentType] || s.incidentType
+                        : "Chưa phân loại"}
+                    </span>
+                    <IncidentState incident={s} />
                   </div>
                   <p className="text-muted-foreground mt-0.5 text-[13px]">
-                    {s.diaChi} · {s.nguyenNhan}
+                    {s.address} · {s.description}
                   </p>
                 </Card>
               ))}
@@ -252,7 +322,8 @@ export default function TrangTraCuu() {
                     <StatusBadge value={b.trangThai} />
                   </div>
                   <p className="text-muted-foreground mt-0.5 text-[13px]">
-                    Nơi nhận: {b.noiNhan} · hạn {formatDate(b.hanNop)} · chu kỳ {b.chuKy.toLowerCase()}
+                    Nơi nhận: {b.noiNhan} · hạn {formatDate(b.hanNop)} · chu kỳ{" "}
+                    {b.chuKy.toLowerCase()}
                   </p>
                 </Card>
               ))}

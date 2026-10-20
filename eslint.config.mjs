@@ -8,6 +8,8 @@ export default [
       "node_modules/**",
       ".next/**",
       ".next-org-tests/**",
+      ".next-m09-tests/**",
+      "Backend/private/**",
       "Backend/data/**",
       "next-env.d.ts",
     ],
