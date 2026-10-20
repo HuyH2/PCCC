@@ -1,4 +1,11 @@
-import { listPlans, planDetail, createPlan, updatePlan, planningOptions, listPlanFacilities } from "./plans.service.js";
+import {
+  listPlans,
+  planDetail,
+  createPlan,
+  updatePlan,
+  planningOptions,
+  listPlanFacilities,
+} from "./plans.service.js";
 import { createTarget } from "./targets.service.js";
 import { createPeriodicInspection } from "./periodic-inspections.service.js";
 

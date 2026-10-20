@@ -12,7 +12,10 @@ import {
 import { validateInspectionFile, uploadDocument, documentFile } from "./documents.service.js";
 import { createFollowUp, completeFollowUp } from "./follow-ups.service.js";
 import { checklistRoutes } from "./checklists.routes.js";
-import { MAX_INSPECTION_FILE_BYTES, INSPECTION_FILE_SIZE_MESSAGE } from "./inspections.constants.js";
+import {
+  MAX_INSPECTION_FILE_BYTES,
+  INSPECTION_FILE_SIZE_MESSAGE,
+} from "./inspections.constants.js";
 
 const ID = "([a-zA-Z0-9-]+)";
 const INSPECTION = `^\\/api\\/inspections\\/${ID}`;
@@ -62,8 +65,6 @@ async function upload(ctx, id) {
     ),
   };
 }
-
-
 
 const inspectionOnlyRoutes = [
   {

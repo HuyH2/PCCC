@@ -15,9 +15,22 @@ const ALLOCATION_ROLES = ["A01", "A02"];
 export function createTarget(db, user, planId, payload, ip) {
   requirePlanning(user, "edit");
   requireRole(user, ALLOCATION_ROLES, "Chỉ Chỉ huy hoặc Phó chỉ huy được phân bổ chỉ tiêu.");
-  object(payload, ["period_type", "month", "week", "officer_id", "region_id", "target_count", "parent_id"]);
+  object(payload, [
+    "period_type",
+    "month",
+    "week",
+    "officer_id",
+    "region_id",
+    "target_count",
+    "parent_id",
+  ]);
   const plan = scopedPlan(db, user, planId);
-  assert(plan.status !== "closed", 409, "INVALID_STATE", "Kế hoạch đã đóng không thể phân bổ thêm.");
+  assert(
+    plan.status !== "closed",
+    409,
+    "INVALID_STATE",
+    "Kế hoạch đã đóng không thể phân bổ thêm.",
+  );
   const periodType = payload.period_type;
   assert(
     ["month", "week"].includes(periodType),
@@ -125,7 +138,9 @@ export function createTarget(db, user, planId, payload, ip) {
       "Chỉ tiêu cha không cùng kỳ phân bổ.",
     );
     const existing = db
-      .prepare("SELECT coalesce(sum(target_count),0) AS n FROM inspection_targets WHERE parent_id=?")
+      .prepare(
+        "SELECT coalesce(sum(target_count),0) AS n FROM inspection_targets WHERE parent_id=?",
+      )
       .get(parentId).n;
     assert(
       existing + targetCount <= parent.target_count,

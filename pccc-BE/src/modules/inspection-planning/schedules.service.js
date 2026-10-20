@@ -4,7 +4,15 @@ import { object, pagination } from "../../core/validation.js";
 import { transaction } from "../../core/database.js";
 import { facilityScope } from "../authorization/authorization.service.js";
 import { writeAudit } from "../audit/audit.service.js";
-import { date, optionalTime, requirePlanning, requireRole, parseFile, trimmed, optionalText } from "./planning.helpers.js";
+import {
+  date,
+  optionalTime,
+  requirePlanning,
+  requireRole,
+  parseFile,
+  trimmed,
+  optionalText,
+} from "./planning.helpers.js";
 import { scopedPeriodicInspection } from "./planning.queries.js";
 
 const RESCHEDULE_ROLES = ["A01", "A03"];
@@ -183,7 +191,12 @@ export function rescheduleInspection(db, user, id, payload, ip) {
     "Lịch kiểm tra đã thay đổi. Hãy tải lại.",
   );
   const newDate = date(payload.new_date, "Ngày mới");
-  assert(newDate !== before.scheduled_date, 400, "INVALID_INPUT", "Ngày mới phải khác ngày hiện tại.");
+  assert(
+    newDate !== before.scheduled_date,
+    400,
+    "INVALID_INPUT",
+    "Ngày mới phải khác ngày hiện tại.",
+  );
   const reason = trimmed(payload.reason, "Lý do dời lịch", 1, 2000);
   const startTime = optionalTime(payload.start_time ?? before.start_time, "Giờ bắt đầu");
   const endTime = optionalTime(payload.end_time ?? before.end_time, "Giờ kết thúc");

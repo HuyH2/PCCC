@@ -1,5 +1,10 @@
 import { sendFile } from "../../core/http.js";
-import { listSchedules, updateSchedule, listReschedules, rescheduleInspection } from "./schedules.service.js";
+import {
+  listSchedules,
+  updateSchedule,
+  listReschedules,
+  rescheduleInspection,
+} from "./schedules.service.js";
 import { planningInspectionDetail, assignLeadOfficer } from "./periodic-inspections.service.js";
 import { upsertNotice } from "./notices.service.js";
 import { planningFile } from "./planning-files.service.js";
@@ -25,7 +30,8 @@ export const inspectionsPlanningRoutes = [
   {
     method: "GET",
     path: new RegExp(`^/api/inspections/${ID}/notice/file$`),
-    handle: (ctx, match) => sendFile(ctx.response, planningFile(ctx.db, ctx.user, match[1], "notice")),
+    handle: (ctx, match) =>
+      sendFile(ctx.response, planningFile(ctx.db, ctx.user, match[1], "notice")),
   },
   {
     method: "GET",

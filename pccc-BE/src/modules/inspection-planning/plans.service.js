@@ -41,7 +41,12 @@ export function listPlans(db, user, url) {
   }
   const status = url.searchParams.get("status");
   if (status) {
-    assert(PLAN_STATUSES.includes(status), 400, "INVALID_INPUT", "Trạng thái kế hoạch không hợp lệ.");
+    assert(
+      PLAN_STATUSES.includes(status),
+      400,
+      "INVALID_INPUT",
+      "Trạng thái kế hoạch không hợp lệ.",
+    );
     clauses.push("p.status=?");
     params.push(status);
   }
@@ -88,7 +93,16 @@ export function planDetail(db, user, id) {
 export function createPlan(db, user, payload, ip) {
   requirePlanning(user, "create");
   requireRole(user, PLAN_ROLES, "Vai trò hiện tại không được lập kế hoạch kiểm tra năm.");
-  object(payload, ["code", "year", "title", "facility_group", "legal_basis", "unit_id", "annual_target", "status"]);
+  object(payload, [
+    "code",
+    "year",
+    "title",
+    "facility_group",
+    "legal_basis",
+    "unit_id",
+    "annual_target",
+    "status",
+  ]);
   const year = integer(payload.year, "Năm kế hoạch", 2000, 2100);
   const title = trimmed(payload.title, "Tên kế hoạch", 1, 300);
   const unitId = trimmed(payload.unit_id, "Đơn vị", 1, 100);
@@ -161,7 +175,15 @@ export function createPlan(db, user, payload, ip) {
 export function updatePlan(db, user, id, payload, ip) {
   requirePlanning(user, "edit");
   requireRole(user, PLAN_ROLES, "Vai trò hiện tại không được cập nhật kế hoạch kiểm tra.");
-  object(payload, ["title", "facility_group", "legal_basis", "annual_target", "status", "version", "change_reason"]);
+  object(payload, [
+    "title",
+    "facility_group",
+    "legal_basis",
+    "annual_target",
+    "status",
+    "version",
+    "change_reason",
+  ]);
   const before = scopedPlan(db, user, id);
   assert(before.status !== "closed", 409, "INVALID_STATE", "Kế hoạch đã đóng không thể chỉnh sửa.");
   assert(
@@ -173,7 +195,12 @@ export function updatePlan(db, user, id, payload, ip) {
   const status = payload.status ?? before.status;
   assert(PLAN_STATUSES.includes(status), 400, "INVALID_INPUT", "Trạng thái kế hoạch không hợp lệ.");
   const allowed = before.status === "draft" ? ["draft", "published"] : ["published", "closed"];
-  assert(allowed.includes(status), 409, "INVALID_STATE", "Không thể chuyển trạng thái kế hoạch theo yêu cầu.");
+  assert(
+    allowed.includes(status),
+    409,
+    "INVALID_STATE",
+    "Không thể chuyển trạng thái kế hoạch theo yêu cầu.",
+  );
   const annualTarget =
     payload.annual_target == null
       ? before.annual_target

@@ -1,4 +1,9 @@
-import { requireChecklistAuthor, listChecklists, checklistDetail, createChecklist } from "./checklists.service.js";
+import {
+  requireChecklistAuthor,
+  listChecklists,
+  checklistDetail,
+  createChecklist,
+} from "./checklists.service.js";
 
 const ID = "([a-zA-Z0-9-]+)";
 

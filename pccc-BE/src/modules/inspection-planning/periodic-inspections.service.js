@@ -230,7 +230,12 @@ export function assignLeadOfficer(db, user, id, payload, ip) {
     "INVALID_STATE",
     "Chỉ hồ sơ đang chuẩn bị mới được đổi cán bộ.",
   );
-  assert(payload.version === before.version, 409, "VERSION_CONFLICT", "Cuộc kiểm tra đã thay đổi. Hãy tải lại.");
+  assert(
+    payload.version === before.version,
+    409,
+    "VERSION_CONFLICT",
+    "Cuộc kiểm tra đã thay đổi. Hãy tải lại.",
+  );
   const officer = ensureOfficer(
     db,
     trimmed(payload.lead_officer_id, "Cán bộ phụ trách", 1, 100),

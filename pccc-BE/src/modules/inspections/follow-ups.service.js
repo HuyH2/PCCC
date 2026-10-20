@@ -2,7 +2,12 @@ import { randomUUID } from "node:crypto";
 import { assert } from "../../core/errors.js";
 import { object } from "../../core/validation.js";
 import { transaction } from "../../core/database.js";
-import { requireInspectionAccess, date, trimmed, writeInspectionAudit } from "./inspections.helpers.js";
+import {
+  requireInspectionAccess,
+  date,
+  trimmed,
+  writeInspectionAudit,
+} from "./inspections.helpers.js";
 import { scopedInspection } from "./inspections.queries.js";
 
 // ---------------------------------------------------------------------------

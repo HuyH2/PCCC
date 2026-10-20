@@ -191,7 +191,11 @@ export function saveResults(db, user, id, payload, ip) {
     const before = inspectionDetail(db, user, id);
     const inspection = before.inspection;
     expectVersion(inspection, payload.version);
-    expectStatus(inspection, ["planned", "in_progress"], "Kết quả checklist đã được chốt, không thể sửa.");
+    expectStatus(
+      inspection,
+      ["planned", "in_progress"],
+      "Kết quả checklist đã được chốt, không thể sửa.",
+    );
     let checklistId = inspection.checklist_id;
     if (payload.checklist_id != null && payload.checklist_id !== checklistId) {
       const hasResults = db
@@ -280,7 +284,12 @@ export function saveResults(db, user, id, payload, ip) {
 export function saveConclusion(db, user, id, payload, ip) {
   requireInspectionAccess(user, "edit");
   object(payload, ["version", "outcome", "conclusion"]);
-  assert(OUTCOMES.includes(payload.outcome), 400, "INVALID_INPUT", "Kết quả kiểm tra không hợp lệ.");
+  assert(
+    OUTCOMES.includes(payload.outcome),
+    400,
+    "INVALID_INPUT",
+    "Kết quả kiểm tra không hợp lệ.",
+  );
   const conclusion = trimmed(payload.conclusion, "Kết luận", 1, 4000);
   return transaction(db, () => {
     const before = scopedInspection(db, user, id);

@@ -138,7 +138,12 @@ export function parseFile(value, label = "Tệp đính kèm") {
   object(value, ["name", "content_type", "content_base64"]);
   const name = trimmed(value.name, "Tên file", 1, 255);
   const contentType = value.content_type;
-  assert(FILE_VALIDATORS[contentType], 400, "INVALID_INPUT", `${label} chỉ nhận PDF, JPEG hoặc PNG.`);
+  assert(
+    FILE_VALIDATORS[contentType],
+    400,
+    "INVALID_INPUT",
+    `${label} chỉ nhận PDF, JPEG hoặc PNG.`,
+  );
   assert(
     typeof value.content_base64 === "string" &&
       value.content_base64.length > 0 &&

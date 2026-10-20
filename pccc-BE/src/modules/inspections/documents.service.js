@@ -7,7 +7,12 @@ import {
   MAX_INSPECTION_FILE_BYTES,
   INSPECTION_FILE_SIZE_MESSAGE,
 } from "./inspections.constants.js";
-import { requireInspectionAccess, trimmed, expectStatus, writeInspectionAudit } from "./inspections.helpers.js";
+import {
+  requireInspectionAccess,
+  trimmed,
+  expectStatus,
+  writeInspectionAudit,
+} from "./inspections.helpers.js";
 import { scopedInspection } from "./inspections.queries.js";
 
 // ---------------------------------------------------------------------------
