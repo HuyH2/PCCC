@@ -10,6 +10,7 @@ import { dashboardRoutes } from "./modules/dashboard/dashboard.routes.js";
 import { auditRoutes } from "./modules/audit/audit.routes.js";
 import { legalDocumentsRoutes } from "./modules/legal-documents/legal-documents.routes.js";
 import { inspectionsRoutes } from "./modules/inspections/inspections.routes.js";
+import { tasksRoutes } from "./modules/tasks/tasks.routes.js";
 
 // Modular monolith: each business module registers its routes here; all share one process and DB.
 const routes = [
@@ -22,6 +23,7 @@ const routes = [
   ...auditRoutes,
   ...legalDocumentsRoutes,
   ...inspectionsRoutes,
+  ...tasksRoutes,
 ];
 
 export function createApp(
@@ -71,7 +73,7 @@ export function createApp(
         "Nguồn yêu cầu không được phép.",
       );
       if (request.method === "OPTIONS") {
-        response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
+        response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
         response.setHeader(
           "Access-Control-Allow-Headers",
           "Content-Type, X-File-Name, X-Document-Version, X-Document-Kind, X-Record-Number, X-Document-Description",

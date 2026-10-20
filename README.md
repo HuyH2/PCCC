@@ -1,5 +1,45 @@
 # Hệ thống Quản lý công tác PCCC & CNCH
 
+## Giao việc, tiến độ và trao đổi — M07
+
+`/cong-viec/giao-viec` đọc công việc từ database. Chỉ huy A01/A02 hoặc quản trị A05 có
+`M07.create` và phạm vi đơn vị/toàn hệ thống có thể giao việc cho tài khoản đang hoạt động,
+có `M07.view` và phạm vi giao nhau. Form lưu tên, loại việc, nội dung, người thực hiện và hạn.
+Người được giao có `M07.edit` cập nhật tiến độ 0–100%; các lần đổi được lưu trong audit và hiện
+ở lịch sử trên trang chi tiết. Mức 100% hiện là tiến độ báo cáo, không tự phê duyệt hoàn thành.
+Người giao chỉ xem tiến độ và lịch sử; form **Ghi nhận tiến độ** xuất hiện khi đăng nhập bằng tài
+khoản người thực hiện. Với `CV-DEMO-02`, dùng `demo.tong-hop` để nhập phần trăm/ghi chú, sau đó
+đăng nhập `demo.admin` để xem kết quả. Tiến độ ban đầu của dữ liệu mẫu không phải một lần cập nhật
+nên không có dòng lịch sử cho đến khi người thực hiện lưu thay đổi.
+Migration `015-task-assignment-progress.sql` bổ sung các cột vào bảng `tasks` mà không thay
+đổi công việc đã có.
+
+Mở một công việc để xem và gửi tin nhắn; hai
+người tham gia (người giao và người được giao) nhìn thấy cùng cuộc trao đổi. Tin mới tự cập nhật
+trên trang gần nhất mỗi 5 giây. Người gửi được sửa hoặc xóa mềm tin của mình khi công việc còn mở.
+Backend kiểm tra quyền `M07.view/create/edit` và tư cách tham gia từng công việc; người ngoài không
+thấy công việc/tin nhắn. API có phân trang, audit thao tác và giữ nội dung đã xóa trong database để
+truy vết. Migration `014-task-messages.sql` tạo `tasks` và `task_messages` vì repository trước đó chỉ
+có danh sách công việc mock và dùng bảng tài khoản `accounts` thay cho `users`.
+
+**Thử trên UI với database demo:** chạy `pnpm migrate` rồi `pnpm seed`, khởi động lại backend/frontend,
+đăng nhập `demo.chi-huy` và mở **Lịch – Công việc – KPI → Giao việc & tiến độ**. Nhấn **Giao công việc**,
+nhập thông tin, chọn `demo.can-bo` và lưu. Mở công việc vừa tạo; đăng nhập `demo.can-bo` trong cửa sổ
+khác để xem cùng công việc, nhập tiến độ và ghi chú, rồi nhấn **Lưu tiến độ**. Quay lại tài khoản
+chỉ huy, tải lại trang để thấy tiến độ và lịch sử. Gửi một tin trong công việc; tài khoản còn lại
+thấy tin trong tối đa 5 giây. Thử sửa/xóa tin do chính tài khoản
+gửi; tài khoản kia không có nút sửa/xóa tin đó. `demo.admin` thấy các công việc mẫu CV-DEMO-02–05
+do chính tài khoản này giao; `demo.nguoi-xem`
+không có quyền M07. Dùng database thử nghiệm vì các thao tác này ghi dữ liệu.
+
+Các công việc `CV-DEMO-*` là dữ liệu mẫu. Seed hiện tạo bảy công việc mẫu, mỗi tài khoản chỉ thấy
+những công việc mình giao hoặc được giao. Với database đã seed trước migration tiến độ, chạy lại
+`pnpm seed` để bổ sung hạn và tiến độ cho hai công việc mẫu cũ chưa được chỉnh sửa. Công việc tạo
+qua form được lưu thật trong database.
+Các công việc mẫu CV-DEMO-02–07 có hai tin nhắn trao đổi mẫu giữa người giao và người thực hiện;
+seed không chèn tin mẫu vào công việc đã có trao đổi và không tạo trùng khi chạy lại.
+Màn hình lịch và KPI vẫn là dữ liệu demo, chưa tổng hợp từ công việc thật.
+
 ## Khóa tài khoản và chuyển giao phạm vi — UC-ADM-04
 
 `/quan-tri/tai-khoan` đã nối API để khóa/mở khóa tài khoản; `/to-chuc/phan-cong` đã nối API

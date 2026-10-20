@@ -272,6 +272,31 @@ Thêm mục mới **ở cuối** danh sách, theo mẫu ở §7.
 - **Giới hạn:** Hồ sơ M04 hiện tập trung vào vòng đời đình chỉ/hoạt động lại; chưa triển khai quản lý
   các loại vi phạm độc lập không dẫn tới đình chỉ.
 
+### F09 — Trao đổi theo công việc (M07)
+
+- **Database:** migration `014-task-messages.sql` tạo bảng công việc tối thiểu `tasks` và
+  `task_messages`; FK tới `accounts` (repo chưa có `users`), index theo công việc/thời gian, xóa mềm.
+  Seed tạo bảy công việc và hội thoại mẫu theo từng việc (13 tin nhắn), không ghi đè trao đổi đã có.
+- **API:** danh sách/chi tiết công việc, danh sách tin nhắn có phân trang, gửi/sửa/xóa mềm. Mọi API
+  kiểm quyền M07 và chỉ cho người giao/người được giao của công việc truy cập; sửa/xóa chỉ người gửi.
+  Audit ghi thao tác, transaction giữ nhất quán khi ghi lỗi.
+- **UI:** `/cong-viec/giao-viec` hiển thị công việc từ DB; `/cong-viec/giao-viec/[id]` hiển thị trao đổi,
+  trạng thái tải/lỗi, form gửi và tự làm mới trang tin mới nhất mỗi 5 giây.
+- **Giới hạn:** lịch và KPI vẫn là tính năng riêng chưa nối backend. Tin nhắn hiện chỉ
+  giữa hai người tham gia, không có chat độc lập hoặc video call.
+
+### F10 — Giao việc và theo dõi tiến độ (M07)
+
+- **Database:** migration `015-task-assignment-progress.sql` thêm loại việc, hạn, tiến độ và thời gian
+  cập nhật cho `tasks`; seed có bảy công việc mẫu với tiến độ/hạn. Seed chỉ backfill tiến độ/hạn
+  của hai công việc mẫu cũ chưa từng được chỉnh sửa, không thay dữ liệu do người dùng cập nhật.
+- **API:** `POST /api/tasks`, `GET /api/tasks/assignees`, `PUT /api/tasks/:id/progress`,
+  `GET /api/tasks/:id/progress-history`. Chỉ A01/A02/A05 được giao trong phạm vi đơn vị/toàn hệ thống;
+  người thực hiện cập nhật tiến độ. Người không tham gia không xem được công việc hoặc lịch sử.
+  Audit và cập nhật dùng chung transaction. 100% là báo cáo tiến độ, chưa tự đóng công việc.
+- **UI:** trang `/cong-viec/giao-viec` có form giao việc và danh sách tiến độ từ DB; trang chi tiết
+  hiển thị hạn, tiến độ và lịch sử cập nhật cùng người thao tác.
+
 ## 7. Quy tắc khi làm feature
 
 Bắt buộc với mọi feature mới (người hoặc AI agent):

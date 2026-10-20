@@ -47,6 +47,7 @@ Monorepo pnpm (`pnpm-workspace.yaml`) gồm hai ứng dụng; backend theo modul
   chung), `administration`, `facilities`, `search`, `dashboard`, `audit` (service audit chung + nhật
   ký), `legal-documents` (kho văn bản M05; hợp đồng API, PDF và quyền ở `pccc-BE/LEGAL_DOCUMENTS.md`),
   `inspections` (thực hiện kiểm tra M06; API, trạng thái và giả định ở `pccc-BE/INSPECTIONS.md`).
+  Module `tasks` lưu giao việc, tiến độ và trao đổi M07 theo từng công việc.
 - `pccc-BE/migrations/*.sql`: migration theo thứ tự tên file.
 - Chuyển giao tài khoản/phạm vi UC-ADM-04 dùng module `administration/account-transfer.service.js`,
   `region_assignments`, `account_transfers` và `account_transfer_items`; xem `pccc-BE/ACCOUNT_TRANSFERS.md`.
@@ -63,7 +64,10 @@ Monorepo pnpm (`pnpm-workspace.yaml`) gồm hai ứng dụng; backend theo modul
   đã có luồng API. `/co-so`, chi tiết cơ sở và lịch sử trạng thái đã nối API; `/vi-pham` đọc hồ sơ
   đình chỉ/hoạt động lại từ database. Các màn hình nghiệp vụ khác cần kiểm tra riêng.
 - Kho `/van-ban` (danh sách/chi tiết/thêm/sửa/PDF/lịch sử) và `/quan-tri/nhat-ky` đã nối API thật.
-  Kho chung đọc theo M05.view + scope không rỗng; ghi cần vai trò A01/A05, quyền tạo/sửa
+  `/cong-viec/giao-viec` và chi tiết trao đổi/tiến độ đọc database; các màn hình M07 khác
+  vẫn cần tích hợp riêng.
+
+- Kho chung đọc theo M05.view + scope không rỗng; ghi cần vai trò A01/A05, quyền tạo/sửa
   và scope không rỗng (Chỉ huy có thể dùng scope đơn vị).
   Nhật ký hệ thống giữ giới hạn A05 + M01.view + all; history văn bản theo quyền đọc văn bản.
 - Nhiều màn hình nghiệp vụ và form còn mock. Khi được giao tích hợp thật, làm đủ DB → API → quyền
