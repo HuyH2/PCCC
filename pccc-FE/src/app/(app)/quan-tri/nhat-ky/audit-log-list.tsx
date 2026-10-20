@@ -92,9 +92,11 @@ export function AuditLogList() {
               maxLength={100}
             />
             <datalist id="audit-features">
-              {["M05", "M06", "M01.auth", "M01.authorization", "system"].map((f) => (
-                <option key={f} value={f} />
-              ))}
+              {["M05", "M06", "M01", "M01.transfer", "M01.auth", "M01.authorization", "system"].map(
+                (f) => (
+                  <option key={f} value={f} />
+                ),
+              )}
             </datalist>
           </div>
           <div className="space-y-2">
@@ -116,6 +118,9 @@ export function AuditLogList() {
                 "auth.logout",
                 "authorization.role_permissions_changed",
                 "authorization.account_changed",
+                "account.locked",
+                "account.unlocked",
+                "account.transfer_completed",
               ].map((a) => (
                 <option key={a} value={a} />
               ))}

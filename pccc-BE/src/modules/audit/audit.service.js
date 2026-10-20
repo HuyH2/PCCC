@@ -30,20 +30,23 @@ export function writeAudit(
   text(feature, "Chức năng", 1, 100);
   text(objectType, "Loại đối tượng", 1, 100);
   text(action, "Thao tác", 1, 100);
-  db.prepare(
-    `INSERT INTO audit_logs(actor_id,action,object_id,before_json,after_json,occurred_at,ip,feature,object_type)
+  const result = db
+    .prepare(
+      `INSERT INTO audit_logs(actor_id,action,object_id,before_json,after_json,occurred_at,ip,feature,object_type)
     VALUES (?,?,?,?,?,?,?,?,?)`,
-  ).run(
-    actorId,
-    action,
-    objectId,
-    before == null ? null : JSON.stringify(redact(before)),
-    after == null ? null : JSON.stringify(redact(after)),
-    Date.now(),
-    ip,
-    feature,
-    objectType,
-  );
+    )
+    .run(
+      actorId,
+      action,
+      objectId,
+      before == null ? null : JSON.stringify(redact(before)),
+      after == null ? null : JSON.stringify(redact(after)),
+      Date.now(),
+      ip,
+      feature,
+      objectType,
+    );
+  return Number(result.lastInsertRowid);
 }
 
 // Backward-compatible signature for authentication and authorization features.
