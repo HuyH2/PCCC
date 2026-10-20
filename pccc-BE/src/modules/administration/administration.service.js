@@ -9,6 +9,7 @@ import {
 import { audit, writeAudit } from "../audit/audit.service.js";
 import { transaction } from "../../core/database.js";
 import { hashPassword } from "../../core/password.js";
+import { businessDate } from "../../core/time.js";
 
 export function preserveAdministrator(db) {
   const row = db
@@ -217,7 +218,7 @@ export function updateAccountAuthorization(db, principal, id, payload, ip) {
       ip,
     });
     const now = Date.now();
-    const effectiveDate = new Date(now).toISOString().slice(0, 10);
+    const effectiveDate = businessDate(now);
     for (const regionId of removedRegionIds) {
       const removed = db
         .prepare("DELETE FROM region_assignments WHERE region_id=? AND account_id=?")

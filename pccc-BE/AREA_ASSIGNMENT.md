@@ -46,6 +46,8 @@ Trong một transaction, API cập nhật `region_assignments`, scope `region` t
 gỡ scope `region` của cán bộ cũ (giữ scope `facility` cho các cơ sở cũ còn phụ trách), ghi audit và
 `assignment_events`. `effectiveDate` là ngày nghiệp vụ (`YYYY-MM-DD`) và phải là ngày có thật
 (`2026-02-30` bị từ chối), không phải lịch hẹn tự động: phân công có hiệu lực ngay, giống UC-ADM-04.
+Ngày do server tự sinh (chuyển giao, thu hồi scope) dùng múi giờ Việt Nam
+(`Asia/Ho_Chi_Minh`), không phụ thuộc timezone của máy chủ.
 
 Chuyển giao UC-ADM-04 cũng ghi `assignment_events` cho từng khu vực trong cùng transaction, với
 `effectiveDate` là ngày chuyển giao và lý do chuyển giao. Nhờ vậy khu vực không hiện người phụ trách

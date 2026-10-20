@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { assert } from "../../core/errors.js";
 import { object, pagination, text } from "../../core/validation.js";
 import { transaction } from "../../core/database.js";
+import { businessDate } from "../../core/time.js";
 import { requireAdministrator } from "../authorization/authorization.service.js";
 import { writeAudit } from "../audit/audit.service.js";
 import { preserveAdministrator } from "./administration.service.js";
@@ -223,7 +224,7 @@ export function createTransfer(db, principal, payload, ip) {
     });
     // UC-ORG-03 history covers transfers too; otherwise the region would show the new
     // owner with the previous assignment's effective date/note.
-    const effectiveDate = new Date(now).toISOString().slice(0, 10);
+    const effectiveDate = businessDate(now);
     for (const region of regions)
       db.prepare(
         `INSERT INTO assignment_events

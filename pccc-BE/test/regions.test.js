@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { openDatabase } from "../src/core/database.js";
 import { seedDemo } from "../src/core/seed.js";
+import { businessDate } from "../src/core/time.js";
 import { createApp } from "../src/app.js";
 
 const password = "Region-test-password-2026";
@@ -500,7 +501,7 @@ test("transfers append assignment history instead of inheriting old notes", asyn
 
   const detail = await request("/api/regions/KP01", { cookie: admin });
   assert.equal(detail.status, 200);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessDate();
   assert.equal(detail.data.region.officer_account_id, "DEMO-A03");
   assert.equal(detail.data.region.effective_date, today);
   assert.equal(detail.data.region.assignment_note, "Điều động cán bộ");
@@ -608,4 +609,10 @@ test("status guards and an audit failure roll back the assignment", async (t) =>
     db.prepare("SELECT count(*) AS n FROM assignment_events WHERE region_id='KP01'").get().n,
     0,
   );
+});
+
+test("business date follows Vietnam time around the UTC midnight boundary", () => {
+  assert.equal(businessDate("2026-10-20T16:59:59Z"), "2026-10-20");
+  assert.equal(businessDate("2026-10-20T17:00:00Z"), "2026-10-21");
+  assert.equal(businessDate("2026-10-20T23:30:00Z"), "2026-10-21");
 });
