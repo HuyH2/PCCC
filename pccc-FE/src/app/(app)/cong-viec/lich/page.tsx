@@ -6,6 +6,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { canBoTheoId, congViecList, coSoTheoId, cuocKiemTraList, NGAY_HE_THONG } from "@/data/mock";
+import { toBusinessDate } from "@/lib/date";
 import { formatDate } from "@/lib/utils";
 
 export const metadata = { title: "Lịch công tác" };
@@ -15,7 +16,7 @@ const tenThu = ["Chủ nhật", "Thứ hai", "Thứ ba", "Thứ tư", "Thứ nă
 function ngayISO(offset: number) {
   const d = new Date(NGAY_HE_THONG);
   d.setDate(d.getDate() + offset);
-  return { iso: d.toISOString().slice(0, 10), thu: tenThu[d.getDay()], la: d };
+  return { iso: toBusinessDate(d), thu: tenThu[d.getDay()], la: d };
 }
 
 export default function TrangLichCongTac() {

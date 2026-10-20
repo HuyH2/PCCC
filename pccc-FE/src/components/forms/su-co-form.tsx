@@ -15,13 +15,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { canBoList, coSoList, donViList, NGAY_HE_THONG } from "@/data/mock";
 import { suCoSchema, type SuCoFormValues } from "@/data/schemas";
+import { toBusinessDate } from "@/lib/date";
 
 const phuongList = donViList.filter((d) => d.cap === "Phường");
-const homNay = NGAY_HE_THONG.toISOString().slice(0, 10);
+const homNay = toBusinessDate(NGAY_HE_THONG);
 function congNgay(n: number) {
   const d = new Date(NGAY_HE_THONG);
   d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+  return toBusinessDate(d);
 }
 
 const nguyenNhanGoiY = [

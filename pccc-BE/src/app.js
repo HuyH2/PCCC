@@ -10,6 +10,7 @@ import { dashboardRoutes } from "./modules/dashboard/dashboard.routes.js";
 import { auditRoutes } from "./modules/audit/audit.routes.js";
 import { legalDocumentsRoutes } from "./modules/legal-documents/legal-documents.routes.js";
 import { inspectionsRoutes } from "./modules/inspections/inspections.routes.js";
+import { regionsRoutes } from "./modules/regions/regions.routes.js";
 import { tasksRoutes } from "./modules/tasks/tasks.routes.js";
 
 // Modular monolith: each business module registers its routes here; all share one process and DB.
@@ -23,6 +24,7 @@ const routes = [
   ...auditRoutes,
   ...legalDocumentsRoutes,
   ...inspectionsRoutes,
+  ...regionsRoutes,
   ...tasksRoutes,
 ];
 

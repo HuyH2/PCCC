@@ -10,6 +10,7 @@ import type {
   GiaiTrinh, KeHoachKiemTra, KhuVuc, LoaiHinhCoSo, LoaiSuCo, LoaiViPham,
   NhanSuCoSo, NhatKy, SuCo, TaiKhoan, TrangThaiCoSo, VanBanPhapLuat, ViPham,
 } from "./types";
+import { toBusinessDate } from "@/lib/date";
 
 /* ---------- Bộ sinh số giả ngẫu nhiên có hạt giống (deterministic) -------- */
 function taoRandom(seed: number) {
@@ -29,7 +30,7 @@ export const NGAY_HE_THONG = new Date("2026-09-16T00:00:00");
 function ngayLech(soNgay: number) {
   const d = new Date(NGAY_HE_THONG);
   d.setDate(d.getDate() + soNgay);
-  return d.toISOString().slice(0, 10);
+  return toBusinessDate(d);
 }
 function gioLech(soNgay: number, gio: number, phut: number) {
   const d = new Date(NGAY_HE_THONG);

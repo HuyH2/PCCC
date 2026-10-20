@@ -46,7 +46,21 @@ export function canManageDocuments(user: AuthUser, action: "create" | "edit") {
 
 /** Preserve existing demo screens. Backend enforces permissions on its APIs. */
 export function canVisit(user: AuthUser, path: string) {
-  if (path === "/quan-tri/tai-khoan" || path === "/to-chuc/phan-cong") {
+  if (path === "/to-chuc/khu-vuc") {
+    return user.permissions.includes("M02.view") && user.scopes.length > 0;
+  }
+  if (path === "/to-chuc/phan-cong") {
+    const administrator =
+      user.permissions.includes("M01.view") &&
+      user.role === "A05" &&
+      user.scopes.some((scope) => scope.kind === "all");
+    const commander =
+      user.permissions.includes("M02.view") &&
+      user.permissions.includes("M02.edit") &&
+      user.scopes.length > 0;
+    return administrator || commander;
+  }
+  if (path === "/quan-tri/tai-khoan") {
     return (
       user.permissions.includes("M01.view") &&
       user.role === "A05" &&

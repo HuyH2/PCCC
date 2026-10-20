@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { canBoList, NGAY_HE_THONG } from "@/data/mock";
 import { baoCaoSchema, type BaoCaoFormValues } from "@/data/schemas";
+import { toBusinessDate } from "@/lib/date";
 
 const noiNhanOptions = [
   "PC07 - Phòng tham mưu",
@@ -31,7 +32,7 @@ const noiNhanOptions = [
 function congNgay(n: number) {
   const d = new Date(NGAY_HE_THONG);
   d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+  return toBusinessDate(d);
 }
 
 /** Biểu mẫu thêm đầu việc báo cáo và thiết lập cảnh báo hạn (UC-RPT-01, UC-RPT-03). */

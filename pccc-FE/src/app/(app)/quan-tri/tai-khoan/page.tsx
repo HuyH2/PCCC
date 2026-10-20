@@ -12,7 +12,7 @@ export default async function AccountPage() {
     <div className="space-y-5">
       <PageHeader
         title="Quản lý tài khoản người dùng"
-        description="Khóa hoặc mở khóa tài khoản; tài khoản bị khóa mất phiên đăng nhập ngay."
+        description="Tạo tài khoản cho cán bộ, gán vai trò và đơn vị, khóa/ngưng hoặc đặt lại mật khẩu. Tài khoản bị khóa mất phiên đăng nhập ngay, không xóa vật lý tài khoản có lịch sử."
         module="M01"
         useCases={["UC-ADM-02", "UC-ADM-04"]}
         actions={
