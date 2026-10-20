@@ -16,6 +16,46 @@ Thử nhanh sau khi chạy dự án:
 
 Chi tiết schema, quyền và API: [pccc-BE/AREA_ASSIGNMENT.md](pccc-BE/AREA_ASSIGNMENT.md).
 
+## Giao việc, tiến độ và trao đổi — M07
+
+`/cong-viec/giao-viec` đọc công việc từ database. Chỉ huy A01/A02 hoặc quản trị A05 có
+`M07.create` và phạm vi đơn vị/toàn hệ thống có thể giao việc cho tài khoản đang hoạt động,
+có `M07.view` và phạm vi giao nhau. Form lưu tên, loại việc, nội dung, người thực hiện và hạn.
+Người được giao có `M07.edit` cập nhật tiến độ 0–100%; các lần đổi được lưu trong audit và hiện
+ở lịch sử trên trang chi tiết. Mức 100% hiện là tiến độ báo cáo, không tự phê duyệt hoàn thành.
+Người giao chỉ xem tiến độ và lịch sử; form **Ghi nhận tiến độ** xuất hiện khi đăng nhập bằng tài
+khoản người thực hiện. Với `CV-DEMO-02`, dùng `demo.tong-hop` để nhập phần trăm/ghi chú, sau đó
+đăng nhập `demo.admin` để xem kết quả. Tiến độ ban đầu của dữ liệu mẫu không phải một lần cập nhật
+nên không có dòng lịch sử cho đến khi người thực hiện lưu thay đổi.
+Migration `015-task-assignment-progress.sql` bổ sung các cột vào bảng `tasks` mà không thay
+đổi công việc đã có.
+
+Mở một công việc để xem và gửi tin nhắn; hai
+người tham gia (người giao và người được giao) nhìn thấy cùng cuộc trao đổi. Tin mới tự cập nhật
+trên trang gần nhất mỗi 5 giây. Người gửi được sửa hoặc xóa mềm tin của mình khi công việc còn mở.
+Backend kiểm tra quyền `M07.view/create/edit` và tư cách tham gia từng công việc; người ngoài không
+thấy công việc/tin nhắn. API có phân trang, audit thao tác và giữ nội dung đã xóa trong database để
+truy vết. Migration `014-task-messages.sql` tạo `tasks` và `task_messages` vì repository trước đó chỉ
+có danh sách công việc mock và dùng bảng tài khoản `accounts` thay cho `users`.
+
+**Thử trên UI với database demo:** chạy `pnpm migrate` rồi `pnpm seed`, khởi động lại backend/frontend,
+đăng nhập `demo.chi-huy` và mở **Lịch – Công việc – KPI → Giao việc & tiến độ**. Nhấn **Giao công việc**,
+nhập thông tin, chọn `demo.can-bo` và lưu. Mở công việc vừa tạo; đăng nhập `demo.can-bo` trong cửa sổ
+khác để xem cùng công việc, nhập tiến độ và ghi chú, rồi nhấn **Lưu tiến độ**. Quay lại tài khoản
+chỉ huy, tải lại trang để thấy tiến độ và lịch sử. Gửi một tin trong công việc; tài khoản còn lại
+thấy tin trong tối đa 5 giây. Thử sửa/xóa tin do chính tài khoản
+gửi; tài khoản kia không có nút sửa/xóa tin đó. `demo.admin` thấy các công việc mẫu CV-DEMO-02–05
+do chính tài khoản này giao; `demo.nguoi-xem`
+không có quyền M07. Dùng database thử nghiệm vì các thao tác này ghi dữ liệu.
+
+Các công việc `CV-DEMO-*` là dữ liệu mẫu. Seed hiện tạo bảy công việc mẫu, mỗi tài khoản chỉ thấy
+những công việc mình giao hoặc được giao. Với database đã seed trước migration tiến độ, chạy lại
+`pnpm seed` để bổ sung hạn và tiến độ cho hai công việc mẫu cũ chưa được chỉnh sửa. Công việc tạo
+qua form được lưu thật trong database.
+Các công việc mẫu CV-DEMO-02–07 có hai tin nhắn trao đổi mẫu giữa người giao và người thực hiện;
+seed không chèn tin mẫu vào công việc đã có trao đổi và không tạo trùng khi chạy lại.
+Màn hình lịch và KPI vẫn là dữ liệu demo, chưa tổng hợp từ công việc thật.
+
 ## Khóa tài khoản và chuyển giao phạm vi — UC-ADM-04
 
 `/quan-tri/tai-khoan` đã nối API để khóa/mở khóa tài khoản; `/to-chuc/phan-cong` đã nối API
@@ -40,13 +80,36 @@ Chi tiết schema, quyền và API: [pccc-BE/AREA_ASSIGNMENT.md](pccc-BE/AREA_AS
    đang đăng nhập và kiểm tra trạng thái **Đã khóa**; bấm **Mở khóa** để khôi phục.
 
 Tài khoản `demo.chi-huy` trong ảnh minh họa là A01, không có quyền vào hai màn hình này.
-`/co-so` hiện vẫn hiển thị dữ liệu mẫu frontend nên không dùng trang đó để kiểm tra kết quả
-chuyển giao. Seed không ghi đè mật khẩu hoặc phân công đã thay đổi; trên database demo đã dùng
+`/co-so` hiện đọc database và có thể dùng để kiểm tra người phụ trách sau chuyển giao. Seed không ghi đè mật khẩu hoặc phân công đã thay đổi; trên database demo đã dùng
 lâu, danh sách CB-A03 có thể khác ví dụ. Migration tự chạy khi backend khởi động. Nếu chưa seed
 database demo, kiểm tra đúng `DATABASE_PATH` trong `pccc-BE/.env` rồi chạy `pnpm seed` tại root;
 seed không khôi phục phân công hoặc mật khẩu đã thay đổi.
 Chuyển giao cập nhật người phụ trách; quyền xem rộng theo khu vực/đơn vị/toàn hệ thống cần quản trị
 rà soát riêng ở `/quan-tri/vai-tro` nếu cán bộ cũ không còn được xem dữ liệu đó.
+
+## Trạng thái và lịch sử cơ sở — UC-FAC-08
+
+`/co-so` và chi tiết cơ sở đọc database thật. Trang chi tiết hiển thị trạng thái hiện tại, người thao tác,
+lý do, số quyết định và timeline thay đổi trạng thái/thông tin; có bộ lọc loại thay đổi và thời gian.
+`/vi-pham` hiển thị hồ sơ đình chỉ và phê duyệt hoạt động lại từ database. Mọi thay đổi trạng thái
+ghi lịch sử và audit trong cùng transaction. Migration `011`–`013` tự chạy khi backend khởi động;
+`013` bổ sung cột số quyết định cho database đã áp dụng phiên bản cũ của `011`.
+
+**Thử luồng UI trên database demo:**
+
+1. Khởi động lại backend sau khi cập nhật mã nguồn; chạy `pnpm seed` nếu database chưa có dữ liệu mẫu.
+   Seed chỉ tạo hồ sơ đình chỉ mẫu cho CS002 khi đó vẫn là cơ sở demo gốc, đang hoạt động và chưa có hồ sơ.
+2. Đăng nhập `demo.admin` → `/vi-pham` → chọn hồ sơ CS002 → mở chi tiết cơ sở. Kiểm tra trạng thái
+   **Đình chỉ**, lý do, số quyết định và người thực hiện trong timeline.
+3. Trong form trạng thái, chọn **Đang hoạt động**, nhập lý do, bằng chứng khắc phục và **số quyết định
+   cho phép hoạt động lại**; đánh dấu **Admin xác nhận phê duyệt** rồi lưu. Thiếu bất kỳ mục bắt buộc nào
+   sẽ bị từ chối. Xem timeline và `/vi-pham?status=restored` để đối chiếu hồ sơ phê duyệt.
+4. Với `demo.can-bo`, mở CS001 từ `/co-so`, cập nhật tên/địa chỉ hoặc chuyển **Tạm ngừng** kèm lý do;
+   timeline ghi dữ liệu trước/sau. `demo.chi-huy` có thể đình chỉ với số quyết định; chỉ Admin được
+   phê duyệt hoạt động lại sau đình chỉ. `demo.nguoi-xem` chỉ được xem.
+
+Chỉ thao tác trên database thử nghiệm khi kiểm tra các bước ghi dữ liệu. Các màn hình nghiệp vụ khác
+vẫn có phần dùng dữ liệu mẫu; hồ sơ M04 hiện tập trung vào vòng đời đình chỉ/hoạt động lại.
 
 ## Kho văn bản và nhật ký — UC-DOC-01, UC-DOC-02, UC-SYS-05
 
@@ -91,7 +154,7 @@ người 3 và API chi tiết được mô tả trong [`pccc-BE/README.md`](pccc
 Không còn đăng nhập nhanh bỏ qua mật khẩu hoặc session localStorage.
 
 Các trang đăng nhập, đổi mật khẩu và cấu hình vai trò/phạm vi đã nối API thật.
-Dashboard `/` và tra cứu đã nối API; trang `/co-so` và nhiều màn hình nghiệp vụ vẫn dùng dữ liệu
+Dashboard `/`, tra cứu và `/co-so` đã nối API; nhiều màn hình nghiệp vụ khác vẫn dùng dữ liệu
 mẫu của dự án. Chủ module cần nối các màn hình còn lại với API kiểm soát quyền/phạm vi;
 backend kiểm tra quyền độc lập trên các API hiện có. Quyền seed là cấu hình mẫu,
 chưa thay thế phê duyệt Q02.

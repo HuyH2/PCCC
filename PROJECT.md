@@ -248,7 +248,54 @@ Thêm mục mới **ở cuối** danh sách, theo mẫu ở §7.
   phiên, quyền A05/A06 và bộ lọc audit. Danh sách cán bộ làm mới ngay sau chuyển giao.
 - **Giới hạn:** Schema hiện chưa có `users/officers/areas/officer_assignments`; dùng bảng hiện hữu.
   Scope rộng `region`/`unit`/`all` cần quản trị rà soát riêng sau chuyển giao; không có lịch chuyển
-  tương lai. Trang `/co-so` vẫn dùng dữ liệu mẫu frontend.
+  tương lai.
+
+### F08 — Trạng thái và lịch sử cơ sở (UC-FAC-08)
+
+- **Người làm / branch:** Codex — `Facility-Status-&-History-Tracking`.
+- **Mô tả:** Danh sách và chi tiết cơ sở đọc từ database. Thay đổi thông tin ghi audit trước/sau;
+  thay đổi trạng thái ghi `facility_status_history` và audit trong cùng transaction. Timeline kết hợp
+  hai nguồn, lọc theo loại thay đổi và khoảng thời gian, giữ người thực hiện và lý do.
+- **Backend:** migrations `011-facility-status-history.sql`, `012-facility-violations.sql` và
+  `013-facility-history-decision-reference.cjs` (tương thích database đã chạy bản cũ của `011`),
+  module `facilities`; `GET /api/facilities/:id/status`,
+  `/status-history`, `/changes`, `/timeline`; `PUT /api/facilities/:id` và `/status`. Đọc yêu cầu
+  `M03.view` + data scope; sửa thông tin và trạng thái thường cần `M03.edit`; đình chỉ cần
+  `M03.approve` hoặc Admin với quyền quản trị và số quyết định. Hoạt động lại sau đình chỉ chỉ Admin
+  được phê duyệt rõ trong form, kèm bằng chứng khắc phục và số quyết định; hồ sơ M04 được cập nhật
+  trong cùng transaction. `GET /api/violations` đọc các hồ sơ đình chỉ/hoạt động lại theo scope.
+- **Frontend:** `/co-so` và `/co-so/[id]` dùng API thật; trang sửa tên/địa chỉ ghi lịch sử; chi tiết
+  hiển thị trạng thái hiện tại, người thao tác, thời gian, trước/sau và bộ lọc timeline. `/vi-pham`
+  đọc hồ sơ từ database và dẫn tới trang chi tiết/phê duyệt.
+- **Test:** `pccc-BE/test/facility-history.test.js` kiểm lịch sử, audit, lọc, quyền, scope và
+  chuyển trạng thái không hợp lệ; UI QA trên database tách biệt.
+- **Giới hạn:** Hồ sơ M04 hiện tập trung vào vòng đời đình chỉ/hoạt động lại; chưa triển khai quản lý
+  các loại vi phạm độc lập không dẫn tới đình chỉ.
+
+### F09 — Trao đổi theo công việc (M07)
+
+- **Database:** migration `014-task-messages.sql` tạo bảng công việc tối thiểu `tasks` và
+  `task_messages`; FK tới `accounts` (repo chưa có `users`), index theo công việc/thời gian, xóa mềm.
+  Seed tạo bảy công việc và hội thoại mẫu theo từng việc (13 tin nhắn), không ghi đè trao đổi đã có.
+- **API:** danh sách/chi tiết công việc, danh sách tin nhắn có phân trang, gửi/sửa/xóa mềm. Mọi API
+  kiểm quyền M07 và chỉ cho người giao/người được giao của công việc truy cập; sửa/xóa chỉ người gửi.
+  Audit ghi thao tác, transaction giữ nhất quán khi ghi lỗi.
+- **UI:** `/cong-viec/giao-viec` hiển thị công việc từ DB; `/cong-viec/giao-viec/[id]` hiển thị trao đổi,
+  trạng thái tải/lỗi, form gửi và tự làm mới trang tin mới nhất mỗi 5 giây.
+- **Giới hạn:** lịch và KPI vẫn là tính năng riêng chưa nối backend. Tin nhắn hiện chỉ
+  giữa hai người tham gia, không có chat độc lập hoặc video call.
+
+### F10 — Giao việc và theo dõi tiến độ (M07)
+
+- **Database:** migration `015-task-assignment-progress.sql` thêm loại việc, hạn, tiến độ và thời gian
+  cập nhật cho `tasks`; seed có bảy công việc mẫu với tiến độ/hạn. Seed chỉ backfill tiến độ/hạn
+  của hai công việc mẫu cũ chưa từng được chỉnh sửa, không thay dữ liệu do người dùng cập nhật.
+- **API:** `POST /api/tasks`, `GET /api/tasks/assignees`, `PUT /api/tasks/:id/progress`,
+  `GET /api/tasks/:id/progress-history`. Chỉ A01/A02/A05 được giao trong phạm vi đơn vị/toàn hệ thống;
+  người thực hiện cập nhật tiến độ. Người không tham gia không xem được công việc hoặc lịch sử.
+  Audit và cập nhật dùng chung transaction. 100% là báo cáo tiến độ, chưa tự đóng công việc.
+- **UI:** trang `/cong-viec/giao-viec` có form giao việc và danh sách tiến độ từ DB; trang chi tiết
+  hiển thị hạn, tiến độ và lịch sử cập nhật cùng người thao tác.
 
 ## 7. Quy tắc khi làm feature
 
