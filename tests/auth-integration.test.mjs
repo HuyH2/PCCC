@@ -3,11 +3,14 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import { openDatabase } from "../pccc-BE/src/core/database.js";
 import { seedDemo } from "../pccc-BE/src/core/seed.js";
 import { createApp } from "../pccc-BE/src/app.js";
 
 const frontendDirectory = fileURLToPath(new URL("../pccc-FE/", import.meta.url));
+const frontendRequire = createRequire(new URL("../pccc-FE/package.json", import.meta.url));
+const nextBinary = frontendRequire.resolve("next/dist/bin/next");
 
 test(
   "Next frontend proxy + separate backend: login, first-password change, role navigation, scope and logout",
@@ -26,14 +29,7 @@ test(
     let logs = "";
     const frontend = spawn(
       process.execPath,
-      [
-        "node_modules/next/dist/bin/next",
-        "start",
-        "--hostname",
-        "127.0.0.1",
-        "--port",
-        String(frontendPort),
-      ],
+      [nextBinary, "start", "--hostname", "127.0.0.1", "--port", String(frontendPort)],
       {
         cwd: frontendDirectory,
         env: { ...process.env, BACKEND_URL: backendOrigin },
@@ -236,5 +232,50 @@ test(
       await request(`/api/audit-logs?feature=M05&objectId=${document.id}`, { cookie: adminCookie })
     ).json();
     assert.equal(audit.total, 2);
+    const commanderLogin = await request("/api/auth/login", {
+      method: "POST",
+      body: { username: "demo.chi-huy", password },
+    });
+    const commanderCookie = commanderLogin.headers.get("set-cookie").split(";")[0];
+    assert.equal(
+      (await request("/api/auth/skip-password-change", { method: "POST", cookie: commanderCookie }))
+        .status,
+      200,
+    );
+    const commanderList = await request("/van-ban", { cookie: commanderCookie });
+    assert.equal(commanderList.status, 200);
+    assert.match(await commanderList.text(), /Thêm văn bản/);
+    assert.equal((await request("/van-ban/them", { cookie: commanderCookie })).status, 200);
+    const commanderCreated = await request("/api/legal-documents", {
+      method: "POST",
+      cookie: commanderCookie,
+      body: { ...documentBody, reference_number: "INTEGRATION-COMMANDER" },
+    });
+    assert.equal(commanderCreated.status, 201);
+    const commanderDocument = (await commanderCreated.json()).document;
+    const commanderDetail = await request(`/van-ban/${commanderDocument.id}`, {
+      cookie: commanderCookie,
+    });
+    assert.equal(commanderDetail.status, 200);
+    assert.match(await commanderDetail.text(), /Sửa văn bản/);
+    assert.equal(
+      (await request(`/van-ban/${commanderDocument.id}/sua`, { cookie: commanderCookie })).status,
+      200,
+    );
+    assert.equal(
+      (
+        await request(`/api/legal-documents/${commanderDocument.id}`, {
+          method: "PUT",
+          cookie: commanderCookie,
+          body: {
+            ...documentBody,
+            reference_number: "INTEGRATION-COMMANDER",
+            version: 1,
+            status: "expired",
+          },
+        })
+      ).status,
+      200,
+    );
   },
 );

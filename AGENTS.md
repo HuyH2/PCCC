@@ -60,7 +60,8 @@ Monorepo pnpm (`pnpm-workspace.yaml`) gồm hai ứng dụng; backend theo modul
 - Đăng nhập, đổi/bỏ qua đổi mật khẩu, cấu hình vai trò/phạm vi, dashboard `/` và tra cứu `/tra-cuu`
   đã có luồng API. Backend có API đọc cơ sở, nhưng trang `/co-so` hiện vẫn dùng dữ liệu demo.
 - Kho `/van-ban` (danh sách/chi tiết/thêm/sửa/PDF/lịch sử) và `/quan-tri/nhat-ky` đã nối API thật.
-  Kho chung đọc theo M05.view + scope không rỗng; ghi cần quyền tạo/sửa + scope all.
+  Kho chung đọc theo M05.view + scope không rỗng; ghi cần vai trò A01/A05, quyền tạo/sửa
+  và scope không rỗng (Chỉ huy có thể dùng scope đơn vị).
   Nhật ký hệ thống giữ giới hạn A05 + M01.view + all; history văn bản theo quyền đọc văn bản.
 - Nhiều màn hình nghiệp vụ và form còn mock. Khi được giao tích hợp thật, làm đủ DB → API → quyền
   → UI → validation → test; không báo hoàn thành dựa trên toast hoặc thay đổi state cục bộ.
