@@ -11,8 +11,8 @@ import { tokenHash } from "../src/modules/auth/auth.service.js";
 
 const password = "Temporary-test-password-2026";
 const origin = "http://localhost:3000";
-const migrationCount = readdirSync(new URL("../migrations/", import.meta.url)).filter((f) =>
-  f.endsWith(".sql"),
+const migrationCount = readdirSync(new URL("../migrations/", import.meta.url)).filter(
+  (f) => f.endsWith(".sql") || f.endsWith(".cjs"),
 ).length;
 
 async function fixture(t) {

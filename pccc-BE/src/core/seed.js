@@ -2,6 +2,7 @@ import { hashPassword } from "./password.js";
 import { transaction } from "./database.js";
 import { seedLegalDocuments } from "./seed-legal-documents.js";
 import { seedInspections } from "./seed-inspections.js";
+import { seedFacilityViolations } from "./seed-facility-violations.js";
 
 export const roleNames = {
   A01: "Chỉ huy/Đội trưởng",
@@ -132,5 +133,6 @@ export async function seedDemo(db, password) {
       ).run(regionId, accountId, Date.now());
     seedLegalDocuments(db);
     seedInspections(db);
+    seedFacilityViolations(db);
   });
 }

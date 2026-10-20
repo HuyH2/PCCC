@@ -248,7 +248,29 @@ Thêm mục mới **ở cuối** danh sách, theo mẫu ở §7.
   phiên, quyền A05/A06 và bộ lọc audit. Danh sách cán bộ làm mới ngay sau chuyển giao.
 - **Giới hạn:** Schema hiện chưa có `users/officers/areas/officer_assignments`; dùng bảng hiện hữu.
   Scope rộng `region`/`unit`/`all` cần quản trị rà soát riêng sau chuyển giao; không có lịch chuyển
-  tương lai. Trang `/co-so` vẫn dùng dữ liệu mẫu frontend.
+  tương lai.
+
+### F08 — Trạng thái và lịch sử cơ sở (UC-FAC-08)
+
+- **Người làm / branch:** Codex — `Facility-Status-&-History-Tracking`.
+- **Mô tả:** Danh sách và chi tiết cơ sở đọc từ database. Thay đổi thông tin ghi audit trước/sau;
+  thay đổi trạng thái ghi `facility_status_history` và audit trong cùng transaction. Timeline kết hợp
+  hai nguồn, lọc theo loại thay đổi và khoảng thời gian, giữ người thực hiện và lý do.
+- **Backend:** migrations `011-facility-status-history.sql`, `012-facility-violations.sql` và
+  `013-facility-history-decision-reference.cjs` (tương thích database đã chạy bản cũ của `011`),
+  module `facilities`; `GET /api/facilities/:id/status`,
+  `/status-history`, `/changes`, `/timeline`; `PUT /api/facilities/:id` và `/status`. Đọc yêu cầu
+  `M03.view` + data scope; sửa thông tin và trạng thái thường cần `M03.edit`; đình chỉ cần
+  `M03.approve` hoặc Admin với quyền quản trị và số quyết định. Hoạt động lại sau đình chỉ chỉ Admin
+  được phê duyệt rõ trong form, kèm bằng chứng khắc phục và số quyết định; hồ sơ M04 được cập nhật
+  trong cùng transaction. `GET /api/violations` đọc các hồ sơ đình chỉ/hoạt động lại theo scope.
+- **Frontend:** `/co-so` và `/co-so/[id]` dùng API thật; trang sửa tên/địa chỉ ghi lịch sử; chi tiết
+  hiển thị trạng thái hiện tại, người thao tác, thời gian, trước/sau và bộ lọc timeline. `/vi-pham`
+  đọc hồ sơ từ database và dẫn tới trang chi tiết/phê duyệt.
+- **Test:** `pccc-BE/test/facility-history.test.js` kiểm lịch sử, audit, lọc, quyền, scope và
+  chuyển trạng thái không hợp lệ; UI QA trên database tách biệt.
+- **Giới hạn:** Hồ sơ M04 hiện tập trung vào vòng đời đình chỉ/hoạt động lại; chưa triển khai quản lý
+  các loại vi phạm độc lập không dẫn tới đình chỉ.
 
 ## 7. Quy tắc khi làm feature
 

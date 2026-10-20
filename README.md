@@ -24,13 +24,36 @@
    đang đăng nhập và kiểm tra trạng thái **Đã khóa**; bấm **Mở khóa** để khôi phục.
 
 Tài khoản `demo.chi-huy` trong ảnh minh họa là A01, không có quyền vào hai màn hình này.
-`/co-so` hiện vẫn hiển thị dữ liệu mẫu frontend nên không dùng trang đó để kiểm tra kết quả
-chuyển giao. Seed không ghi đè mật khẩu hoặc phân công đã thay đổi; trên database demo đã dùng
+`/co-so` hiện đọc database và có thể dùng để kiểm tra người phụ trách sau chuyển giao. Seed không ghi đè mật khẩu hoặc phân công đã thay đổi; trên database demo đã dùng
 lâu, danh sách CB-A03 có thể khác ví dụ. Migration tự chạy khi backend khởi động. Nếu chưa seed
 database demo, kiểm tra đúng `DATABASE_PATH` trong `pccc-BE/.env` rồi chạy `pnpm seed` tại root;
 seed không khôi phục phân công hoặc mật khẩu đã thay đổi.
 Chuyển giao cập nhật người phụ trách; quyền xem rộng theo khu vực/đơn vị/toàn hệ thống cần quản trị
 rà soát riêng ở `/quan-tri/vai-tro` nếu cán bộ cũ không còn được xem dữ liệu đó.
+
+## Trạng thái và lịch sử cơ sở — UC-FAC-08
+
+`/co-so` và chi tiết cơ sở đọc database thật. Trang chi tiết hiển thị trạng thái hiện tại, người thao tác,
+lý do, số quyết định và timeline thay đổi trạng thái/thông tin; có bộ lọc loại thay đổi và thời gian.
+`/vi-pham` hiển thị hồ sơ đình chỉ và phê duyệt hoạt động lại từ database. Mọi thay đổi trạng thái
+ghi lịch sử và audit trong cùng transaction. Migration `011`–`013` tự chạy khi backend khởi động;
+`013` bổ sung cột số quyết định cho database đã áp dụng phiên bản cũ của `011`.
+
+**Thử luồng UI trên database demo:**
+
+1. Khởi động lại backend sau khi cập nhật mã nguồn; chạy `pnpm seed` nếu database chưa có dữ liệu mẫu.
+   Seed chỉ tạo hồ sơ đình chỉ mẫu cho CS002 khi đó vẫn là cơ sở demo gốc, đang hoạt động và chưa có hồ sơ.
+2. Đăng nhập `demo.admin` → `/vi-pham` → chọn hồ sơ CS002 → mở chi tiết cơ sở. Kiểm tra trạng thái
+   **Đình chỉ**, lý do, số quyết định và người thực hiện trong timeline.
+3. Trong form trạng thái, chọn **Đang hoạt động**, nhập lý do, bằng chứng khắc phục và **số quyết định
+   cho phép hoạt động lại**; đánh dấu **Admin xác nhận phê duyệt** rồi lưu. Thiếu bất kỳ mục bắt buộc nào
+   sẽ bị từ chối. Xem timeline và `/vi-pham?status=restored` để đối chiếu hồ sơ phê duyệt.
+4. Với `demo.can-bo`, mở CS001 từ `/co-so`, cập nhật tên/địa chỉ hoặc chuyển **Tạm ngừng** kèm lý do;
+   timeline ghi dữ liệu trước/sau. `demo.chi-huy` có thể đình chỉ với số quyết định; chỉ Admin được
+   phê duyệt hoạt động lại sau đình chỉ. `demo.nguoi-xem` chỉ được xem.
+
+Chỉ thao tác trên database thử nghiệm khi kiểm tra các bước ghi dữ liệu. Các màn hình nghiệp vụ khác
+vẫn có phần dùng dữ liệu mẫu; hồ sơ M04 hiện tập trung vào vòng đời đình chỉ/hoạt động lại.
 
 ## Kho văn bản và nhật ký — UC-DOC-01, UC-DOC-02, UC-SYS-05
 
@@ -75,7 +98,7 @@ người 3 và API chi tiết được mô tả trong [`pccc-BE/README.md`](pccc
 Không còn đăng nhập nhanh bỏ qua mật khẩu hoặc session localStorage.
 
 Các trang đăng nhập, đổi mật khẩu và cấu hình vai trò/phạm vi đã nối API thật.
-Dashboard `/` và tra cứu đã nối API; trang `/co-so` và nhiều màn hình nghiệp vụ vẫn dùng dữ liệu
+Dashboard `/`, tra cứu và `/co-so` đã nối API; nhiều màn hình nghiệp vụ khác vẫn dùng dữ liệu
 mẫu của dự án. Chủ module cần nối các màn hình còn lại với API kiểm soát quyền/phạm vi;
 backend kiểm tra quyền độc lập trên các API hiện có. Quyền seed là cấu hình mẫu,
 chưa thay thế phê duyệt Q02.

@@ -2,8 +2,10 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 
 const migrationDirectory = fileURLToPath(new URL("../../migrations/", import.meta.url));
+const require = createRequire(import.meta.url);
 
 export function transaction(db, work) {
   db.exec("BEGIN IMMEDIATE");
@@ -37,11 +39,13 @@ export function openDatabase(path = process.env.DATABASE_PATH || "./data/pccc.sq
     "CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)",
   );
   for (const name of readdirSync(migrationDirectory)
-    .filter((f) => f.endsWith(".sql"))
+    .filter((f) => f.endsWith(".sql") || f.endsWith(".cjs"))
     .sort()) {
     if (db.prepare("SELECT 1 FROM schema_migrations WHERE name=?").get(name)) continue;
     transaction(db, () => {
-      db.exec(readFileSync(resolve(migrationDirectory, name), "utf8"));
+      const path = resolve(migrationDirectory, name);
+      if (name.endsWith(".cjs")) require(path)(db);
+      else db.exec(readFileSync(path, "utf8"));
       db.prepare("INSERT INTO schema_migrations VALUES (?,?)").run(name, Date.now());
     });
   }

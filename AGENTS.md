@@ -60,7 +60,8 @@ Monorepo pnpm (`pnpm-workspace.yaml`) gồm hai ứng dụng; backend theo modul
 - Backend xác thực session, kiểm quyền/phạm vi, validate input rồi truy vấn SQLite. Lỗi API có dạng
   `{ error: { code, message } }`; giữ semantics 401/403/404 và không trả stack trace/secret.
 - Đăng nhập, đổi/bỏ qua đổi mật khẩu, cấu hình vai trò/phạm vi, dashboard `/` và tra cứu `/tra-cuu`
-  đã có luồng API. Backend có API đọc cơ sở, nhưng trang `/co-so` hiện vẫn dùng dữ liệu demo.
+  đã có luồng API. `/co-so`, chi tiết cơ sở và lịch sử trạng thái đã nối API; `/vi-pham` đọc hồ sơ
+  đình chỉ/hoạt động lại từ database. Các màn hình nghiệp vụ khác cần kiểm tra riêng.
 - Kho `/van-ban` (danh sách/chi tiết/thêm/sửa/PDF/lịch sử) và `/quan-tri/nhat-ky` đã nối API thật.
   Kho chung đọc theo M05.view + scope không rỗng; ghi cần vai trò A01/A05, quyền tạo/sửa
   và scope không rỗng (Chỉ huy có thể dùng scope đơn vị).
