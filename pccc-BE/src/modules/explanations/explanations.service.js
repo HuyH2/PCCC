@@ -24,6 +24,7 @@ function visibleAccounts(db, user) {
   return db
     .prepare(
       `SELECT a.id,a.full_name,a.username FROM accounts a
+      JOIN role_permissions rp ON rp.role_code=a.role_code AND rp.permission_code='M07.view'
       WHERE a.status='active' AND a.id<>? AND EXISTS
         (SELECT 1 FROM account_scopes s WHERE s.account_id=a.id) AND ${scope.sql}
       ORDER BY a.full_name,a.id`,

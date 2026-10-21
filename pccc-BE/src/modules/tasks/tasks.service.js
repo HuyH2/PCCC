@@ -220,6 +220,8 @@ export function updateTaskStatus(db, user, id, input, ip) {
     assert(task.status === "open", 409, "TASK_CLOSED", "Công việc đã đóng.");
   } else {
     assert(isAssigner, 403, "FORBIDDEN", "Chỉ người giao được hủy hoặc mở lại công việc.");
+    if (status === "cancelled")
+      assert(task.status === "open", 409, "TASK_CLOSED", "Chỉ hủy được công việc đang mở.");
   }
   const note =
     input.note === undefined

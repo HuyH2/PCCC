@@ -27,7 +27,7 @@ export default async function TrangKPI({
 }) {
   const user = await requirePage("M07.view");
   const query = await searchParams;
-  const period = /^\d{4}-\d{2}$/.test(query.period ?? "")
+  const period = /^\d{4}-(0[1-9]|1[0-2])$/.test(query.period ?? "")
     ? query.period!
     : toBusinessDate().slice(0, 7);
   const response = await backendFetch(`/api/kpi/results?period=${period}`);
