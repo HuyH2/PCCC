@@ -1,4 +1,5 @@
 import { pagination } from "../../core/validation.js";
+import { authenticate } from "../auth/auth.service.js";
 import { getFacility, listFacilities } from "./facilities.service.js";
 import {
   getFacilityStatus,
@@ -9,8 +10,114 @@ import {
   updateFacilityDetails,
   updateFacilityStatus,
 } from "./facility-history.service.js";
+import {
+  facilityAttachmentFile,
+  getFacilityPersonnel,
+  listFacilityAttachments,
+  listFacilityPersonnel,
+  saveFacilityPersonnel,
+  uploadFacilityAttachment,
+} from "./facility-profile.service.js";
+
+function sendAttachment(ctx, facilityId, attachmentId, disposition) {
+  const { attachment, bytes } = facilityAttachmentFile(
+    ctx.db,
+    ctx.user,
+    facilityId,
+    attachmentId,
+    ctx.uploadDirectory,
+  );
+  ctx.response.statusCode = 200;
+  ctx.response.setHeader("Content-Type", attachment.content_type);
+  ctx.response.setHeader("Content-Length", bytes.length);
+  ctx.response.setHeader(
+    "Content-Disposition",
+    `${disposition}; filename="attachment.${attachment.storage_path.split(".").at(-1)}"; filename*=UTF-8''${encodeURIComponent(attachment.original_name).replace(/'/g, "%27")}`,
+  );
+  ctx.response.setHeader("Content-Security-Policy", "sandbox; default-src 'none'");
+  ctx.response.end(bytes);
+}
 
 export const facilitiesRoutes = [
+  {
+    method: "GET",
+    path: /^\/api\/facilities\/([^/]+)\/personnel$/,
+    handle: (ctx, match) =>
+      listFacilityPersonnel(ctx.db, ctx.user, decodeURIComponent(match[1]), ctx.url),
+  },
+  {
+    method: "POST",
+    path: /^\/api\/facilities\/([^/]+)\/personnel$/,
+    handle: async (ctx, match) => {
+      ctx.status = 201;
+      return saveFacilityPersonnel(
+        ctx.db,
+        ctx.user,
+        decodeURIComponent(match[1]),
+        await ctx.readJson(),
+        null,
+        ctx.ip,
+      );
+    },
+  },
+  {
+    method: "GET",
+    path: /^\/api\/facilities\/([^/]+)\/personnel\/([^/]+)$/,
+    handle: (ctx, match) =>
+      getFacilityPersonnel(
+        ctx.db,
+        ctx.user,
+        decodeURIComponent(match[1]),
+        decodeURIComponent(match[2]),
+      ),
+  },
+  {
+    method: "PUT",
+    path: /^\/api\/facilities\/([^/]+)\/personnel\/([^/]+)$/,
+    handle: async (ctx, match) =>
+      saveFacilityPersonnel(
+        ctx.db,
+        ctx.user,
+        decodeURIComponent(match[1]),
+        await ctx.readJson(),
+        decodeURIComponent(match[2]),
+        ctx.ip,
+      ),
+  },
+  {
+    method: "GET",
+    path: /^\/api\/facilities\/([^/]+)\/attachments$/,
+    handle: (ctx, match) =>
+      listFacilityAttachments(ctx.db, ctx.user, decodeURIComponent(match[1]), ctx.url),
+  },
+  {
+    method: "POST",
+    path: /^\/api\/facilities\/([^/]+)\/attachments$/,
+    handle: async (ctx, match) => {
+      ctx.status = 201;
+      return uploadFacilityAttachment(
+        ctx.db,
+        ctx.user,
+        decodeURIComponent(match[1]),
+        ctx.request,
+        ctx.ip,
+        ctx.uploadDirectory,
+        () => authenticate(ctx.db, ctx.token),
+      );
+    },
+  },
+  {
+    method: "GET",
+    path: /^\/api\/facilities\/([^/]+)\/attachments\/([^/]+)\/view$/,
+    handle: (ctx, match) =>
+      sendAttachment(ctx, decodeURIComponent(match[1]), decodeURIComponent(match[2]), "inline"),
+  },
+  {
+    method: "GET",
+    path: /^\/api\/facilities\/([^/]+)\/attachments\/([^/]+)\/download$/,
+    handle: (ctx, match) =>
+      sendAttachment(ctx, decodeURIComponent(match[1]), decodeURIComponent(match[2]), "attachment"),
+  },
   {
     method: "GET",
     path: "/api/violations",

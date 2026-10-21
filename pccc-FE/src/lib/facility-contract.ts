@@ -28,6 +28,55 @@ export interface FacilityTimelinePage {
   pageSize: number;
 }
 
+export interface FacilityPersonnel {
+  id: string;
+  facility_id: string;
+  full_name: string;
+  position: string;
+  phone: string | null;
+  email: string | null;
+  is_head: number;
+  training_status: string | null;
+  certificate_expiry: string | null;
+  notes: string;
+  is_active: number;
+  version: number;
+  created_at: number;
+  updated_at: number;
+  created_by_name: string;
+  updated_by_name: string;
+}
+
+export interface FacilityPersonnelPage {
+  items: FacilityPersonnel[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface FacilityAttachment {
+  id: string;
+  facility_id: string;
+  personnel_id: string | null;
+  personnel_name: string | null;
+  document_type: string;
+  description: string;
+  original_name: string;
+  content_type: "application/pdf" | "image/jpeg" | "image/png";
+  size_bytes: number;
+  uploaded_by_name: string;
+  uploaded_at: number;
+}
+
+export interface FacilityAttachmentPage {
+  items: FacilityAttachment[];
+  total: number;
+  page: number;
+  pageSize: number;
+  maxFileBytes: number;
+  allowedExtensions: string[];
+}
+
 export const facilityStatusNames: Record<string, string> = {
   active: "Đang hoạt động",
   paused: "Tạm ngừng",

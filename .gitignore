@@ -9,6 +9,8 @@ npm-debug.log*
 !.env.example
 next-env.d.ts
 *.tsbuildinfo
+# Local user-upload storage; private data must not be committed to Git.
+pccc-BE/src/private/
 
 # Dự án dùng pnpm (pnpm-lock.yaml); không commit lockfile của npm/yarn.
 package-lock.json
