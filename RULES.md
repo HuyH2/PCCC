@@ -231,6 +231,9 @@ Chỉ sửa expected behavior khi requirement thay đổi có căn cứ.
 ### R-1005 — Chạy test thật
 Không tuyên bố PASS dựa trên đọc code.
 
+### R-1006 — Ghi nhật ký feature và unit test
+Mỗi feature mới phải thêm mục vào §6 của `PROJECT.md` (theo mẫu §7) và có unit test `pccc-BE/test/<feature>.test.js` trong cùng PR.
+
 ---
 
 ## 12. Self-check gate

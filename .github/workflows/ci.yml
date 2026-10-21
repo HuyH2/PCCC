@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Hủy lần chạy cũ khi push commit mới lên cùng branch/PR.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Lint, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      # Phiên bản pnpm lấy từ trường "packageManager" trong package.json ở root.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22 # pccc-BE yêu cầu Node >= 22.13 (node:sqlite)
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Backend tests (pccc-BE)
+        run: pnpm test
+
+      - name: Backend syntax check (pccc-BE)
+        run: pnpm check
+
+      - name: Build frontend (pccc-FE)
+        run: pnpm build
+
+      # Cần build trước; tự chạy backend (4000) + frontend (3100) với DB in-memory.
+      - name: Integration tests
+        run: pnpm test:integration

@@ -2,19 +2,19 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { openDatabase } from "../Backend/src/database.js";
-import { createApp } from "../Backend/src/app.js";
-import { runDemoSeed } from "../Backend/scripts/seed-incidents-demo.js";
+import { openDatabase } from "../pccc-BE/src/core/database.js";
+import { createApp } from "../pccc-BE/src/app.js";
+import { runDemoSeed } from "../pccc-BE/scripts/seed-incidents-demo.js";
 
 // Explicit, persistent, synthetic browser verification fixture. No live database or .env is used.
 const repository = fileURLToPath(new URL("../", import.meta.url));
 const databasePath = resolve(
   repository,
-  "Backend/data/m09-browser-verification/incidents-demo.sqlite",
+  "pccc-BE/data/m09-browser-verification/incidents-demo.sqlite",
 );
 const uploadDirectory = resolve(
   repository,
-  "Backend/private/m09-browser-verification/incidents-demo-uploads",
+  "pccc-BE/private/m09-browser-verification/incidents-demo-uploads",
 );
 const password = "M09-browser-demo-only";
 const backendPort = Number(process.env.TEST_BACKEND_PORT || 4419);
@@ -91,7 +91,7 @@ try {
   frontend = spawn(
     process.execPath,
     [
-      "node_modules/next/dist/bin/next",
+      fileURLToPath(new URL("../node_modules/next/dist/bin/next", import.meta.url)),
       "start",
       "--hostname",
       "127.0.0.1",
@@ -99,7 +99,7 @@ try {
       String(frontendPort),
     ],
     {
-      cwd: repository,
+      cwd: fileURLToPath(new URL("../pccc-FE/", import.meta.url)),
       env: {
         ...process.env,
         BACKEND_URL: `http://127.0.0.1:${backendPort}`,

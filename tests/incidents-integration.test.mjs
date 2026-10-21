@@ -5,9 +5,13 @@ import { once } from "node:events";
 import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
-import { openDatabase } from "../Backend/src/database.js";
-import { seedDemo } from "../Backend/src/seed.js";
-import { createApp } from "../Backend/src/app.js";
+import { fileURLToPath } from "node:url";
+import { openDatabase } from "../pccc-BE/src/core/database.js";
+import { seedDemo } from "../pccc-BE/src/core/seed.js";
+import { createApp } from "../pccc-BE/src/app.js";
+
+const frontendDirectory = fileURLToPath(new URL("../pccc-FE/", import.meta.url));
+const nextBinary = fileURLToPath(new URL("../node_modules/next/dist/bin/next", import.meta.url));
 
 test(
   "Next same-origin rewrite + M09: real SQLite workflow, private uploads, route guards and immediate grants",
@@ -53,7 +57,7 @@ test(
     frontend = spawn(
       process.execPath,
       [
-        "node_modules/next/dist/bin/next",
+        nextBinary,
         "start",
         "--hostname",
         "127.0.0.1",
@@ -61,7 +65,7 @@ test(
         String(frontendPort),
       ],
       {
-        cwd: process.cwd(),
+        cwd: frontendDirectory,
         env: { ...process.env, BACKEND_URL: `http://127.0.0.1:${backendPort}` },
         stdio: ["ignore", "pipe", "pipe"],
         windowsHide: true,
