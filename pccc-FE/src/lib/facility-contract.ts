@@ -58,6 +58,7 @@ export interface FacilityPersonnel {
   email: string | null;
   is_head: number;
   training_status: string | null;
+  certificate_number: string | null;
   certificate_expiry: string | null;
   notes: string;
   is_active: number;

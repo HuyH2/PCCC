@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Download, Eye, FileText, Pencil, Plus, Trash2, Upload, UserRound } from "lucide-react";
+import { Download, Eye, FileText, Pencil, Plus, Trash2, Upload, UserRound, UserX } from "lucide-react";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,6 +50,9 @@ function PersonnelEditor({
   const [email, setEmail] = React.useState(personnel?.email ?? "");
   const [isHead, setIsHead] = React.useState(Boolean(personnel?.is_head));
   const [trainingStatus, setTrainingStatus] = React.useState(personnel?.training_status ?? "");
+  const [certificateNumber, setCertificateNumber] = React.useState(
+    personnel?.certificate_number ?? "",
+  );
   const [certificateExpiry, setCertificateExpiry] = React.useState(
     personnel?.certificate_expiry ?? "",
   );
@@ -79,6 +82,7 @@ function PersonnelEditor({
           email: email.trim() || null,
           isHead,
           trainingStatus: trainingStatus.trim() || null,
+          certificateNumber: certificateNumber.trim() || null,
           certificateExpiry: certificateExpiry || null,
           notes: notes.trim(),
           isActive,
@@ -148,6 +152,16 @@ function PersonnelEditor({
             maxLength={100}
             placeholder="Theo hồ sơ/chứng nhận thực tế"
             onChange={(event) => setTrainingStatus(event.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="personnel-certificate-number">Số chứng chỉ huấn luyện</Label>
+          <Input
+            id="personnel-certificate-number"
+            value={certificateNumber}
+            maxLength={100}
+            placeholder="Ví dụ: 123/GCN-PCCC"
+            onChange={(event) => setCertificateNumber(event.target.value)}
           />
         </div>
         <div className="space-y-2">
@@ -221,6 +235,23 @@ function PersonnelPanel({ facilityId, canEdit }: { facilityId: string; canEdit: 
   const url = `/api/facilities/${encodeURIComponent(facilityId)}/personnel?includeInactive=true&pageSize=100`;
   const personnel = useApiData<FacilityPersonnelPage>(url);
   const [editing, setEditing] = React.useState<FacilityPersonnel | "new" | null>(null);
+  const [deactivatingId, setDeactivatingId] = React.useState<string | null>(null);
+
+  async function deactivatePersonnel(personnelId: string, name: string) {
+    if (!window.confirm(`Ngừng hoạt động nhân sự "${name}" tại cơ sở này?`)) return;
+    setDeactivatingId(personnelId);
+    try {
+      await apiData(
+        `/api/facilities/${encodeURIComponent(facilityId)}/personnel/${encodeURIComponent(personnelId)}`,
+        { method: "DELETE" },
+      );
+      personnel.reload();
+    } catch (failure) {
+      alert(failure instanceof Error ? failure.message : "Không thể ngừng hoạt động nhân sự.");
+    } finally {
+      setDeactivatingId(null);
+    }
+  }
 
   return (
     <section className="space-y-4" aria-labelledby="facility-personnel-title">
@@ -284,15 +315,29 @@ function PersonnelPanel({ facilityId, canEdit }: { facilityId: string; canEdit: 
                   <p className="text-muted-foreground mt-1 text-sm">{item.position}</p>
                 </div>
                 {canEdit && (
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="ghost"
-                    aria-label={`Sửa hồ sơ ${item.full_name}`}
-                    onClick={() => setEditing(item)}
-                  >
-                    <Pencil />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      aria-label={`Sửa hồ sơ ${item.full_name}`}
+                      onClick={() => setEditing(item)}
+                    >
+                      <Pencil />
+                    </Button>
+                    {item.is_active === 1 && (
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        disabled={deactivatingId === item.id}
+                        aria-label={`Ngừng hoạt động ${item.full_name}`}
+                        onClick={() => void deactivatePersonnel(item.id, item.full_name)}
+                      >
+                        <UserX />
+                      </Button>
+                    )}
+                  </div>
                 )}
               </div>
               <dl className="mt-3 grid gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
@@ -307,6 +352,10 @@ function PersonnelPanel({ facilityId, canEdit }: { facilityId: string; canEdit: 
                 <div>
                   <dt className="text-muted-foreground">Huấn luyện</dt>
                   <dd>{item.training_status || "Chưa cập nhật"}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Số chứng chỉ</dt>
+                  <dd>{item.certificate_number || "—"}</dd>
                 </div>
                 <div>
                   <dt className="text-muted-foreground">Hạn chứng nhận</dt>

@@ -16,6 +16,7 @@ import {
   updateFacilityStatus,
 } from "./facility-history.service.js";
 import {
+  deactivateFacilityPersonnel,
   facilityAttachmentFile,
   getFacilityPersonnel,
   listFacilityAttachments,
@@ -86,6 +87,18 @@ export const facilitiesRoutes = [
         ctx.user,
         decodeURIComponent(match[1]),
         await ctx.readJson(),
+        decodeURIComponent(match[2]),
+        ctx.ip,
+      ),
+  },
+  {
+    method: "DELETE",
+    path: /^\/api\/facilities\/([^/]+)\/personnel\/([^/]+)$/,
+    handle: (ctx, match) =>
+      deactivateFacilityPersonnel(
+        ctx.db,
+        ctx.user,
+        decodeURIComponent(match[1]),
         decodeURIComponent(match[2]),
         ctx.ip,
       ),

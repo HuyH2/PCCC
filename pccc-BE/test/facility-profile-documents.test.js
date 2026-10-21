@@ -64,6 +64,7 @@ function personnel(overrides = {}) {
     email: "an@example.invalid",
     isHead: true,
     trainingStatus: "Đã huấn luyện",
+    certificateNumber: "123/GCN-PCCC",
     certificateExpiry: "2027-12-31",
     notes: "Dữ liệu hoàn toàn giả lập.",
     isActive: true,
@@ -220,6 +221,7 @@ test("personnel APIs manage profiles, replace the head and preserve audit under 
   });
   assert.equal(first.status, 201);
   assert.equal(first.data.personnel.is_head, 1);
+  assert.equal(first.data.personnel.certificate_number, "123/GCN-PCCC");
   const second = await request(collection, {
     method: "POST",
     cookie: officer,
@@ -254,11 +256,36 @@ test("personnel APIs manage profiles, replace the head and preserve audit under 
     ).status,
     409,
   );
+  assert.equal(
+    (
+      await request(`${collection}/${first.data.personnel.id}`, {
+        method: "DELETE",
+        cookie: viewer,
+      })
+    ).status,
+    403,
+  );
+  const deactivated = await request(`${collection}/${first.data.personnel.id}`, {
+    method: "DELETE",
+    cookie: officer,
+  });
+  assert.equal(deactivated.status, 200);
+  assert.equal(deactivated.data.personnel.is_active, 0);
+  assert.equal(deactivated.data.personnel.is_head, 0);
+  assert.equal(
+    (
+      await request(`${collection}/${first.data.personnel.id}`, {
+        method: "DELETE",
+        cookie: officer,
+      })
+    ).status,
+    400,
+  );
   assert.equal((await request("/api/facilities/CS003/personnel", { cookie: officer })).status, 404);
   assert.equal(
     db.prepare("SELECT count(*) AS n FROM audit_logs WHERE object_type='facility_personnel'").get()
       .n,
-    4,
+    5,
   );
 });
 

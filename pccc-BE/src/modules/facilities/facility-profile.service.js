@@ -21,6 +21,7 @@ export {
   listFacilityPersonnel,
   getFacilityPersonnel,
   saveFacilityPersonnel,
+  deactivateFacilityPersonnel,
 } from "./facility-personnel.service.js";
 
 // Document Attachments & Storage (UC-FAC-06)
