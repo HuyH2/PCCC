@@ -16,7 +16,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (user.mustChangePassword) redirect("/doi-mat-khau");
   return (
     <SidebarProvider>
-      <AppSidebar />
+      <AppSidebar user={user} />
       <SidebarInset>
         <AppHeader user={user} />
         <div className="flex-1 p-4 sm:p-5 lg:p-6">{children}</div>

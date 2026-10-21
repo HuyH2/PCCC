@@ -240,6 +240,85 @@ Thêm mục mới **ở cuối** danh sách, theo mẫu ở §7.
 - **Ghi chú:** Không hard-code chu kỳ kiểm tra hoặc công thức nợ KPI vì Q08/Q09 chưa chốt. Trường
   `carryover_count` giữ chỗ dữ liệu chuyển kỳ; việc tự động tính/chấp nhận nợ cần quyết định Q09.
 
+### F06 — Khôi phục quyền quản lý kho văn bản sau tái cấu trúc (UC-DOC-02)
+
+- **Mô tả:** Chỉ huy (A01) và Quản trị (A05) có nút và trang thêm/sửa văn bản khi có quyền M05
+  tương ứng và scope được cấp; cán bộ khác chỉ tra cứu. Kiểm tra quyền ở cả frontend lẫn backend.
+- **Backend:** Migration `008-legal-document-management-permissions.sql` bổ sung grant cho vai trò
+  đang tồn tại, giữ tài khoản/scope/quyền khác và ghi audit. Seed mới cấp M05.create/edit cho A01.
+  API tạo/sửa/upload xác thực vai trò, grant và scope không rỗng.
+- **Frontend:** `/van-ban` và trang chi tiết hiển thị thao tác theo helper `canManageDocuments`;
+  trang thêm/sửa và proxy dùng cùng quy tắc. Integration test định vị Next CLI qua module resolution
+  để chạy trong workspace pnpm mới.
+- **Test:** `pccc-BE/test/legal-documents.test.js` kiểm migration trên DB cũ, Chỉ huy scope đơn vị,
+  thu hồi grant/scope và chặn vai trò khác; `tests/auth-integration.test.mjs` kiểm nút, form và API.
+
+### F07 — Khóa tài khoản và chuyển giao phạm vi quản lý (UC-ADM-04)
+
+- **Mô tả:** Admin khóa/mở tài khoản, chọn cán bộ cũ → khu vực/cơ sở (một phần hoặc toàn bộ) →
+  cán bộ mới → xác nhận. Giao dịch cập nhật người phụ trách hiện tại, quyền truy cập trực tiếp,
+  thu hồi phiên liên quan và giữ lịch sử/audit trước–sau.
+- **Backend:** `009-account-transfers.sql`, `010-region-assignment-backfill.sql`;
+  `account-transfer.service.js` và routes trong module administration. Chỉ A05, M01.view/edit và
+  scope all; khóa tài khoản hiện hành/last admin bị chặn. Chi tiết và ánh xạ schema ở
+  [pccc-BE/ACCOUNT_TRANSFERS.md](pccc-BE/ACCOUNT_TRANSFERS.md).
+- **Frontend:** `/quan-tri/tai-khoan` dùng API thật để khóa/mở; `/to-chuc/phan-cong` có form chọn
+  cán bộ/phạm vi, xác nhận và lịch sử thật. Menu ẩn các trang chỉ dành cho quản trị.
+- **Test:** `pccc-BE/test/account-transfer.test.js` kiểm migration/seed, quyền 401/403, khóa/mở,
+  chuyển một phần/toàn bộ, phạm vi, audit và transaction rollback; integration kiểm route/UI/API.
+  UI QA trên database tách biệt kiểm xác nhận/hủy, chuyển liên tiếp, lịch sử, khóa/mở, thu hồi
+  phiên, quyền A05/A06 và bộ lọc audit. Danh sách cán bộ làm mới ngay sau chuyển giao.
+- **Giới hạn:** Schema hiện chưa có `users/officers/areas/officer_assignments`; dùng bảng hiện hữu.
+  Scope rộng `region`/`unit`/`all` cần quản trị rà soát riêng sau chuyển giao; không có lịch chuyển
+  tương lai.
+
+### F08 — Trạng thái và lịch sử cơ sở (UC-FAC-08)
+
+- **Người làm / branch:** Codex — `Facility-Status-&-History-Tracking`.
+- **Mô tả:** Danh sách và chi tiết cơ sở đọc từ database. Thay đổi thông tin ghi audit trước/sau;
+  thay đổi trạng thái ghi `facility_status_history` và audit trong cùng transaction. Timeline kết hợp
+  hai nguồn, lọc theo loại thay đổi và khoảng thời gian, giữ người thực hiện và lý do.
+- **Backend:** migrations `011-facility-status-history.sql`, `012-facility-violations.sql` và
+  `013-facility-history-decision-reference.cjs` (tương thích database đã chạy bản cũ của `011`),
+  module `facilities`; `GET /api/facilities/:id/status`,
+  `/status-history`, `/changes`, `/timeline`; `PUT /api/facilities/:id` và `/status`. Đọc yêu cầu
+  `M03.view` + data scope; sửa thông tin và trạng thái thường cần `M03.edit`; đình chỉ cần
+  `M03.approve` hoặc Admin với quyền quản trị và số quyết định. Hoạt động lại sau đình chỉ chỉ Admin
+  được phê duyệt rõ trong form, kèm bằng chứng khắc phục và số quyết định; hồ sơ M04 được cập nhật
+  trong cùng transaction. `GET /api/violations` đọc các hồ sơ đình chỉ/hoạt động lại theo scope.
+- **Frontend:** `/co-so` và `/co-so/[id]` dùng API thật; trang sửa tên/địa chỉ ghi lịch sử; chi tiết
+  hiển thị trạng thái hiện tại, người thao tác, thời gian, trước/sau và bộ lọc timeline. `/vi-pham`
+  đọc hồ sơ từ database và dẫn tới trang chi tiết/phê duyệt.
+- **Test:** `pccc-BE/test/facility-history.test.js` kiểm lịch sử, audit, lọc, quyền, scope và
+  chuyển trạng thái không hợp lệ; UI QA trên database tách biệt.
+- **Giới hạn:** Hồ sơ M04 hiện tập trung vào vòng đời đình chỉ/hoạt động lại; chưa triển khai quản lý
+  các loại vi phạm độc lập không dẫn tới đình chỉ.
+
+### F09 — Trao đổi theo công việc (M07)
+
+- **Database:** migration `014-task-messages.sql` tạo bảng công việc tối thiểu `tasks` và
+  `task_messages`; FK tới `accounts` (repo chưa có `users`), index theo công việc/thời gian, xóa mềm.
+  Seed tạo bảy công việc và hội thoại mẫu theo từng việc (13 tin nhắn), không ghi đè trao đổi đã có.
+- **API:** danh sách/chi tiết công việc, danh sách tin nhắn có phân trang, gửi/sửa/xóa mềm. Mọi API
+  kiểm quyền M07 và chỉ cho người giao/người được giao của công việc truy cập; sửa/xóa chỉ người gửi.
+  Audit ghi thao tác, transaction giữ nhất quán khi ghi lỗi.
+- **UI:** `/cong-viec/giao-viec` hiển thị công việc từ DB; `/cong-viec/giao-viec/[id]` hiển thị trao đổi,
+  trạng thái tải/lỗi, form gửi và tự làm mới trang tin mới nhất mỗi 5 giây.
+- **Giới hạn:** lịch và KPI vẫn là tính năng riêng chưa nối backend. Tin nhắn hiện chỉ
+  giữa hai người tham gia, không có chat độc lập hoặc video call.
+
+### F10 — Giao việc và theo dõi tiến độ (M07)
+
+- **Database:** migration `015-task-assignment-progress.sql` thêm loại việc, hạn, tiến độ và thời gian
+  cập nhật cho `tasks`; seed có bảy công việc mẫu với tiến độ/hạn. Seed chỉ backfill tiến độ/hạn
+  của hai công việc mẫu cũ chưa từng được chỉnh sửa, không thay dữ liệu do người dùng cập nhật.
+- **API:** `POST /api/tasks`, `GET /api/tasks/assignees`, `PUT /api/tasks/:id/progress`,
+  `GET /api/tasks/:id/progress-history`. Chỉ A01/A02/A05 được giao trong phạm vi đơn vị/toàn hệ thống;
+  người thực hiện cập nhật tiến độ. Người không tham gia không xem được công việc hoặc lịch sử.
+  Audit và cập nhật dùng chung transaction. 100% là báo cáo tiến độ, chưa tự đóng công việc.
+- **UI:** trang `/cong-viec/giao-viec` có form giao việc và danh sách tiến độ từ DB; trang chi tiết
+  hiển thị hạn, tiến độ và lịch sử cập nhật cùng người thao tác.
+
 ## 7. Quy tắc khi làm feature
 
 Bắt buộc với mọi feature mới (người hoặc AI agent):

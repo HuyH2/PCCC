@@ -3,6 +3,9 @@ import { transaction } from "./database.js";
 import { seedLegalDocuments } from "./seed-legal-documents.js";
 import { seedInspections } from "./seed-inspections.js";
 import { seedInspectionPlanning } from "./seed-inspection-planning.js";
+import { seedFacilityViolations } from "./seed-facility-violations.js";
+import { seedTasks } from "./seed-tasks.js";
+import { seedKpi } from "./seed-kpi.js";
 
 export const roleNames = {
   A01: "Chỉ huy/Đội trưởng",
@@ -37,35 +40,44 @@ export async function seedDemo(db, password) {
           action,
         );
       }
-    db.prepare(
-      "INSERT OR IGNORE INTO units(id,name,parent_id,code,level,status) VALUES (?,?,?,?,?,?)",
-    ).run("DV-PC07", "PC07 (mẫu)", null, "DV-PC07", "ROOT", "ACTIVE");
-    db.prepare(
-      "INSERT OR IGNORE INTO units(id,name,parent_id,code,level,status) VALUES (?,?,?,?,?,?)",
-    ).run("DV-KV10", "Đội khu vực 10 (mẫu)", "DV-PC07", "DV-KV10", "AREA", "ACTIVE");
-    db.prepare(
-      "INSERT OR IGNORE INTO units(id,name,parent_id,code,level,status) VALUES (?,?,?,?,?,?)",
-    ).run("DV-KV11", "Đội khu vực 11 (mẫu)", "DV-PC07", "DV-KV11", "AREA", "ACTIVE");
-    db.prepare("INSERT OR IGNORE INTO regions(id,name,unit_id,code,status) VALUES (?,?,?,?,?)").run(
+    db.prepare("INSERT OR IGNORE INTO units(id,name,parent_id,code,level) VALUES (?,?,?,?,?)").run(
+      "DV-PC07",
+      "PC07 (mẫu)",
+      null,
+      "DV-PC07",
+      "ROOT",
+    );
+    db.prepare("INSERT OR IGNORE INTO units(id,name,parent_id,code,level) VALUES (?,?,?,?,?)").run(
+      "DV-KV10",
+      "Đội khu vực 10 (mẫu)",
+      "DV-PC07",
+      "DV-KV10",
+      "AREA",
+    );
+    db.prepare("INSERT OR IGNORE INTO units(id,name,parent_id,code,level) VALUES (?,?,?,?,?)").run(
+      "DV-KV11",
+      "Đội khu vực 11 (mẫu)",
+      "DV-PC07",
+      "DV-KV11",
+      "AREA",
+    );
+    db.prepare("INSERT OR IGNORE INTO regions(id,name,unit_id,code) VALUES (?,?,?,?)").run(
       "KP01",
       "Khu phố 01 (mẫu)",
       "DV-KV10",
       "KP01",
-      "ACTIVE",
     );
-    db.prepare("INSERT OR IGNORE INTO regions(id,name,unit_id,code,status) VALUES (?,?,?,?,?)").run(
+    db.prepare("INSERT OR IGNORE INTO regions(id,name,unit_id,code) VALUES (?,?,?,?)").run(
       "KP02",
       "Khu phố 02 (mẫu)",
       "DV-KV10",
       "KP02",
-      "ACTIVE",
     );
-    db.prepare("INSERT OR IGNORE INTO regions(id,name,unit_id,code,status) VALUES (?,?,?,?,?)").run(
+    db.prepare("INSERT OR IGNORE INTO regions(id,name,unit_id,code) VALUES (?,?,?,?)").run(
       "KP03",
       "Khu phố 03 (mẫu)",
       "DV-KV11",
       "KP03",
-      "ACTIVE",
     );
     for (const [id, region, officer] of [
       ["CS001", "KP01", "CB-A03"],
@@ -78,16 +90,38 @@ export async function seedDemo(db, password) {
     }
     const grants = {
       A01: [
+        "M07.view",
+        "M07.create",
+        "M07.edit",
         "M03.view",
         "M03.approve",
         "M03.export",
         "M10.view",
         "M05.view",
+        "M05.create",
+        "M05.edit",
         "M06.view",
         "M06.create",
+        "M02.view",
+        "M02.edit",
       ],
-      A02: ["M03.view", "M10.view", "M05.view", "M06.view", "M06.create", "M06.edit"],
+      A02: [
+        "M07.view",
+        "M07.create",
+        "M07.edit",
+        "M03.view",
+        "M10.view",
+        "M05.view",
+        "M06.view",
+        "M06.create",
+        "M06.edit",
+        "M02.view",
+        "M02.edit",
+      ],
       A03: [
+        "M07.view",
+        "M07.create",
+        "M07.edit",
         "M03.view",
         "M03.create",
         "M03.edit",
@@ -97,8 +131,31 @@ export async function seedDemo(db, password) {
         "M06.create",
         "M06.edit",
       ],
-      A04: ["M03.view", "M03.export", "M10.view", "M05.view", "M06.view"],
-      A05: ["M01.view", "M01.edit", "M03.view", "M10.view", "M05.view", "M05.create", "M05.edit"],
+      A04: [
+        "M03.view",
+        "M03.export",
+        "M10.view",
+        "M05.view",
+        "M06.view",
+        "M07.view",
+        "M07.create",
+        "M07.edit",
+      ],
+      A05: [
+        "M01.view",
+        "M01.edit",
+        "M02.view",
+        "M02.create",
+        "M02.edit",
+        "M03.view",
+        "M10.view",
+        "M05.view",
+        "M05.create",
+        "M05.edit",
+        "M07.view",
+        "M07.create",
+        "M07.edit",
+      ],
       A06: ["M03.view", "M10.view", "M05.view", "M06.view"],
     };
     const usernames = {
@@ -125,32 +182,68 @@ export async function seedDemo(db, password) {
         "INSERT INTO account_scopes(account_id,kind,unit_id,region_id) VALUES (?,?,?,?)",
       ).run(id, kind, kind === "unit" ? "DV-KV10" : null, kind === "region" ? "KP01" : null);
     }
-    const now = Date.now();
-    for (const [index, role] of Object.keys(usernames).entries()) {
-      const officerId = `CB-${role}`;
+    // Explicit synthetic profiles for the account ids used by assignments and M09.
+    for (const role of Object.keys(usernames))
       db.prepare(
-        `INSERT OR IGNORE INTO officers(
-          id,officer_code,full_name,rank,position,phone,email,notes,unit_id,business_role,
-          status,created_at,updated_at
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT OR IGNORE INTO officers
+         (id,officer_code,full_name,rank,position,phone,email,notes,unit_id,business_role,created_at,updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
       ).run(
-        officerId,
-        officerId,
-        `${roleNames[role]} (mẫu)`,
+        `CB-${role}`,
+        `CB-${role}`,
+        `${roleNames[role]} (dữ liệu mẫu)`,
         "Cấp bậc mẫu",
         roleNames[role],
-        `09000000${index + 1}`,
-        `demo-${role.toLowerCase()}@example.invalid`,
-        "Dữ liệu mẫu không dùng trong vận hành thật",
-        "DV-KV10",
+        "0900000000",
+        `${role.toLowerCase()}@example.invalid`,
+        "Hồ sơ giả lập phục vụ kiểm thử.",
+        role === "A05" || role === "A06" ? "DV-PC07" : "DV-KV10",
         role,
-        "ACTIVE",
-        now,
-        now,
+        Date.now(),
+        Date.now(),
       );
-    }
+    db.prepare(
+      `INSERT OR IGNORE INTO officers
+       (id,officer_code,full_name,rank,position,phone,email,notes,unit_id,business_role,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      "CB-OTHER",
+      "CB-OTHER",
+      "Cán bộ khu vực 11 (dữ liệu mẫu)",
+      "Cấp bậc mẫu",
+      "Cán bộ mẫu",
+      "0900000001",
+      "other@example.invalid",
+      "Hồ sơ giả lập liên kết cơ sở mẫu.",
+      "DV-KV11",
+      "A03",
+      Date.now(),
+      Date.now(),
+    );
+    // Existing demo installations had no M07 grants. Add sample grants only
+    // when M07 has never been configured; preserve any administrator choices.
+    if (
+      !db.prepare("SELECT 1 FROM role_permissions WHERE permission_code LIKE 'M07.%' LIMIT 1").get()
+    )
+      for (const role of ["A01", "A02", "A03", "A04", "A05"])
+        for (const action of ["view", "create", "edit"])
+          db.prepare("INSERT OR IGNORE INTO role_permissions VALUES (?,?)").run(
+            role,
+            `M07.${action}`,
+          );
+    // Demo assignments only. Preserve existing ownership after a transfer or later seed run.
+    for (const [regionId, accountId] of [
+      ["KP01", "DEMO-A03"],
+      ["KP02", "DEMO-A01"],
+    ])
+      db.prepare(
+        "INSERT OR IGNORE INTO region_assignments(region_id,account_id,assigned_at) VALUES (?,?,?)",
+      ).run(regionId, accountId, Date.now());
     seedLegalDocuments(db);
     seedInspections(db);
     seedInspectionPlanning(db);
+    seedFacilityViolations(db);
+    seedTasks(db);
+    seedKpi(db);
   });
 }

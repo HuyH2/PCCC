@@ -22,10 +22,10 @@ export function requireDocumentAccess(user, action = "view") {
   if (action !== "view") requirePermission(user, "M05.view");
   requirePermission(user, `M05.${action}`);
   assert(
-    user.scopes.length > 0 && (action === "view" || user.scopes.some((s) => s.kind === "all")),
+    user.scopes.length > 0 && (action === "view" || ["A01", "A05"].includes(user.role)),
     403,
     "FORBIDDEN",
-    "Kho dùng chung yêu cầu phạm vi được cấp; cập nhật yêu cầu phạm vi toàn hệ thống.",
+    "Chỉ Chỉ huy hoặc Quản trị có phạm vi được cấp mới được quản lý kho văn bản.",
   );
 }
 

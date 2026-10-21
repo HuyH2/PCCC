@@ -1,117 +1,171 @@
-import { CalendarClock, ClipboardCheck, Flame, Plus, Siren } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, CalendarClock, ListChecks } from "lucide-react";
 
 import { PageHeader } from "@/components/shared/page-header";
 import { SectionCard } from "@/components/shared/section-card";
-import { StatusBadge } from "@/components/shared/status-badge";
+import { StatCard } from "@/components/shared/stat-card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { canBoTheoId, congViecList, coSoTheoId, cuocKiemTraList, NGAY_HE_THONG } from "@/data/mock";
-import { formatDate } from "@/lib/utils";
+import { backendFetch, requirePage } from "@/lib/backend";
+import { toBusinessDate } from "@/lib/date";
+import type { TaskRecord } from "@/lib/task-contract";
 
 export const metadata = { title: "Lịch công tác" };
 
-const tenThu = ["Chủ nhật", "Thứ hai", "Thứ ba", "Thứ tư", "Thứ năm", "Thứ sáu", "Thứ bảy"];
+const weekdays = ["Chủ nhật", "Thứ hai", "Thứ ba", "Thứ tư", "Thứ năm", "Thứ sáu", "Thứ bảy"];
 
-function ngayISO(offset: number) {
-  const d = new Date(NGAY_HE_THONG);
-  d.setDate(d.getDate() + offset);
-  return { iso: d.toISOString().slice(0, 10), thu: tenThu[d.getDay()], la: d };
+function displayDate(iso: string) {
+  return new Date(`${iso}T00:00:00+07:00`).toLocaleDateString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "Asia/Ho_Chi_Minh",
+  });
 }
 
-export default function TrangLichCongTac() {
-  const ngay7 = Array.from({ length: 7 }, (_, i) => ngayISO(i));
+function taskTone(task: TaskRecord) {
+  if (task.status === "completed") return "success" as const;
+  if (task.status === "cancelled") return "danger" as const;
+  return task.due_at !== null && toBusinessDate(task.due_at) < toBusinessDate()
+    ? ("danger" as const)
+    : ("warning" as const);
+}
+
+export default async function TrangLichCongTac() {
+  await requirePage("M07.view");
+  const today = toBusinessDate();
+  const start = new Date(`${today}T00:00:00+07:00`);
+  const days = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(start.getTime() + index * 86400000);
+    const iso = toBusinessDate(date);
+    return {
+      iso,
+      weekday: weekdays[new Date(`${iso}T12:00:00+07:00`).getUTCDay()],
+      isToday: iso === today,
+    };
+  });
+  const end = days[days.length - 1].iso;
+  const [scheduleResponse, overdueResponse] = await Promise.all([
+    backendFetch(`/api/tasks?from=${today}&to=${end}&pageSize=100&sort=due`),
+    backendFetch("/api/tasks?deadline=overdue&pageSize=20&sort=due"),
+  ]);
+  if (!scheduleResponse.ok) throw new Error("Không thể tải lịch công tác.");
+  const schedule = (await scheduleResponse.json()) as { items: TaskRecord[] };
+  const overdue = overdueResponse.ok
+    ? ((await overdueResponse.json()) as { items: TaskRecord[] }).items
+    : [];
+  const byDate = new Map<string, TaskRecord[]>();
+  for (const task of schedule.items) {
+    if (task.due_at === null) continue;
+    const key = toBusinessDate(task.due_at);
+    byDate.set(key, [...(byDate.get(key) ?? []), task]);
+  }
+  const completedThisWeek = schedule.items.filter((task) => task.status === "completed").length;
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Lịch công tác hàng ngày"
-        description="Tổng hợp lịch kiểm tra và công việc đến hạn của Đội Khu vực 10 trong 7 ngày tới, giúp chỉ huy nắm nhanh khối lượng công tác từng ngày."
+        description="Công việc đến hạn trong 7 ngày tới và các việc đang quá hạn của bạn. Lịch kiểm tra chuyên ngành thuộc module M06."
         module="M07"
         useCases={["UC-WRK-01"]}
         actions={
-          <Button size="sm">
-            <Plus />
-            Thêm lịch công tác
-          </Button>
+          <Link
+            href="/cong-viec/giao-viec"
+            className="bg-primary text-primary-foreground inline-flex h-9 items-center rounded-md px-3 text-sm font-medium"
+          >
+            Giao việc
+          </Link>
         }
       />
 
-      <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
-        {ngay7.map((n, idx) => {
-          const kiemTra = cuocKiemTraList.filter((k) => k.ngayKiemTra === n.iso);
-          const congViec = congViecList.filter((c) => c.hanHoanThanh === n.iso);
-          const tong = kiemTra.length + congViec.length;
-          return (
-            <SectionCard
-              key={n.iso}
-              className={idx === 0 ? "border-primary/40 ring-primary/10 ring-2" : undefined}
-              title={idx === 0 ? `Hôm nay · ${n.thu}` : n.thu}
-              description={formatDate(n.iso)}
-              action={
-                <Badge variant={tong === 0 ? "muted" : tong > 4 ? "danger" : "secondary"}>
-                  {tong} việc
-                </Badge>
-              }
-              contentClassName="space-y-2"
+      <div className="grid gap-3 sm:grid-cols-3">
+        <StatCard
+          label="Việc đến hạn 7 ngày"
+          value={schedule.items.length}
+          icon={CalendarClock}
+          tone="info"
+        />
+        <StatCard
+          label="Đang quá hạn"
+          value={overdue.length}
+          icon={AlertTriangle}
+          tone={overdue.length > 0 ? "danger" : "success"}
+        />
+        <StatCard
+          label="Đã hoàn thành trong lịch"
+          value={completedThisWeek}
+          icon={ListChecks}
+          tone="success"
+        />
+      </div>
+
+      {overdue.length > 0 && (
+        <SectionCard
+          title="Cần xử lý ngay"
+          description={`${overdue.length} công việc đã quá hạn nhưng chưa hoàn thành.`}
+          className="border-destructive/30"
+          contentClassName="space-y-2"
+        >
+          {overdue.map((task) => (
+            <Link
+              key={task.id}
+              href={`/cong-viec/giao-viec/${encodeURIComponent(task.id)}`}
+              className="hover:bg-muted/60 flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm"
             >
-              {tong === 0 ? (
-                <p className="text-muted-foreground py-4 text-center text-[13px]">Không có lịch</p>
-              ) : (
-                <>
-                  {kiemTra.slice(0, 4).map((k) => {
-                    const cs = coSoTheoId.get(k.coSoId)!;
-                    return (
-                      <div key={k.id} className="border-l-primary bg-accent/40 rounded-r-md border-l-2 px-2.5 py-1.5">
-                        <div className="flex items-center gap-1.5 text-[11px] font-semibold">
-                          <ClipboardCheck className="text-primary size-3" />
-                          Kiểm tra {k.loai.toLowerCase()}
-                        </div>
-                        <div className="truncate text-[13px] font-medium">{cs.ten}</div>
-                        <div className="text-muted-foreground truncate text-xs">
-                          {canBoTheoId.get(k.truongDoanId)?.hoTen}
-                        </div>
+              <span className="font-medium">{task.title}</span>
+              <span className="text-destructive text-xs">
+                Hạn {task.due_at ? displayDate(toBusinessDate(task.due_at)) : "—"}
+              </span>
+            </Link>
+          ))}
+        </SectionCard>
+      )}
+
+      <div className="grid gap-3 lg:grid-cols-7">
+        {days.map((day) => {
+          const tasks = byDate.get(day.iso) ?? [];
+          return (
+            <section
+              key={day.iso}
+              className={`rounded-xl border p-3 ${
+                day.isToday ? "border-primary/50 bg-primary/5" : "bg-card"
+              }`}
+            >
+              <div className="mb-3 flex items-baseline justify-between gap-1">
+                <div>
+                  <p className="text-xs font-semibold uppercase">{day.weekday}</p>
+                  <p className="text-muted-foreground text-xs">{displayDate(day.iso)}</p>
+                </div>
+                {day.isToday && <Badge variant="info">Hôm nay</Badge>}
+              </div>
+              <div className="space-y-2">
+                {tasks.length === 0 ? (
+                  <p className="text-muted-foreground text-xs">Không có việc đến hạn.</p>
+                ) : (
+                  tasks.map((task) => (
+                    <Link
+                      key={task.id}
+                      href={`/cong-viec/giao-viec/${encodeURIComponent(task.id)}`}
+                      className="hover:bg-muted/60 block rounded-lg border p-2"
+                    >
+                      <p className="line-clamp-2 text-[13px] font-medium">{task.title}</p>
+                      <div className="text-muted-foreground mt-1 flex items-center justify-between gap-1 text-[11px]">
+                        <span className="truncate">{task.assignee_name}</span>
+                        <Badge variant={taskTone(task)} className="px-1.5 py-0 text-[10px]">
+                          {task.status === "completed"
+                            ? "Xong"
+                            : task.status === "cancelled"
+                              ? "Hủy"
+                              : `${task.progress}%`}
+                        </Badge>
                       </div>
-                    );
-                  })}
-                  {congViec.slice(0, 3).map((c) => (
-                    <div key={c.id} className="border-l-warning bg-warning/8 rounded-r-md border-l-2 px-2.5 py-1.5">
-                      <div className="flex items-center gap-1.5 text-[11px] font-semibold">
-                        <CalendarClock className="text-warning-foreground size-3" />
-                        Hạn công việc
-                      </div>
-                      <div className="truncate text-[13px] font-medium">{c.tieuDe}</div>
-                      <div className="text-muted-foreground truncate text-xs">
-                        {canBoTheoId.get(c.nguoiThucHienId)?.hoTen}
-                      </div>
-                    </div>
-                  ))}
-                  {tong > 7 && (
-                    <p className="text-muted-foreground pt-1 text-center text-xs">+{tong - 7} việc khác</p>
-                  )}
-                </>
-              )}
-            </SectionCard>
+                    </Link>
+                  ))
+                )}
+              </div>
+            </section>
           );
         })}
       </div>
-
-      <SectionCard
-        title="Ghi chú vận hành"
-        description="Nội dung được xác định trong URD, cần chốt khi triển khai thật"
-      >
-        <ul className="text-muted-foreground space-y-2 text-[13px]">
-          <li className="flex gap-2">
-            <Siren className="text-primary mt-0.5 size-4 shrink-0" />
-            Cảnh báo và chuông nhắc việc do phần mềm lập trình; push notification cần đánh giá riêng
-            (URD mục 10).
-          </li>
-          <li className="flex gap-2">
-            <Flame className="text-primary mt-0.5 size-4 shrink-0" />
-            Số ngày báo trước của từng loại hạn được cấu hình theo BR-07 và nhắc đến khi công việc hoàn
-            thành hoặc được đóng.
-          </li>
-        </ul>
-      </SectionCard>
     </div>
   );
 }

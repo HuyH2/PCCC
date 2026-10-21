@@ -1,5 +1,149 @@
 # Hệ thống Quản lý công tác PCCC & CNCH
 
+## Tổ chức, cán bộ và sự cố sau khi hợp nhất nhánh SCRUM-25
+
+`/to-chuc/don-vi`, `/to-chuc/can-bo` và `/su-co` dùng SQLite/API thật. M09 có hồ sơ,
+thiệt hại, phân công, tiến độ, tài liệu riêng tư và thống kê; `/su-co/thong-ke` đọc số liệu
+từ database. Cần cấp quyền M09 phù hợp ở `/quan-tri/vai-tro` trước khi sử dụng; seed không
+tự cấp quyền M09. Hai API địa bàn có mục đích riêng: `/api/regions` phục vụ phân công
+phụ trách, còn `/api/organization/regions` phục vụ danh mục khu phố của M02. Các API
+Tổ chức và cán bộ khác xem [tài liệu backend](pccc-BE/README.md#tổ-chức-và-cán-bộ--uc-org-01-uc-org-02).
+
+Để tạo dữ liệu M09 mẫu, dùng script riêng `pccc-BE/scripts/seed-incidents-demo.js` với
+database tên `incidents-demo.sqlite` và thư mục upload riêng; script từ chối database đang
+chạy. Không chạy script này trên `pccc-BE/data/pccc.sqlite`.
+
+Nếu đang dùng database demo local mặc định và trang `/su-co` trống, chạy
+`pnpm seed:incidents:local` tại root rồi bấm **Tải lại** trên trang. Lệnh thêm 80 hồ sơ giả lập
+vào `pccc-BE/data/pccc.sqlite` (3 khu phố, 4 loại sự cố, hồ sơ nháp/chính thức, đủ trạng thái,
+deadline, thiệt hại, phân công, lịch sử và 4 tệp `.txt` mẫu). Chạy lại không tạo trùng hoặc
+ghi đè hồ sơ đã sửa. Lệnh chỉ chạy ngoài production khi database có các tài khoản `demo.*`;
+không cấp thêm quyền M09. Đăng nhập `demo.admin` hoặc cấp quyền/phạm vi thích hợp tại
+`/quan-tri/vai-tro` để xem và thao tác. Đây là dữ liệu hoàn toàn giả lập, không phải hồ sơ thực.
+Trong chi tiết sự cố đã hoàn thành hoặc đóng, người có `M09.edit` vẫn có thể chọn **Sửa hồ sơ**
+để hiệu chỉnh thông tin; phải nhập lý do và thay đổi được lưu vào nhật ký trước/sau. Trạng thái
+xử lý và deadline không đổi qua form này.
+
+## Phân công địa bàn và quản lý tài khoản — UC-ORG-03, UC-ADM-02
+
+`/to-chuc/khu-vuc` đã nối API thật: danh sách khu vực theo phạm vi, tạo/sửa khu vực (A05), phân công
+cán bộ kèm ngày hiệu lực/ghi chú và xem lịch sử. `/to-chuc/phan-cong` có thêm tab **Phân công** cho
+A01/A02; tab **Chuyển giao** giữ nguyên cho A05. `/quan-tri/tai-khoan` cho tạo tài khoản, gán vai trò +
+đơn vị, khóa/ngưng và đặt lại mật khẩu.
+
+Thử nhanh sau khi chạy dự án:
+
+1. Đăng nhập `demo.chi-huy` (A01) → `/to-chuc/phan-cong` → tab **Phân công** → chọn khu phố.
+2. Chọn cán bộ, nhập ngày hiệu lực và ghi chú → xác nhận; kiểm tra **Lịch sử phân công** bên dưới.
+3. Đăng nhập `demo.admin` (A05) → `/to-chuc/khu-vuc` tạo khu phố mới; `/quan-tri/tai-khoan` tạo tài
+   khoản với mật khẩu tạm, sau đó đăng nhập bằng tài khoản mới để kiểm tra bước đổi mật khẩu bắt buộc.
+
+Chi tiết schema, quyền và API: [pccc-BE/AREA_ASSIGNMENT.md](pccc-BE/AREA_ASSIGNMENT.md).
+
+## Giao việc, tiến độ và trao đổi — M07
+
+`/cong-viec/giao-viec` đọc công việc từ database. Chỉ huy A01/A02 hoặc quản trị A05 có
+`M07.create` và phạm vi đơn vị/toàn hệ thống có thể giao việc cho tài khoản đang hoạt động,
+có `M07.view` và phạm vi giao nhau. Form lưu tên, loại việc, nội dung, người thực hiện và hạn.
+Người được giao có `M07.edit` cập nhật tiến độ 0–100%; các lần đổi được lưu trong `task_progress`
+và audit, hiện ở lịch sử trên trang chi tiết. Mức 100% chỉ là tiến độ báo cáo; hoàn thành công việc
+là thao tác riêng, đặt tiến độ 100%, ghi `completed_at` và được tính vào KPI. Người giao có thể hoàn
+thành thay hoặc hủy/mở lại công việc; người thực hiện có thể tự hoàn thành việc của mình.
+Migration `015-task-assignment-progress.sql` bổ sung các cột vào bảng `tasks` mà không thay
+đổi công việc đã có. Migration `016-work-kpi.sql` thêm `task_assignments`, `task_progress`,
+`kpi_targets`, `kpi_results`, `explanations` và `tasks.completed_at`; lịch sử phân công/tiến độ
+được backfill một lần từ dữ liệu hiện có.
+
+KPI đang dùng công thức đã chốt cho bản demo: mỗi cán bộ có chỉ tiêu số việc hoàn thành theo tháng;
+`KPI = việc hoàn thành / (chỉ tiêu kỳ + nợ kỳ trước)`, tối đa 100%; phần thiếu cộng dồn thành nợ
+kỳ sau. Chỉ huy A01/A02 và quản trị A05 cấu hình chỉ tiêu trong phạm vi được cấp. Giải trình được
+chấp nhận xóa nợ của đúng kỳ được giải trình; từ chối thì giữ nguyên nợ. Chỉ tiêu hiện đếm công việc
+hoàn thành, chưa gồm kết quả kiểm tra của M06 — đây là điểm mở rộng cần URD chốt.
+
+Mở một công việc để xem và gửi tin nhắn; hai
+người tham gia (người giao và người được giao) nhìn thấy cùng cuộc trao đổi. Tin mới tự cập nhật
+trên trang gần nhất mỗi 5 giây. Người gửi được sửa hoặc xóa mềm tin của mình khi công việc còn mở.
+Backend kiểm tra quyền `M07.view/create/edit` và tư cách tham gia từng công việc; người ngoài không
+thấy công việc/tin nhắn. API có phân trang, audit thao tác và giữ nội dung đã xóa trong database để
+truy vết. Migration `014-task-messages.sql` tạo `tasks` và `task_messages` vì repository trước đó chỉ
+có danh sách công việc mock và dùng bảng tài khoản `accounts` thay cho `users`.
+
+**Thử trên UI với database demo:** chạy `pnpm migrate` rồi `pnpm seed`, khởi động lại backend/frontend,
+đăng nhập `demo.chi-huy` và mở **Lịch – Công việc – KPI → Giao việc & tiến độ**. Nhấn **Giao công việc**,
+nhập thông tin, chọn `demo.can-bo` và lưu. Mở công việc vừa tạo; đăng nhập `demo.can-bo` trong cửa sổ
+khác để xem cùng công việc, nhập tiến độ và ghi chú, rồi nhấn **Lưu tiến độ** hoặc **Hoàn thành công
+việc**. Quay lại tài khoản chỉ huy, tải lại trang để thấy tiến độ và lịch sử. Mở **KPI & nợ chỉ tiêu**
+để xem chỉ tiêu, nợ cộng dồn và cấu hình chỉ tiêu; mở **Yêu cầu giải trình** để gửi yêu cầu, sau đó
+đăng nhập `demo.can-bo` để phản hồi và quay lại chỉ huy để chấp nhận/từ chối. Gửi một tin trong công
+việc; tài khoản còn lại thấy tin trong tối đa 5 giây. Thử sửa/xóa tin do chính tài khoản gửi; tài
+khoản kia không có nút sửa/xóa tin đó. `demo.admin` thấy các công việc mẫu CV-DEMO-02–05 do chính tài
+khoản này giao; `demo.nguoi-xem` không có quyền M07. Dùng database thử nghiệm vì các thao tác này ghi
+dữ liệu.
+
+Các công việc `CV-DEMO-*` là dữ liệu mẫu. Seed hiện tạo bảy công việc mẫu, mỗi tài khoản chỉ thấy
+những công việc mình giao hoặc được giao. Với database đã seed trước migration tiến độ, chạy lại
+`pnpm seed` để bổ sung hạn và tiến độ cho hai công việc mẫu cũ chưa được chỉnh sửa. Công việc tạo
+qua form được lưu thật trong database.
+Các công việc mẫu CV-DEMO-02–07 có hai tin nhắn trao đổi mẫu giữa người giao và người thực hiện;
+seed không chèn tin mẫu vào công việc đã có trao đổi và không tạo trùng khi chạy lại.
+Màn hình lịch, KPI và giải trình đọc dữ liệu thật từ các bảng M07; dữ liệu chỉ tiêu/giải trình mẫu
+chỉ được tạo khi chưa có cấu hình. Chi tiết API và quyền: [pccc-BE/WORK_KPI.md](pccc-BE/WORK_KPI.md).
+
+## Khóa tài khoản và chuyển giao phạm vi — UC-ADM-04
+
+`/quan-tri/tai-khoan` đã nối API để khóa/mở khóa tài khoản; `/to-chuc/phan-cong` đã nối API
+để chuyển giao một phần hoặc toàn bộ khu vực/cơ sở và xem lịch sử. Chỉ quản trị A05 có
+`M01.view` và scope `all` được xem; thao tác cần thêm `M01.edit`. Xem
+[schema, quyền và API chuyển giao](pccc-BE/ACCOUNT_TRANSFERS.md).
+
+**Thử trên UI sau khi chạy dự án (mục “Chạy dự án”):**
+
+1. Đăng nhập `demo.admin` (A05) bằng mật khẩu demo ở mục 5. Lần đầu có thể chọn **Bỏ qua, đổi sau**.
+   Nếu vừa cập nhật mã nguồn khi hai server đang chạy, khởi động lại backend và frontend.
+2. Mở **Tổ chức – Cán bộ → Phân công phụ trách** (`/to-chuc/phan-cong`). Chọn
+   `demo.can-bo` (CB-A03); seed mới gán khu phố KP01 và cơ sở CS001 cho tài khoản này.
+3. Chọn riêng CS001 để thử chuyển giao một phần, hoặc bấm **Chọn toàn bộ** để chuyển cả KP01 và
+   CS001. Chọn `demo.tong-hop` (CB-A04), nhập lý do, bấm **Xác nhận chuyển giao** và xác nhận
+   hộp thoại. Thao tác có hiệu lực ngay và sẽ thu hồi phiên của hai tài khoản liên quan.
+4. Kiểm tra mục đã chuyển không còn trong danh sách của CB-A03; chọn CB-A04 làm cán bộ chuyển
+   giao để thấy mục đó đang thuộc CB-A04. Bên dưới form có **Lịch sử chuyển giao** với cán bộ
+   cũ/mới, phạm vi, lý do, thời gian, người thực hiện và mã audit. Có thể mở
+   `/quan-tri/nhat-ky` để đối chiếu log.
+5. Mở **Quản trị → Tài khoản** (`/quan-tri/tai-khoan`), khóa một tài khoản demo khác tài khoản
+   đang đăng nhập và kiểm tra trạng thái **Đã khóa**; bấm **Mở khóa** để khôi phục.
+
+Tài khoản `demo.chi-huy` trong ảnh minh họa là A01, không có quyền vào hai màn hình này.
+`/co-so` hiện đọc database và có thể dùng để kiểm tra người phụ trách sau chuyển giao. Seed không ghi đè mật khẩu hoặc phân công đã thay đổi; trên database demo đã dùng
+lâu, danh sách CB-A03 có thể khác ví dụ. Migration tự chạy khi backend khởi động. Nếu chưa seed
+database demo, kiểm tra đúng `DATABASE_PATH` trong `pccc-BE/.env` rồi chạy `pnpm seed` tại root;
+seed không khôi phục phân công hoặc mật khẩu đã thay đổi.
+Chuyển giao cập nhật người phụ trách; quyền xem rộng theo khu vực/đơn vị/toàn hệ thống cần quản trị
+rà soát riêng ở `/quan-tri/vai-tro` nếu cán bộ cũ không còn được xem dữ liệu đó.
+
+## Trạng thái và lịch sử cơ sở — UC-FAC-08
+
+`/co-so` và chi tiết cơ sở đọc database thật. Trang chi tiết hiển thị trạng thái hiện tại, người thao tác,
+lý do, số quyết định và timeline thay đổi trạng thái/thông tin; có bộ lọc loại thay đổi và thời gian.
+`/vi-pham` hiển thị hồ sơ đình chỉ và phê duyệt hoạt động lại từ database. Mọi thay đổi trạng thái
+ghi lịch sử và audit trong cùng transaction. Migration `011`–`013` tự chạy khi backend khởi động;
+`013` bổ sung cột số quyết định cho database đã áp dụng phiên bản cũ của `011`.
+
+**Thử luồng UI trên database demo:**
+
+1. Khởi động lại backend sau khi cập nhật mã nguồn; chạy `pnpm seed` nếu database chưa có dữ liệu mẫu.
+   Seed chỉ tạo hồ sơ đình chỉ mẫu cho CS002 khi đó vẫn là cơ sở demo gốc, đang hoạt động và chưa có hồ sơ.
+2. Đăng nhập `demo.admin` → `/vi-pham` → chọn hồ sơ CS002 → mở chi tiết cơ sở. Kiểm tra trạng thái
+   **Đình chỉ**, lý do, số quyết định và người thực hiện trong timeline.
+3. Trong form trạng thái, chọn **Đang hoạt động**, nhập lý do, bằng chứng khắc phục và **số quyết định
+   cho phép hoạt động lại**; đánh dấu **Admin xác nhận phê duyệt** rồi lưu. Thiếu bất kỳ mục bắt buộc nào
+   sẽ bị từ chối. Xem timeline và `/vi-pham?status=restored` để đối chiếu hồ sơ phê duyệt.
+4. Với `demo.can-bo`, mở CS001 từ `/co-so`, cập nhật tên/địa chỉ hoặc chuyển **Tạm ngừng** kèm lý do;
+   timeline ghi dữ liệu trước/sau. `demo.chi-huy` có thể đình chỉ với số quyết định; chỉ Admin được
+   phê duyệt hoạt động lại sau đình chỉ. `demo.nguoi-xem` chỉ được xem.
+
+Chỉ thao tác trên database thử nghiệm khi kiểm tra các bước ghi dữ liệu. Các màn hình nghiệp vụ khác
+vẫn có phần dùng dữ liệu mẫu; hồ sơ M04 hiện tập trung vào vòng đời đình chỉ/hoạt động lại.
+
 ## Kho văn bản và nhật ký — UC-DOC-01, UC-DOC-02, UC-SYS-05
 
 `/van-ban` đã kết nối API: tìm kiếm/lọc, thêm/sửa/phân loại, xem chi tiết, tải PDF hoặc mở link,
@@ -43,7 +187,7 @@ người 3 và API chi tiết được mô tả trong [`pccc-BE/README.md`](pccc
 Không còn đăng nhập nhanh bỏ qua mật khẩu hoặc session localStorage.
 
 Các trang đăng nhập, đổi mật khẩu và cấu hình vai trò/phạm vi đã nối API thật.
-Dashboard `/` và tra cứu đã nối API; trang `/co-so` và nhiều màn hình nghiệp vụ vẫn dùng dữ liệu
+Dashboard `/`, tra cứu và `/co-so` đã nối API; nhiều màn hình nghiệp vụ khác vẫn dùng dữ liệu
 mẫu của dự án. Chủ module cần nối các màn hình còn lại với API kiểm soát quyền/phạm vi;
 backend kiểm tra quyền độc lập trên các API hiện có. Quyền seed là cấu hình mẫu,
 chưa thay thế phê duyệt Q02.

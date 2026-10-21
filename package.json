@@ -14,6 +14,7 @@
     "start:be": "pnpm --filter pccc-be start",
     "migrate": "pnpm --filter pccc-be migrate",
     "seed": "pnpm --filter pccc-be seed",
+    "seed:incidents:local": "pnpm --filter pccc-be seed:incidents:local",
     "lint": "eslint .",
     "typecheck": "pnpm --filter pccc-fe typecheck",
     "test": "pnpm --filter pccc-be test",

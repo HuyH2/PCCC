@@ -1,5 +1,26 @@
 # pccc-BE — Backend PCCC/CNCH
 
+## Tổ chức và cán bộ — UC-ORG-01, UC-ORG-02
+
+`src/core/organization.js` và `src/modules/organization/organization.routes.js` dùng lại
+session, M02 permission, scope và audit chung. `002-organization.sql` mở rộng `units`,
+`regions` và tạo `officers` mà vẫn giữ các ID cũ. ROOT chỉ đọc; cập nhật trạng thái và
+chuyển đơn vị được kiểm tra quan hệ và lưu audit.
+
+| Phương thức | Endpoint                                              | Mục đích                           |
+| ----------- | ----------------------------------------------------- | ---------------------------------- |
+| GET         | `/api/organization/tree`, `/api/organization/options` | Cây và tùy chọn theo scope         |
+| GET, POST   | `/api/units`, `/api/officers`                         | Danh sách hoặc tạo đơn vị/cán bộ   |
+| GET, PATCH  | `/api/units/:id`, `/api/officers/:id`                 | Chi tiết hoặc cập nhật             |
+| PATCH       | `/api/units/:id/status`, `/api/officers/:id/status`   | Đổi trạng thái có lý do và audit   |
+| POST        | `/api/organization/regions`                           | Tạo khu phố M02                    |
+| GET, PATCH  | `/api/organization/regions/:id`                       | Chi tiết hoặc cập nhật khu phố M02 |
+| PATCH       | `/api/organization/regions/:id/status`                | Đổi trạng thái khu phố M02         |
+
+`/api/regions` thuộc UC-ORG-03 để quản lý phân công hiện tại và lịch sử phụ trách. M09
+đăng ký routes trong `src/modules/incidents/incidents.routes.js`; chính sách phân loại,
+cảnh báo và upload là cấu hình demo cần xác nhận trước khi dùng làm quy định chính thức.
+
 Backend (modular monolith) của monorepo. Mỗi module nghiệp vụ nằm ở `src/modules/<module>/` (`*.service.js` + `*.routes.js`), hạ tầng chung ở `src/core/`, `src/app.js` đăng ký routes; quy tắc chi tiết ở [PROJECT.md](../PROJECT.md) §2. Phần auth phục vụ **UC-ADM-01** và **UC-ADM-03**, đối chiếu URD v1.0 và sơ đồ sequence ADM-01. Node.js >= 22.13, HTTP API và SQLite tích hợp (`node:sqlite`). Không cần cài package backend. SQLite ở Node 22 còn có cảnh báo experimental; lựa chọn này phục vụ môi trường đồ án, chưa chốt hạ tầng production Q13.
 
 ## Chạy trên PowerShell
@@ -46,28 +67,46 @@ Lần đầu hiển thị trang đổi mật khẩu với nút **Bỏ qua, đổ
 
 Response lỗi thống nhất: `{ "error": { "code": "FORBIDDEN", "message": "..." } }`.
 
-| Method | Path                                         | Điều kiện                                                                      |
-| ------ | -------------------------------------------- | ------------------------------------------------------------------------------ |
-| GET    | `/api/health`                                | Public, không trả thông tin nội bộ                                             |
-| POST   | `/api/auth/login`                            | `{username,password}`; tài khoản và vai trò hoạt động                          |
-| POST   | `/api/auth/logout`                           | Thu hồi session; idempotent                                                    |
-| GET    | `/api/auth/me`                               | Session hợp lệ; trả identity, permissions, scopes                              |
-| POST   | `/api/auth/change-password`                  | `{currentPassword,newPassword}`; session hợp lệ                                |
-| GET    | `/api/authorization/roles`                   | A05 + all + M01.view                                                           |
-| PUT    | `/api/authorization/roles/:role/permissions` | A05 + all + M01.edit; `{permissions:["M03.view"]}`                             |
-| GET    | `/api/authorization/accounts`                | A05 + all + M01.view; phân trang                                               |
-| GET    | `/api/authorization/accounts/:id`            | A05 + all + M01.view                                                           |
-| PUT    | `/api/authorization/accounts/:id`            | A05 + all + M01.edit; role + scopes                                            |
-| GET    | `/api/authorization/scope-options?kind=unit` | A05 + all + M01.view; kind unit/region/facility, phân trang                    |
-| GET    | `/api/audit-logs`                            | A05 + all + M01.view; chỉ đọc, phân trang                                      |
-| GET    | `/api/facilities`                            | M03.view + lọc scope trước search/count/pagination                             |
-| GET    | `/api/facilities/:id`                        | M03.view; ngoài scope trả 404                                                  |
-| GET    | `/api/dashboard`                             | M10.view + M03.view; `facilityCount`, `regionCount`, `officerCount` theo scope |
-| GET    | `/api/dashboard/facilities-by-region`        | M10.view + M03.view; số cơ sở theo khu vực, phân trang                         |
-| GET    | `/api/dashboard/facilities-by-officer`       | M10.view + M03.view; số cơ sở theo cán bộ, phân trang                          |
-| GET    | `/api/search?q=&limit=`                      | M10.view; tìm không dấu, nhóm kết quả theo loại và scope                       |
+| Method | Path                                             | Điều kiện                                                                      |
+| ------ | ------------------------------------------------ | ------------------------------------------------------------------------------ |
+| GET    | `/api/health`                                    | Public, không trả thông tin nội bộ                                             |
+| POST   | `/api/auth/login`                                | `{username,password}`; tài khoản và vai trò hoạt động                          |
+| POST   | `/api/auth/logout`                               | Thu hồi session; idempotent                                                    |
+| GET    | `/api/auth/me`                                   | Session hợp lệ; trả identity, permissions, scopes                              |
+| POST   | `/api/auth/change-password`                      | `{currentPassword,newPassword}`; session hợp lệ                                |
+| GET    | `/api/authorization/roles`                       | A05 + all + M01.view                                                           |
+| PUT    | `/api/authorization/roles/:role/permissions`     | A05 + all + M01.edit; `{permissions:["M03.view"]}`                             |
+| GET    | `/api/authorization/accounts`                    | A05 + all + M01.view; phân trang, `search`                                     |
+| GET    | `/api/authorization/accounts/:id`                | A05 + all + M01.view                                                           |
+| POST   | `/api/authorization/accounts`                    | A05 + all + M01.edit; tạo tài khoản + role + scope + mật khẩu tạm              |
+| PUT    | `/api/authorization/accounts/:id`                | A05 + all + M01.edit; role, scopes, fullName, officerId                        |
+| POST   | `/api/authorization/accounts/:id/status`         | A05 + all + M01.edit; `{status: active\|locked\|inactive}`                     |
+| POST   | `/api/authorization/accounts/:id/reset-password` | A05 + all + M01.edit; thu hồi session, bắt đổi ở lần đăng nhập tới             |
+| POST   | `/api/authorization/accounts/:id/lock`           | A05 + all + M01.edit; khóa và thu hồi session                                  |
+| POST   | `/api/authorization/accounts/:id/unlock`         | A05 + all + M01.edit; mở tài khoản đã khóa                                     |
+| GET    | `/api/authorization/scope-options?kind=unit`     | A05 + all + M01.view; kind unit/region/facility, phân trang                    |
+| GET    | `/api/account-transfers/candidates`              | A05 + all + M01.view; tài khoản có thể chọn                                    |
+| GET    | `/api/account-transfers/assignments`             | A05 + all + M01.view; phạm vi hiện phụ trách theo `sourceAccountId`            |
+| POST   | `/api/account-transfers`                         | A05 + all + M01.edit; chuyển giao trong transaction                            |
+| GET    | `/api/account-transfers`                         | A05 + all + M01.view; lịch sử phân trang                                       |
+| GET    | `/api/audit-logs`                                | A05 + all + M01.view; chỉ đọc, phân trang                                      |
+| GET    | `/api/regions`                                   | M02.view + scope; phân trang, `search`, `unitId`                               |
+| POST   | `/api/regions`                                   | M02.view + M02.create; `{id,name,unitId}`                                      |
+| GET    | `/api/regions/:id`                               | M02.view; chi tiết + cơ sở + cán bộ theo scope, lịch sử phân trang             |
+| PUT    | `/api/regions/:id`                               | M02.view + M02.edit; `{name,unitId}`, đơn vị trong scope                       |
+| POST   | `/api/regions/:id/assignment`                    | M02.edit; `{accountId\|null,effectiveDate,note}`; tài khoản đích trong scope   |
+| GET    | `/api/regions/officers?regionId=`                | M02.edit; ứng viên theo `accountScope` + đơn vị của khu vực                    |
+| GET    | `/api/regions/:id/officers`                      | M02.view; cán bộ phụ trách khu vực và cơ sở theo scope                         |
+| GET    | `/api/units`                                     | M02.view; danh mục đơn vị theo scope                                           |
+| GET    | `/api/facilities`                                | M03.view + lọc scope trước search/count/pagination                             |
+| GET    | `/api/facilities/:id`                            | M03.view; ngoài scope trả 404                                                  |
+| GET    | `/api/dashboard`                                 | M10.view + M03.view; `facilityCount`, `regionCount`, `officerCount` theo scope |
+| GET    | `/api/dashboard/facilities-by-region`            | M10.view + M03.view; số cơ sở theo khu vực, phân trang                         |
+| GET    | `/api/dashboard/facilities-by-officer`           | M10.view + M03.view; số cơ sở theo cán bộ, phân trang                          |
+| GET    | `/api/search?q=&limit=`                          | M10.view; tìm không dấu, nhóm kết quả theo loại và scope                       |
 
 API thực hiện kiểm tra M06 (`/api/inspections*`, `/api/inspection-checklists*`): xem [INSPECTIONS.md](INSPECTIONS.md).
+Schema, payload và giới hạn chuyển giao: [ACCOUNT_TRANSFERS.md](ACCOUNT_TRANSFERS.md).
 
 Danh sách hỗ trợ `page` (mặc định 1), `pageSize` (mặc định 20, tối đa 100). Cơ sở hỗ trợ `search` tên/địa chỉ, tối đa 100 ký tự. Scope options phân trang để tra ID hợp lệ.
 
@@ -115,13 +154,22 @@ Repo chưa có bảng tài khoản thật nên migration cung cấp **một bả
 | must_change_password      | 1 khi cấp/reset, 0 sau đổi mật khẩu hoặc chọn bỏ qua                     |
 | last_login_at, created_at | Unix milliseconds                                                        |
 
-Không hard-delete tài khoản có lịch sử. Khi khóa/ngưng, API từ chối ngay; người 3 cần xóa sessions cùng transaction để phiên cũ không sống lại khi mở khóa. Reset mật khẩu cũng phải thu hồi sessions và ghi audit. Các thao tác này thuộc UC-ADM-02/04, không cung cấp CRUD tài khoản ngoài scope task.
+Không hard-delete tài khoản có lịch sử. API khóa tài khoản đã xóa sessions cùng transaction để
+phiên cũ không sống lại khi mở khóa. Reset mật khẩu cũng phải thu hồi sessions và ghi audit.
+Đã cung cấp CRUD tài khoản (tạo, sửa hồ sơ/vai trò/phạm vi, khóa/ngưng, đặt lại mật khẩu) trong phạm vi
+A05 + `M01.edit`; không xóa vật lý tài khoản có lịch sử. Chi tiết phân công địa bàn xem
+[AREA_ASSIGNMENT.md](AREA_ASSIGNMENT.md).
 
 `units`, `regions`, `facilities` là catalog tích hợp tối thiểu để kiểm chứng scope. Khi người phụ trách nghiệp vụ hoàn thành schema dùng chung, nối các FK/query vào nguồn đó bằng migration, không duy trì hai nguồn dữ liệu thật.
 
 ## Frontend và giới hạn bàn giao
 
-Đã nối `/dang-nhap`, `/doi-mat-khau` và `/quan-tri/vai-tro`. Reload dùng cookie server; không còn localStorage chứa danh tính hay tài khoản mặc định. Proxy kiểm tra đăng nhập và quyền vào trang cấu hình phân quyền; API kiểm tra quyền/phạm vi độc lập. Sidebar và các màn hình nghiệp vụ giữ nguyên UI, dữ liệu mẫu ban đầu; chủ module tiếp tục tích hợp API. `/tong-quan` và `/du-lieu/co-so` chuyển về `/` và `/co-so`. Logout/login dùng full navigation để bỏ router cache tài khoản cũ.
+Đã nối `/dang-nhap`, `/doi-mat-khau`, `/quan-tri/vai-tro`, `/quan-tri/tai-khoan` và
+`/to-chuc/phan-cong`. Reload dùng cookie server; không còn localStorage chứa danh tính hay tài khoản
+mặc định. Proxy kiểm tra đăng nhập và quyền vào các trang quản trị; API kiểm tra quyền/phạm vi độc
+lập. Nhiều màn hình nghiệp vụ khác vẫn dùng dữ liệu mẫu; riêng `/co-so` chưa phản ánh kết quả chuyển
+giao. `/tong-quan` và `/du-lieu/co-so` chuyển về `/` và `/co-so`. Logout/login dùng full navigation
+để bỏ router cache tài khoản cũ. Luồng thử trên UI nằm ở [README root](../README.md#khóa-tài-khoản-và-chuyển-giao-phạm-vi--uc-adm-04).
 
 Mã các màn hình nghiệp vụ tĩnh cũ vẫn được giữ. Chúng bị ẩn/chặn đến khi chủ module nối API có kiểm soát scope. Cấp quyền M04–M11 trong ma trận không tự mở các màn hình chưa tích hợp. Đây là giới hạn rõ ràng của phần tích hợp, không phải quyền chính thức đã chốt. Không đưa dữ liệu thật vào `src/data/mock.ts`, vì đó là module dữ liệu công khai của giao diện demo.
 

@@ -6,19 +6,38 @@ import { usePathname } from "next/navigation";
 import { ChevronRight, Flame } from "lucide-react";
 
 import {
-  Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupLabel,
-  SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarMenuSub,
-  SidebarMenuSubButton, SidebarMenuSubItem, useSidebar,
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { navGroups, type NavItem } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
+import { canVisit, type AuthUser } from "@/lib/auth-contract";
 
 function laDuongDanHoatDong(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function MenuCoCapCon({ item, pathname }: { item: NavItem; pathname: string }) {
+function MenuCoCapCon({
+  item,
+  pathname,
+  user,
+}: {
+  item: NavItem;
+  pathname: string;
+  user: AuthUser;
+}) {
   const { state, setOpen } = useSidebar();
   const dangHoatDong = laDuongDanHoatDong(pathname, item.href);
   const [mo, setMo] = React.useState(dangHoatDong);
@@ -55,23 +74,25 @@ function MenuCoCapCon({ item, pathname }: { item: NavItem; pathname: string }) {
       </SidebarMenuButton>
       {mo && (
         <SidebarMenuSub>
-          {item.items!.map((sub) => (
-            <SidebarMenuSubItem key={sub.href}>
-              <SidebarMenuSubButton asChild isActive={laDuongDanHoatDong(pathname, sub.href)}>
-                <Link href={sub.href}>
-                  {sub.icon ? <sub.icon /> : null}
-                  <span>{sub.title}</span>
-                </Link>
-              </SidebarMenuSubButton>
-            </SidebarMenuSubItem>
-          ))}
+          {item
+            .items!.filter((sub) => canVisit(user, sub.href))
+            .map((sub) => (
+              <SidebarMenuSubItem key={sub.href}>
+                <SidebarMenuSubButton asChild isActive={laDuongDanHoatDong(pathname, sub.href)}>
+                  <Link href={sub.href}>
+                    {sub.icon ? <sub.icon /> : null}
+                    <span>{sub.title}</span>
+                  </Link>
+                </SidebarMenuSubButton>
+              </SidebarMenuSubItem>
+            ))}
         </SidebarMenuSub>
       )}
     </SidebarMenuItem>
   );
 }
 
-export function AppSidebar() {
+export function AppSidebar({ user }: { user: AuthUser }) {
   const pathname = usePathname();
 
   return (
@@ -95,24 +116,29 @@ export function AppSidebar() {
           <SidebarGroup key={group.label}>
             <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
             <SidebarMenu>
-              {group.items.map((item) =>
-                item.items?.length ? (
-                  <MenuCoCapCon key={item.href} item={item} pathname={pathname} />
-                ) : (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton
-                      asChild
-                      tooltip={item.title}
-                      isActive={laDuongDanHoatDong(pathname, item.href)}
-                    >
-                      <Link href={item.href}>
-                        {item.icon ? <item.icon /> : null}
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ),
-              )}
+              {group.items
+                .filter(
+                  (item) =>
+                    !item.items?.length || item.items.some((sub) => canVisit(user, sub.href)),
+                )
+                .map((item) =>
+                  item.items?.length ? (
+                    <MenuCoCapCon key={item.href} item={item} pathname={pathname} user={user} />
+                  ) : (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        asChild
+                        tooltip={item.title}
+                        isActive={laDuongDanHoatDong(pathname, item.href)}
+                      >
+                        <Link href={item.href}>
+                          {item.icon ? <item.icon /> : null}
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ),
+                )}
             </SidebarMenu>
           </SidebarGroup>
         ))}
@@ -120,7 +146,8 @@ export function AppSidebar() {
 
       <SidebarFooter className="border-sidebar-border border-t">
         <p className="text-sidebar-foreground/60 px-1 text-[11px] leading-relaxed group-data-[collapsible=icon]:hidden">
-          URD v1.0 · Bản demo dùng <strong className="font-semibold">dữ liệu mẫu</strong> theo NFR-02.
+          URD v1.0 · Bản demo dùng <strong className="font-semibold">dữ liệu mẫu</strong> theo
+          NFR-02.
         </p>
       </SidebarFooter>
     </Sidebar>

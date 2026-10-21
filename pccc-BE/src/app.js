@@ -11,11 +11,19 @@ import { auditRoutes } from "./modules/audit/audit.routes.js";
 import { legalDocumentsRoutes } from "./modules/legal-documents/legal-documents.routes.js";
 import { inspectionsRoutes } from "./modules/inspections/inspections.routes.js";
 import { inspectionPlanningRoutes } from "./modules/inspection-planning/inspection-planning.routes.js";
+import { regionsRoutes } from "./modules/regions/regions.routes.js";
+import { tasksRoutes } from "./modules/tasks/tasks.routes.js";
+import { kpiRoutes } from "./modules/kpi/kpi.routes.js";
+import { explanationsRoutes } from "./modules/explanations/explanations.routes.js";
+import { incidentRoutes } from "./modules/incidents/incidents.routes.js";
+import { organizationRoutes } from "./modules/organization/organization.routes.js";
 
 // Modular monolith: each business module registers its routes here; all share one process and DB.
 const routes = [
   { method: "GET", path: "/api/health", public: true, handle: () => ({ status: "ok" }) },
   ...authRoutes,
+  ...incidentRoutes,
+  ...organizationRoutes,
   ...administrationRoutes,
   ...facilitiesRoutes,
   ...searchRoutes,
@@ -24,6 +32,10 @@ const routes = [
   ...legalDocumentsRoutes,
   ...inspectionPlanningRoutes,
   ...inspectionsRoutes,
+  ...regionsRoutes,
+  ...tasksRoutes,
+  ...kpiRoutes,
+  ...explanationsRoutes,
 ];
 
 export function createApp(
@@ -33,6 +45,8 @@ export function createApp(
     secureCookie = false,
     ttlSeconds = 28800,
     logger = console,
+    uploadDirectory,
+    incidentNow = Date.now,
   } = {},
 ) {
   assert(
@@ -73,7 +87,10 @@ export function createApp(
         "Nguồn yêu cầu không được phép.",
       );
       if (request.method === "OPTIONS") {
-        response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
+        response.setHeader(
+          "Access-Control-Allow-Methods",
+          "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+        );
         response.setHeader(
           "Access-Control-Allow-Headers",
           "Content-Type, X-File-Name, X-Document-Version, X-Document-Kind, X-Record-Number, X-Document-Description",
@@ -103,6 +120,8 @@ export function createApp(
         method,
         ip,
         token,
+        uploadDirectory,
+        incidentNow,
         readJson: (limit) => readJson(request, limit),
         setSessionCookie: (value) => response.setHeader("Set-Cookie", cookie(value, ttlSeconds)),
         clearSessionCookie: () => response.setHeader("Set-Cookie", cookie("", 0)),

@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Keep verification builds separate from an already running development server.
+  distDir: process.env.NEXT_TEST_DIST_DIR || ".next",
   async rewrites() {
     return [
       {

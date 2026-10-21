@@ -4,12 +4,12 @@ import { PageHeader } from "@/components/shared/page-header";
 import { documentStatuses, formatAuditTime } from "@/lib/legal-document-contract";
 import { documentPageUser, loadDocument } from "@/lib/legal-document-server";
 import { DocumentHistory } from "./document-history";
+import { canManageDocuments } from "@/lib/auth-contract";
 export default async function DocumentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await documentPageUser();
   const { id } = await params;
   const document = await loadDocument(id);
-  const canEdit =
-    user.permissions.includes("M05.edit") && user.scopes.some((s) => s.kind === "all");
+  const canEdit = canManageDocuments(user, "edit");
   return (
     <div className="space-y-5">
       <PageHeader

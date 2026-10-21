@@ -10,6 +10,7 @@ import type {
   GiaiTrinh, KeHoachKiemTra, KhuVuc, LoaiHinhCoSo, LoaiSuCo, LoaiViPham,
   NhanSuCoSo, NhatKy, SuCo, TaiKhoan, TrangThaiCoSo, VanBanPhapLuat, ViPham,
 } from "./types";
+import { toBusinessDate } from "@/lib/date";
 
 /* ---------- Bộ sinh số giả ngẫu nhiên có hạt giống (deterministic) -------- */
 function taoRandom(seed: number) {
@@ -29,7 +30,7 @@ export const NGAY_HE_THONG = new Date("2026-09-16T00:00:00");
 function ngayLech(soNgay: number) {
   const d = new Date(NGAY_HE_THONG);
   d.setDate(d.getDate() + soNgay);
-  return d.toISOString().slice(0, 10);
+  return toBusinessDate(d);
 }
 function gioLech(soNgay: number, gio: number, phut: number) {
   const d = new Date(NGAY_HE_THONG);
@@ -467,5 +468,4 @@ export const canhBaoList: CanhBao[] = [
   { id: "AL03", loai: "Chứng nhận hết hạn", tieuDe: "24 chứng nhận huấn luyện sắp hết hạn", moTa: "Thuộc 18 cơ sở trên địa bàn Kv10, hết hạn trong 30 ngày tới.", mucDo: "Trung bình", thoiDiem: gioLech(-1, 16, 20), daDoc: false, duongDan: "/co-so?loc=chung-nhan" },
   { id: "AL04", loai: "Công việc quá hạn", tieuDe: "9 công việc đã quá hạn hoàn thành", moTa: "Chỉ huy có thể yêu cầu cán bộ giải trình theo BR-06.", mucDo: "Cao", thoiDiem: gioLech(-1, 9, 0), daDoc: true, duongDan: "/cong-viec" },
   { id: "AL05", loai: "Hạn kiểm tra", tieuDe: "12 cuộc kiểm tra dự kiến trong tuần", moTa: "Trong đó 4 cuộc chưa gửi thông báo cho cơ sở.", mucDo: "Trung bình", thoiDiem: gioLech(-2, 14, 45), daDoc: true, duongDan: "/kiem-tra" },
-  { id: "AL06", loai: "Sự cố cần xử lý", tieuDe: "2 hồ sơ sự cố quá hạn xử lý", moTa: "Vụ cháy ngày 22/07 và vụ CNCH ngày 03/08 chưa đóng hồ sơ.", mucDo: "Cao", thoiDiem: gioLech(-2, 10, 12), daDoc: true, duongDan: "/su-co" },
 ];

@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { canBoDiaBan, coSoList } from "@/data/mock";
 import { viPhamSchema, type ViPhamFormValues } from "@/data/schemas";
 import { NGAY_HE_THONG } from "@/data/mock";
+import { toBusinessDate } from "@/lib/date";
 
 const loaiViPhamOptions = [
   "Thiếu hồ sơ/phương án",
@@ -28,7 +29,7 @@ const loaiViPhamOptions = [
   "Không huấn luyện nghiệp vụ",
 ];
 
-const homNay = NGAY_HE_THONG.toISOString().slice(0, 10);
+const homNay = toBusinessDate(NGAY_HE_THONG);
 
 /** Biểu mẫu ghi nhận vi phạm / lập hồ sơ đình chỉ (UC-VIO-01, UC-VIO-02). */
 export function ViPhamForm({ trigger, coSoId }: { trigger: React.ReactNode; coSoId?: string }) {

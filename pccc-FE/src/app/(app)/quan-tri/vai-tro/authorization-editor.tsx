@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SectionCard } from "@/components/shared/section-card";
+import type { ModuleCode } from "@/data/types";
 import type { DataScope } from "@/lib/auth-contract";
+import { tenPhanHe } from "@/lib/navigation";
 
 interface Role {
   code: string;
@@ -190,7 +192,9 @@ export function AuthorizationEditor({ canEdit }: { canEdit: boolean }) {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from(new Set(permissions.map((p) => p.module))).map((module) => (
               <div key={module} className="rounded-lg border p-3">
-                <p className="mb-2 font-semibold">{module}</p>
+                <p className="mb-2 font-semibold">
+                  {module} · {tenPhanHe[module as ModuleCode] ?? "Phân hệ khác"}
+                </p>
                 {permissions
                   .filter((p) => p.module === module)
                   .map((p) => (

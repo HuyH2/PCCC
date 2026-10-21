@@ -1,7 +1,14 @@
 import Link from "next/link";
 import {
-  AlertTriangle, ArrowRight, BellRing, CalendarClock, CheckCheck, FileSpreadsheet,
-  ShieldAlert, Siren, Settings2,
+  AlertTriangle,
+  ArrowRight,
+  BellRing,
+  CalendarClock,
+  CheckCheck,
+  FileSpreadsheet,
+  ShieldAlert,
+  Siren,
+  Settings2,
 } from "lucide-react";
 
 import { PageHeader } from "@/components/shared/page-header";
@@ -10,7 +17,14 @@ import { StatCard } from "@/components/shared/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { canhBaoList } from "@/data/mock";
 import type { LoaiCanhBao } from "@/data/types";
 import { cn } from "@/lib/utils";
@@ -33,7 +47,6 @@ const cauHinhNhac = [
   { loai: "Chứng nhận hết hạn", truoc: 30, doiTuong: "Cán bộ phụ trách địa bàn" },
   { loai: "Vi phạm quá hạn khắc phục", truoc: 3, doiTuong: "Cán bộ theo dõi, Chỉ huy" },
   { loai: "Công việc quá hạn", truoc: 2, doiTuong: "Người thực hiện, Người giao việc" },
-  { loai: "Sự cố cần xử lý", truoc: 3, doiTuong: "Cán bộ xử lý hồ sơ" },
 ];
 
 export default function TrangCanhBao() {
@@ -44,7 +57,7 @@ export default function TrangCanhBao() {
     <div className="space-y-5">
       <PageHeader
         title="Cảnh báo & nhắc việc"
-        description="Chuông nhắc việc do hệ thống tự sinh dựa trên hạn kiểm tra, hạn báo cáo, thời hạn chứng nhận, vi phạm và sự cố. Cảnh báo tiếp tục nhắc đến khi công việc hoàn thành hoặc được đóng (BR-07)."
+        description="Cảnh báo kiểm tra, báo cáo, chứng nhận và vi phạm. Với sự cố M09, xem cảnh báo deadline tại Hồ sơ sự cố; thông báo chủ động theo lịch chưa được triển khai."
         module="M10"
         useCases={["UC-SYS-03"]}
         actions={
@@ -129,8 +142,8 @@ export default function TrangCanhBao() {
           </TableBody>
         </Table>
         <p className="text-muted-foreground border-t px-3 py-2 text-xs">
-          Chuông/cảnh báo do phần mềm lập trình; tên miền chỉ là điểm truy cập. Push notification trên
-          điện thoại cần đánh giá riêng (URD mục 10).
+          Chuông/cảnh báo do phần mềm lập trình; tên miền chỉ là điểm truy cập. Push notification
+          trên điện thoại cần đánh giá riêng (URD mục 10).
         </p>
       </SectionCard>
     </div>

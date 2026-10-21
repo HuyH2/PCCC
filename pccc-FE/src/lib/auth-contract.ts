@@ -34,8 +34,39 @@ export function canCreateChecklist(user: AuthUser) {
   );
 }
 
+/** UC-DOC-02 — management is limited to Commander and Admin with an active scope and grant. */
+export function canManageDocuments(user: AuthUser, action: "create" | "edit") {
+  return (
+    (user.role === "A01" || user.role === "A05") &&
+    user.scopes.length > 0 &&
+    user.permissions.includes("M05.view") &&
+    user.permissions.includes(`M05.${action}`)
+  );
+}
+
 /** Preserve existing demo screens. Backend enforces permissions on its APIs. */
 export function canVisit(user: AuthUser, path: string) {
+  if (path === "/to-chuc/khu-vuc") {
+    return user.permissions.includes("M02.view") && user.scopes.length > 0;
+  }
+  if (path === "/to-chuc/phan-cong") {
+    const administrator =
+      user.permissions.includes("M01.view") &&
+      user.role === "A05" &&
+      user.scopes.some((scope) => scope.kind === "all");
+    const commander =
+      user.permissions.includes("M02.view") &&
+      user.permissions.includes("M02.edit") &&
+      user.scopes.length > 0;
+    return administrator || commander;
+  }
+  if (path === "/quan-tri/tai-khoan") {
+    return (
+      user.permissions.includes("M01.view") &&
+      user.role === "A05" &&
+      user.scopes.some((scope) => scope.kind === "all")
+    );
+  }
   if (path === "/quan-tri/vai-tro" || path === "/quan-tri/nhat-ky") {
     return (
       user.permissions.includes("M01.view") &&
@@ -44,6 +75,8 @@ export function canVisit(user: AuthUser, path: string) {
     );
   }
   if (path === "/kiem-tra/checklist/tao") return canCreateChecklist(user);
+  if (path === "/cong-viec/giao-viec" || path.startsWith("/cong-viec/giao-viec/"))
+    return user.permissions.includes("M07.view") && user.scopes.length > 0;
   if (
     path === "/kiem-tra/ke-hoach" ||
     path === "/kiem-tra/cuoc-kiem-tra" ||
@@ -63,10 +96,7 @@ export function canVisit(user: AuthUser, path: string) {
   if (path === "/van-ban" || path.startsWith("/van-ban/")) {
     if (!user.permissions.includes("M05.view") || !user.scopes.length) return false;
     const action = path === "/van-ban/them" ? "create" : path.endsWith("/sua") ? "edit" : null;
-    return (
-      !action ||
-      (user.permissions.includes(`M05.${action}`) && user.scopes.some((s) => s.kind === "all"))
-    );
+    return !action || canManageDocuments(user, action);
   }
   return true;
 }

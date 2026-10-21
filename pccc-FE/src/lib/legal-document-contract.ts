@@ -63,6 +63,9 @@ export const auditActionLabels: Record<string, string> = {
   "auth.password_change_skipped": "Bỏ qua đổi mật khẩu lần đầu",
   "authorization.role_permissions_changed": "Thay đổi quyền vai trò",
   "authorization.account_changed": "Thay đổi quyền / phạm vi tài khoản",
+  "account.locked": "Khóa tài khoản",
+  "account.unlocked": "Mở khóa tài khoản",
+  "account.transfer_completed": "Chuyển giao phạm vi quản lý",
 };
 export function formatAuditTime(value: number) {
   return new Intl.DateTimeFormat("vi-VN", {

@@ -1,192 +1,201 @@
-"use client";
+import Link from "next/link";
 
-import { CheckCircle2, ClipboardList, MessageSquare, Plus, Timer } from "lucide-react";
-
-import { CongViecForm } from "@/components/forms/cong-viec-form";
-import { DataPagination } from "@/components/shared/data-pagination";
-import { EmptyState } from "@/components/shared/empty-state";
-import { FilterBar, useDanhSach, type BoLoc } from "@/components/shared/filter-bar";
 import { PageHeader } from "@/components/shared/page-header";
-import { StatCard } from "@/components/shared/stat-card";
-import { StatusBadge } from "@/components/shared/status-badge";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { canBoDiaBan, canBoTheoId, congViecList } from "@/data/mock";
-import { thongKeCongViec } from "@/data/thong-ke";
-import type { CongViec } from "@/data/types";
-import { daysUntil, deaccent, formatDate } from "@/lib/utils";
+import { backendFetch, requirePage } from "@/lib/backend";
+import { toBusinessDate } from "@/lib/date";
+import type { TaskRecord } from "@/lib/task-contract";
+import { TaskCreateForm } from "./task-create-form";
 
-const boLoc: BoLoc[] = [
-  {
-    key: "trangThai",
-    label: "Trạng thái",
-    options: ["Mới giao", "Đang thực hiện", "Chờ duyệt", "Hoàn thành", "Quá hạn"].map((v) => ({ value: v, label: v })),
-    width: "w-[175px]",
-  },
-  {
-    key: "loai",
-    label: "Loại công việc",
-    options: ["Thường xuyên", "Đột xuất", "Được giao"].map((v) => ({ value: v, label: v })),
-    width: "w-[180px]",
-  },
-  {
-    key: "nguoiThucHien",
-    label: "Người thực hiện",
-    options: canBoDiaBan.map((c) => ({ value: c.id, label: c.hoTen })),
-    width: "w-[195px]",
-  },
-  {
-    key: "giaiTrinh",
-    label: "Giải trình",
-    options: [{ value: "co", label: "Đã yêu cầu giải trình" }],
-    width: "w-[200px]",
-  },
+export const metadata = { title: "Công việc được giao" };
+
+const views = [
+  { value: "all", label: "Tất cả" },
+  { value: "mine", label: "Việc của tôi" },
+  { value: "assigned", label: "Đã giao" },
 ];
 
-function locCongViec(cv: CongViec, tuKhoa: string, gt: Record<string, string>) {
-  if (tuKhoa) {
-    const q = deaccent(tuKhoa);
-    if (!deaccent(cv.tieuDe).includes(q) && !cv.ma.toLowerCase().includes(q)) return false;
-  }
-  if (gt.trangThai && gt.trangThai !== "all" && cv.trangThai !== gt.trangThai) return false;
-  if (gt.loai && gt.loai !== "all" && cv.loai !== gt.loai) return false;
-  if (gt.nguoiThucHien && gt.nguoiThucHien !== "all" && cv.nguoiThucHienId !== gt.nguoiThucHien) return false;
-  if (gt.giaiTrinh === "co" && !cv.canGiaiTrinh) return false;
-  return true;
+const statusLabels: Record<TaskRecord["status"], string> = {
+  open: "Đang thực hiện",
+  completed: "Hoàn thành",
+  cancelled: "Đã hủy",
+};
+
+function statusTone(status: TaskRecord["status"]) {
+  return status === "completed" ? "success" : status === "cancelled" ? "danger" : "warning";
 }
 
-export default function TrangGiaoViec() {
-  const ds = useDanhSach(congViecList, locCongViec);
+export default async function TrangGiaoViec({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    page?: string;
+    view?: string;
+    status?: string;
+    deadline?: string;
+  }>;
+}) {
+  const user = await requirePage("M07.view");
+  const query = await searchParams;
+  const page = Math.max(1, Number.parseInt(query.page ?? "1", 10) || 1);
+  const view = ["all", "mine", "assigned"].includes(query.view ?? "") ? query.view! : "all";
+  const status = ["open", "completed", "cancelled"].includes(query.status ?? "")
+    ? query.status!
+    : "";
+  const deadline = ["overdue", "week"].includes(query.deadline ?? "") ? query.deadline! : "";
+  const params = new URLSearchParams({ page: String(page), pageSize: "20", view });
+  if (status) params.set("status", status);
+  if (deadline) params.set("deadline", deadline);
+  const response = await backendFetch(`/api/tasks?${params.toString()}`);
+  if (!response.ok) throw new Error("Không thể tải danh sách công việc.");
+  const result = (await response.json()) as {
+    items: TaskRecord[];
+    total: number;
+    pageSize: number;
+  };
+  const linkFor = (nextPage: number) => {
+    const next = new URLSearchParams(params);
+    next.set("page", String(nextPage));
+    return `/cong-viec/giao-viec?${next.toString()}`;
+  };
+  const tabFor = (nextView: string) => {
+    const next = new URLSearchParams();
+    next.set("view", nextView);
+    if (status) next.set("status", status);
+    if (deadline) next.set("deadline", deadline);
+    return `/cong-viec/giao-viec?${next.toString()}`;
+  };
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Giao việc & theo dõi tiến độ"
-        description="Chỉ huy giao việc thường xuyên/đột xuất cho cán bộ, theo dõi tiến độ và yêu cầu giải trình khi chậm hạn (BR-06)."
+        description="Giao công việc, theo dõi tiến độ, lọc theo hạn và trao đổi với người thực hiện."
         module="M07"
-        useCases={["UC-WRK-02", "UC-WRK-03", "UC-WRK-06"]}
-        actions={
-          <CongViecForm
-            trigger={
-              <Button size="sm">
-                <Plus />
-                Giao việc mới
-              </Button>
-            }
-          />
-        }
+        useCases={["UC-WRK-02", "UC-WRK-03"]}
       />
-
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Tổng công việc" value={thongKeCongViec.tong} icon={ClipboardList} />
-        <StatCard label="Đang thực hiện" value={thongKeCongViec.dangThucHien} icon={Timer} tone="info" />
-        <StatCard label="Hoàn thành" value={thongKeCongViec.hoanThanh} icon={CheckCircle2} tone="success" hint={`${thongKeCongViec.choDuyet} chờ duyệt`} />
-        <StatCard label="Quá hạn" value={thongKeCongViec.quaHan} icon={Timer} tone="danger" />
-      </div>
-
-      <Card className="gap-0 py-0">
-        <div className="p-3">
-          <FilterBar
-            tuKhoa={ds.tuKhoa}
-            onTuKhoa={ds.doiTuKhoa}
-            giaTri={ds.giaTri}
-            onDoiGiaTri={ds.doiGiaTri}
-            boLoc={boLoc}
-            placeholder="Tìm theo mã hoặc tiêu đề công việc…"
-          />
-        </div>
-
-        {ds.ketQua.length === 0 ? (
-          <EmptyState icon={ClipboardList} />
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Mã</TableHead>
-                <TableHead>Công việc</TableHead>
-                <TableHead>Loại</TableHead>
-                <TableHead>Người giao</TableHead>
-                <TableHead>Người thực hiện</TableHead>
-                <TableHead>Hạn hoàn thành</TableHead>
-                <TableHead className="w-[130px]">Tiến độ</TableHead>
-                <TableHead>Trạng thái</TableHead>
-                <TableHead className="w-[60px]" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {ds.duLieuTrang.map((cv) => {
-                const con = daysUntil(cv.hanHoanThanh);
-                const quaHan = cv.trangThai === "Quá hạn";
-                return (
-                  <TableRow key={cv.id}>
-                    <TableCell className="font-mono text-xs whitespace-nowrap">{cv.ma}</TableCell>
-                    <TableCell className="max-w-[280px]">
-                      <div className="font-medium">{cv.tieuDe}</div>
-                      {cv.canGiaiTrinh && (
-                        <Badge variant="danger" className="mt-1">
-                          Đã yêu cầu giải trình
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge value={cv.loai} />
-                    </TableCell>
-                    <TableCell className="text-[13px] whitespace-nowrap">
-                      {canBoTheoId.get(cv.nguoiGiaoId)?.hoTen}
-                    </TableCell>
-                    <TableCell className="text-[13px] whitespace-nowrap">
-                      {canBoTheoId.get(cv.nguoiThucHienId)?.hoTen}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      <div className="text-[13px]">{formatDate(cv.hanHoanThanh)}</div>
-                      <div className="text-xs">
-                        {quaHan ? (
-                          <span className="text-destructive font-semibold">Quá {Math.abs(con)} ngày</span>
-                        ) : con >= 0 && con <= 5 ? (
-                          <span className="text-warning-foreground font-semibold">Còn {con} ngày</span>
-                        ) : (
-                          <span className="text-muted-foreground">
-                            Giao {formatDate(cv.ngayGiao)}
-                          </span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Progress
-                          value={cv.tienDo}
-                          className="h-1.5"
-                          indicatorClassName={quaHan ? "bg-destructive" : cv.tienDo === 100 ? "bg-success" : "bg-warning"}
-                        />
-                        <span className="w-8 shrink-0 text-right text-xs tabular-nums">{cv.tienDo}%</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge value={cv.trangThai} />
-                    </TableCell>
-                    <TableCell>
-                      <Button variant="ghost" size="icon-sm" aria-label="Trao đổi theo công việc">
-                        <MessageSquare className="size-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+      <p className="text-muted-foreground text-sm">
+        Danh sách chỉ hiển thị công việc bạn giao hoặc được giao. Công việc có chữ “(mẫu)” là dữ
+        liệu demo; công việc mới được tạo bằng nút bên dưới sẽ lưu vào database.
+      </p>
+      {user.permissions.includes("M07.create") &&
+        ["A01", "A02", "A05"].includes(user.role) &&
+        user.scopes.some((scope) => scope.kind === "all" || scope.kind === "unit") && (
+          <TaskCreateForm />
         )}
 
-        <DataPagination
-          tong={ds.ketQua.length}
-          trang={ds.trang}
-          soDong={ds.soDong}
-          onDoiTrang={ds.setTrang}
-          onDoiSoDong={ds.setSoDong}
-        />
-      </Card>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="bg-muted inline-flex rounded-lg p-1">
+          {views.map((item) => (
+            <Link
+              key={item.value}
+              href={tabFor(item.value)}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+                view === item.value
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </div>
+        <form method="get" className="flex flex-wrap items-center gap-2 text-sm">
+          <input type="hidden" name="view" value={view} />
+          <select
+            name="status"
+            defaultValue={status}
+            aria-label="Lọc theo trạng thái"
+            className="border-input bg-background h-9 rounded-md border px-2"
+          >
+            <option value="">Mọi trạng thái</option>
+            <option value="open">Đang thực hiện</option>
+            <option value="completed">Hoàn thành</option>
+            <option value="cancelled">Đã hủy</option>
+          </select>
+          <select
+            name="deadline"
+            defaultValue={deadline}
+            aria-label="Lọc theo hạn"
+            className="border-input bg-background h-9 rounded-md border px-2"
+          >
+            <option value="">Mọi hạn</option>
+            <option value="overdue">Quá hạn</option>
+            <option value="week">Đến hạn 7 ngày</option>
+          </select>
+          <button type="submit" className="border-input h-9 rounded-md border px-3">
+            Lọc
+          </button>
+          {(status || deadline) && (
+            <Link href={`/cong-viec/giao-viec?view=${view}`} className="text-muted-foreground">
+              Xóa lọc
+            </Link>
+          )}
+        </form>
+      </div>
+
+      <div className="space-y-3">
+        {result.items.map((task) => (
+          <article key={task.id} className="rounded-xl border p-4">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <Link
+                  href={`/cong-viec/giao-viec/${encodeURIComponent(task.id)}`}
+                  className="text-primary font-semibold hover:underline"
+                >
+                  {task.title}
+                </Link>
+                <p className="text-muted-foreground mt-1 text-sm">
+                  {task.code}
+                  {task.kind === "assigned"
+                    ? " · Giao việc"
+                    : task.kind === "routine"
+                      ? " · Thường xuyên"
+                      : " · Đột xuất"}
+                </p>
+              </div>
+              <Badge variant={statusTone(task.status)}>{statusLabels[task.status]}</Badge>
+            </div>
+            <p className="mt-2 text-sm">
+              Người giao: {task.assigner_name} · Người thực hiện: {task.assignee_name}
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+              <span>Tiến độ: {task.progress}%</span>
+              <progress
+                className="h-2 w-40 accent-red-700"
+                value={task.progress}
+                max={100}
+                aria-label={`Tiến độ ${task.title}`}
+              />
+              <span>
+                Hạn:{" "}
+                {task.due_at
+                  ? new Date(task.due_at).toLocaleDateString("vi-VN", {
+                      timeZone: "Asia/Ho_Chi_Minh",
+                    })
+                  : "Chưa có"}
+              </span>
+              {task.status === "open" &&
+                task.due_at !== null &&
+                toBusinessDate(task.due_at) < toBusinessDate() && (
+                  <span className="text-destructive font-medium">Quá hạn</span>
+                )}
+            </div>
+          </article>
+        ))}
+        {result.items.length === 0 && (
+          <p className="text-muted-foreground rounded-xl border p-5 text-sm">
+            Không có công việc phù hợp bộ lọc.
+          </p>
+        )}
+      </div>
+      <div className="flex items-center gap-4 text-sm">
+        <span>
+          {result.total} công việc · Trang {page}
+        </span>
+        {page > 1 && <Link href={linkFor(page - 1)}>Trước</Link>}
+        {page * result.pageSize < result.total && <Link href={linkFor(page + 1)}>Sau</Link>}
+      </div>
     </div>
   );
 }
