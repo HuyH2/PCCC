@@ -9,6 +9,10 @@ tự cấp quyền M09. Hai API địa bàn có mục đích riêng: `/api/regio
 phụ trách, còn `/api/organization/regions` phục vụ danh mục khu phố của M02. Các API
 Tổ chức và cán bộ khác xem [tài liệu backend](pccc-BE/README.md#tổ-chức-và-cán-bộ--uc-org-01-uc-org-02).
 
+Với database demo local mới, `pnpm seed` tạo 15 đơn vị và 79 hồ sơ cán bộ để thử
+`/to-chuc/don-vi` và `/to-chuc/can-bo`. Dữ liệu được lưu trong SQLite, tên có nhãn
+`(mẫu)` và thông tin liên hệ giả lập; xem thêm hướng dẫn seed M02 trong tài liệu backend.
+
 Để tạo dữ liệu M09 mẫu, dùng script riêng `pccc-BE/scripts/seed-incidents-demo.js` với
 database tên `incidents-demo.sqlite` và thư mục upload riêng; script từ chối database đang
 chạy. Không chạy script này trên `pccc-BE/data/pccc.sqlite`.

@@ -152,7 +152,7 @@ test("search is accent-insensitive and groups results by data type", async (t) =
   const all = (await search(get, cookie, "mẫu")).data.groups;
   assert.equal(all.facilities.total, 4);
   assert.equal(all.regions.total, 3);
-  assert.equal(all.units.total, 3);
+  assert.equal(all.units.total, 15);
   assert.equal(all.officers.total, 1);
   assert.equal(all.officers.items[0].facilityCount, 2);
   const limited = (await search(get, cookie, "mau", "&limit=1")).data.groups;
@@ -182,7 +182,11 @@ test("search never returns objects outside the caller's data scope", async (t) =
 
   const commander = await login("demo.chi-huy");
   groups = (await search(get, commander, "mau")).data.groups;
-  assert.deepEqual(groups.units.items.map((item) => item.id).sort(), ["DV-KV10"]);
+  assert.deepEqual(groups.units.items.map((item) => item.id).sort(), [
+    "DEMO-ORG-P01",
+    "DEMO-ORG-P02",
+    "DV-KV10",
+  ]);
   assert.equal(groups.facilities.total, 2);
 
   db.exec("DELETE FROM account_scopes WHERE account_id='DEMO-A03'");
