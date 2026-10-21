@@ -122,7 +122,8 @@ export function FacilityHistoryPanel({
         </h2>
         <p className="mt-2 text-lg font-semibold">{facilityStatusNames[status] ?? status}</p>
         <p className="text-muted-foreground mt-2 text-sm">
-          Địa bàn: {facility.region_id} · Cán bộ phụ trách: {facility.officer_id}
+          Địa bàn: {facility.region_name} · Cán bộ phụ trách:{" "}
+          {facility.officer_name ?? facility.officer_id}
         </p>
         {canEdit && (
           <Link

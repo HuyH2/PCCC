@@ -2,428 +2,133 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
-import { toast } from "sonner";
-import { AlertTriangle, ArrowLeft, Save, SaveAll } from "lucide-react";
+import type { FacilityOptions } from "@/lib/facility-contract";
 
-import { FormSection, FormSpan } from "@/components/shared/form-section";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import {
-  Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { canBoDiaBan, coSoList, donViList, khuVucList } from "@/data/mock";
-import { coSoSchema, type CoSoFormValues } from "@/data/schemas";
-import type { CoSo } from "@/data/types";
-import { deaccent } from "@/lib/utils";
-
-const loaiHinhOptions = [
-  "Chung cư/Nhà cao tầng", "Chợ/Trung tâm thương mại", "Cơ sở giáo dục", "Cơ sở y tế",
-  "Khách sạn/Nhà nghỉ", "Karaoke/Vũ trường", "Nhà xưởng/Kho", "Trạm xăng dầu",
-  "Văn phòng/Trụ sở", "Nhà ở kết hợp kinh doanh",
-];
-
-const trangThaiOptions = ["Đang hoạt động", "Đang đình chỉ", "Tạm ngừng", "Không phép"];
-
-const phuongList = donViList.filter((d) => d.cap === "Phường");
-
-/**
- * Biểu mẫu tạo mới / cập nhật hồ sơ cơ sở (UC-FAC-02).
- *
- * - Cho phép "Lưu nháp" bỏ qua ràng buộc, hoặc "Lưu chính thức" bắt buộc đủ trường (BR-02).
- * - Cảnh báo trùng theo tên + địa chỉ trước khi lưu.
- * - Khu phố được lọc lại theo phường đang chọn.
- */
-export function CoSoForm({ coSo }: { coSo?: CoSo }) {
+export function CoSoForm({ regions, officers }: FacilityOptions) {
   const router = useRouter();
-  const laSua = Boolean(coSo);
-  const [dangLuu, setDangLuu] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState("");
 
-  const form = useForm<CoSoFormValues>({
-    resolver: zodResolver(coSoSchema),
-    mode: "onBlur",
-    defaultValues: {
-      ten: coSo?.ten ?? "",
-      diaChi: coSo?.diaChi ?? "",
-      loaiHinh: coSo?.loaiHinh ?? "",
-      phuongId: coSo?.phuongId ?? "",
-      khuVucId: coSo?.khuVucId ?? "",
-      canBoPhuTrachId: coSo?.canBoPhuTrachId ?? "",
-      trangThai: coSo?.trangThai ?? "Đang hoạt động",
-      nguoiDungDau: coSo?.nguoiDungDau ?? "",
-      dienThoai: coSo?.dienThoai ?? "",
-      soTang: coSo?.soTang ?? 1,
-      dienTich: coSo?.dienTich ?? 0,
-      ngayKiemTraGanNhat: coSo?.ngayKiemTraGanNhat ?? "",
-      ngayKiemTraKeTiep: coSo?.ngayKiemTraKeTiep ?? "",
-      ghiChu: "",
-    },
-  });
-
-  const phuongDangChon = form.watch("phuongId");
-  const tenDangNhap = form.watch("ten");
-  const diaChiDangNhap = form.watch("diaChi");
-
-  const khuPhoHopLe = React.useMemo(
-    () => khuVucList.filter((k) => !phuongDangChon || k.phuongId === phuongDangChon),
-    [phuongDangChon],
-  );
-
-  // Khi đổi phường, bỏ khu phố cũ nếu không còn thuộc phường mới
-  React.useEffect(() => {
-    const kvHienTai = form.getValues("khuVucId");
-    if (kvHienTai && !khuPhoHopLe.some((k) => k.id === kvHienTai)) {
-      form.setValue("khuVucId", "");
-    }
-  }, [khuPhoHopLe, form]);
-
-  // Cảnh báo trùng theo tên + địa chỉ (UC-FAC-02, luồng ngoại lệ)
-  const coSoTrung = React.useMemo(() => {
-    const ten = deaccent(tenDangNhap ?? "").trim();
-    const diaChi = deaccent(diaChiDangNhap ?? "").trim();
-    if (ten.length < 3 || diaChi.length < 5) return null;
-    return (
-      coSoList.find(
-        (c) => c.id !== coSo?.id && deaccent(c.ten).trim() === ten && deaccent(c.diaChi).trim() === diaChi,
-      ) ?? null
-    );
-  }, [tenDangNhap, diaChiDangNhap, coSo?.id]);
-
-  function luuChinhThuc(values: CoSoFormValues) {
-    setDangLuu(true);
-    // Bản demo chưa có API — ghi log và điều hướng như khi lưu thành công.
-    console.info("[demo] Lưu chính thức hồ sơ cơ sở:", values);
-    setTimeout(() => {
-      setDangLuu(false);
-      toast.success(laSua ? "Đã cập nhật hồ sơ cơ sở" : "Đã tạo hồ sơ cơ sở", {
-        description: `${values.ten} — đã ghi lịch sử thay đổi theo BR-03.`,
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    const form = new FormData(event.currentTarget);
+    try {
+      const response = await fetch("/api/facilities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.get("name"),
+          address: form.get("address"),
+          regionId: form.get("regionId"),
+          officerId: form.get("officerId"),
+        }),
       });
-      router.push(coSo ? `/co-so/${coSo.id}` : "/co-so");
-    }, 500);
-  }
-
-  function luuNhap() {
-    const values = form.getValues();
-    console.info("[demo] Lưu nháp hồ sơ cơ sở:", values);
-    toast.info("Đã lưu nháp", {
-      description: "Hồ sơ nháp chưa tính vào thống kê cho đến khi lưu chính thức.",
-    });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error?.message ?? "Không thể tạo cơ sở.");
+      router.push(`/co-so/${encodeURIComponent(result.facility.id)}`);
+      router.refresh();
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Không thể tạo cơ sở.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(luuChinhThuc)} className="space-y-5">
-        {coSoTrung && (
-          <div className="border-warning/40 bg-warning/8 flex items-start gap-2.5 rounded-xl border p-3 text-[13px]">
-            <AlertTriangle className="text-warning-foreground mt-0.5 size-4 shrink-0" />
-            <p className="text-muted-foreground">
-              <strong className="text-foreground font-semibold">Cảnh báo trùng dữ liệu:</strong> đã có cơ
-              sở <strong className="text-foreground">{coSoTrung.ten}</strong> ({coSoTrung.ma}) cùng tên và
-              địa chỉ. Kiểm tra lại trước khi lưu để tránh dữ liệu kép (BR-01).
-            </p>
-          </div>
-        )}
-
-        <Card>
-          <CardContent className="space-y-7 pt-5">
-            <FormSection
-              title="Thông tin chung"
-              description="Các trường có dấu * là bắt buộc khi lưu chính thức"
-              cols={3}
-            >
-              <FormSpan>
-                <FormField
-                  control={form.control}
-                  name="ten"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel required>Tên cơ sở</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Ví dụ: Chung cư Hoa Sen 3" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </FormSpan>
-
-              <FormSpan>
-                <FormField
-                  control={form.control}
-                  name="diaChi"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel required>Địa chỉ</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Số nhà, tên đường, phường" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </FormSpan>
-
-              <FormField
-                control={form.control}
-                name="loaiHinh"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel required>Loại hình cơ sở</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Chọn loại hình" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {loaiHinhOptions.map((l) => (
-                          <SelectItem key={l} value={l}>
-                            {l}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>Danh mục loại hình chính thức cần đơn vị cung cấp (Q04).</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="trangThai"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel required>Trạng thái hoạt động</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Chọn trạng thái" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {trangThaiOptions.map((t) => (
-                          <SelectItem key={t} value={t}>
-                            {t}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="soTang"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel required>Số tầng</FormLabel>
-                    <FormControl>
-                      <Input type="number" min={1} {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="dienTich"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel required>Diện tích (m²)</FormLabel>
-                    <FormControl>
-                      <Input type="number" min={0} {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </FormSection>
-
-            <FormSection title="Địa bàn và phân công" cols={3}>
-              <FormField
-                control={form.control}
-                name="phuongId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel required>Phường</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Chọn phường" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {phuongList.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.ten}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="khuVucId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel required>Khu phố</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange} disabled={!phuongDangChon}>
-                      <FormControl>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder={phuongDangChon ? "Chọn khu phố" : "Chọn phường trước"} />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {khuPhoHopLe.map((k) => (
-                          <SelectItem key={k.id} value={k.id}>
-                            {k.ten}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="canBoPhuTrachId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel required>Cán bộ phụ trách</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Chọn cán bộ" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {canBoDiaBan.map((c) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            {c.hoTen} — {c.capBac}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>Mỗi cơ sở có đúng một cán bộ phụ trách.</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </FormSection>
-
-            <FormSection title="Người đứng đầu cơ sở" cols={3}>
-              <FormField
-                control={form.control}
-                name="nguoiDungDau"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel required>Họ và tên</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Nguyễn Văn An" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="dienThoai"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel required>Điện thoại liên hệ</FormLabel>
-                    <FormControl>
-                      <Input placeholder="0903 112 007" inputMode="tel" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </FormSection>
-
-            <FormSection title="Kiểm tra định kỳ" cols={3}>
-              <FormField
-                control={form.control}
-                name="ngayKiemTraGanNhat"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Ngày kiểm tra gần nhất</FormLabel>
-                    <FormControl>
-                      <Input type="date" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="ngayKiemTraKeTiep"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Ngày kiểm tra kế tiếp (dự kiến)</FormLabel>
-                    <FormControl>
-                      <Input type="date" {...field} />
-                    </FormControl>
-                    <FormDescription>Chu kỳ kiểm tra theo loại hình cần chốt ở Q08.</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormSpan>
-                <FormField
-                  control={form.control}
-                  name="ghiChu"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Ghi chú</FormLabel>
-                      <FormControl>
-                        <Textarea placeholder="Thông tin bổ sung về cơ sở…" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </FormSpan>
-            </FormSection>
-          </CardContent>
-        </Card>
-
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={() => router.back()}>
-            <ArrowLeft />
-            Hủy
-          </Button>
-          <Button type="button" variant="outline" onClick={luuNhap}>
-            <Save />
-            Lưu nháp
-          </Button>
-          <Button type="submit" disabled={dangLuu}>
-            <SaveAll />
-            {dangLuu ? "Đang lưu…" : "Lưu chính thức"}
-          </Button>
+    <form onSubmit={submit} className="max-w-2xl space-y-5">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <label htmlFor="facility-name" className="mb-1 block text-sm font-medium">
+            Tên cơ sở <span aria-hidden="true">*</span>
+          </label>
+          <input
+            id="facility-name"
+            name="name"
+            required
+            minLength={1}
+            maxLength={200}
+            className="border-input bg-background w-full rounded-md border px-3 py-2 text-base"
+          />
         </div>
-
-        <p className="text-muted-foreground text-xs">
-          Theo BR-02, hồ sơ thiếu trường bắt buộc chỉ được lưu nháp, không được lưu chính thức. Mọi thay
-          đổi đều ghi lại người thực hiện và thời gian (BR-03).
+        <div className="sm:col-span-2">
+          <label htmlFor="facility-address" className="mb-1 block text-sm font-medium">
+            Địa chỉ <span aria-hidden="true">*</span>
+          </label>
+          <input
+            id="facility-address"
+            name="address"
+            required
+            maxLength={500}
+            className="border-input bg-background w-full rounded-md border px-3 py-2 text-base"
+          />
+        </div>
+        <div>
+          <label htmlFor="facility-region" className="mb-1 block text-sm font-medium">
+            Khu vực <span aria-hidden="true">*</span>
+          </label>
+          <select
+            id="facility-region"
+            name="regionId"
+            required
+            defaultValue=""
+            className="border-input bg-background w-full rounded-md border px-3 py-2 text-base"
+          >
+            <option value="" disabled>
+              Chọn khu vực
+            </option>
+            {regions.map((region) => (
+              <option key={region.id} value={region.id}>
+                {region.name} - {region.unit_name}
+              </option>
+            ))}
+          </select>
+          {regions.length === 0 && (
+            <p className="text-muted-foreground mt-1 text-sm">
+              Không có khu vực nào trong phạm vi được cấp.
+            </p>
+          )}
+        </div>
+        <div>
+          <label htmlFor="facility-officer" className="mb-1 block text-sm font-medium">
+            Cán bộ phụ trách <span aria-hidden="true">*</span>
+          </label>
+          <select
+            id="facility-officer"
+            name="officerId"
+            required
+            defaultValue=""
+            className="border-input bg-background w-full rounded-md border px-3 py-2 text-base"
+          >
+            <option value="" disabled>
+              Chọn cán bộ
+            </option>
+            {officers.map((officer) => (
+              <option key={officer.id} value={officer.id}>
+                {officer.full_name} - {officer.officer_code}
+              </option>
+            ))}
+          </select>
+          {officers.length === 0 && (
+            <p className="text-muted-foreground mt-1 text-sm">
+              Không có cán bộ đang công tác trong phạm vi được cấp.
+            </p>
+          )}
+        </div>
+      </div>
+      {error && (
+        <p role="alert" className="text-destructive text-sm">
+          {error}
         </p>
-      </form>
-    </Form>
+      )}
+      <button
+        type="submit"
+        disabled={saving || regions.length === 0 || officers.length === 0}
+        className="bg-primary text-primary-foreground min-h-11 rounded-md px-4 py-2 text-sm disabled:opacity-50"
+      >
+        {saving ? "Đang lưu..." : "Tạo cơ sở"}
+      </button>
+    </form>
   );
 }
