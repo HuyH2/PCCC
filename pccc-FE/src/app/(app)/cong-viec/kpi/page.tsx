@@ -161,6 +161,9 @@ export default async function TrangKPI({
                 }
               />
               <strong className="w-12 text-right">{personal.score}%</strong>
+              <Badge variant={personal.debt === 0 ? "success" : "danger"}>
+                {personal.debt === 0 ? "Đạt chỉ tiêu" : "Chưa đạt chỉ tiêu"}
+              </Badge>
             </div>
           </>
         )}
@@ -182,6 +185,7 @@ export default async function TrangKPI({
                 <TableHead className="text-right">Nợ hiện tại</TableHead>
                 <TableHead className="text-right">Đã giải trình</TableHead>
                 <TableHead className="w-[160px]">KPI</TableHead>
+                <TableHead>Kết quả</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -223,6 +227,15 @@ export default async function TrangKPI({
                         {item.configured ? `${item.score}%` : "—"}
                       </span>
                     </div>
+                  </TableCell>
+                  <TableCell>
+                    {item.configured ? (
+                      <Badge variant={item.debt === 0 ? "success" : "danger"}>
+                        {item.debt === 0 ? "Đạt" : "Chưa đạt"}
+                      </Badge>
+                    ) : (
+                      "—"
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
