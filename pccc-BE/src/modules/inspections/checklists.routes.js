@@ -11,7 +11,7 @@ export const checklistRoutes = [
   {
     method: "GET",
     path: "/api/inspection-checklists",
-    handle: (ctx) => listChecklists(ctx.db, ctx.user, ctx.url),
+    handle: async (ctx) => await listChecklists(ctx.db, ctx.user, ctx.url),
   },
   {
     method: "POST",
@@ -20,12 +20,12 @@ export const checklistRoutes = [
       requireChecklistAuthor(ctx.user);
       const payload = await ctx.readJson(262144);
       ctx.status = 201;
-      return createChecklist(ctx.db, ctx.user, payload, ctx.ip);
+      return await createChecklist(ctx.db, ctx.user, payload, ctx.ip);
     },
   },
   {
     method: "GET",
     path: new RegExp(`^\\/api\\/inspection-checklists\\/${ID}$`),
-    handle: (ctx, match) => checklistDetail(ctx.db, ctx.user, match[1]),
+    handle: async (ctx, match) => await checklistDetail(ctx.db, ctx.user, match[1]),
   },
 ];

@@ -74,52 +74,57 @@ function requireDatasetExport(user, datasetId) {
   return dataset;
 }
 
-function regionOptions(db, user) {
+async function regionOptions(db, user) {
   const scope = regionScope(user);
-  return db
-    .prepare(
-      `SELECT r.id,r.name,u.name AS unit_name FROM regions r
+  return (
+    await db
+      .prepare(
+        `SELECT r.id,r.name,u.name AS unit_name FROM regions r
       JOIN units u ON u.id=r.unit_id WHERE ${scope.sql} ORDER BY u.name,r.name,r.id`,
-    )
-    .all(...scope.params)
-    .map((row) => ({ value: row.id, label: `${row.name} · ${row.unit_name}` }));
+      )
+      .all(...scope.params)
+  ).map((row) => ({ value: row.id, label: `${row.name} · ${row.unit_name}` }));
 }
 
-function unitOptions(db, user) {
+async function unitOptions(db, user) {
   const scope = regionScope(user);
-  return db
-    .prepare(
-      `SELECT DISTINCT u.id,u.name FROM regions r JOIN units u ON u.id=r.unit_id
+  return (
+    await db
+      .prepare(
+        `SELECT DISTINCT u.id,u.name FROM regions r JOIN units u ON u.id=r.unit_id
       WHERE ${scope.sql} ORDER BY u.name,u.id`,
-    )
-    .all(...scope.params)
-    .map((row) => ({ value: row.id, label: row.name }));
+      )
+      .all(...scope.params)
+  ).map((row) => ({ value: row.id, label: row.name }));
 }
 
-function filterMetadata(db, user, datasetId) {
+async function filterMetadata(db, user, datasetId) {
   if (datasetId === "facilities") {
     const scope = facilityScope(user);
-    const statuses = db
-      .prepare(`SELECT DISTINCT f.status FROM facilities f WHERE ${scope.sql} ORDER BY f.status`)
-      .all(...scope.params)
-      .map((row) => ({ value: row.status, label: row.status }));
-    return { regions: regionOptions(db, user), statuses };
+    const statuses = (
+      await db
+        .prepare(`SELECT DISTINCT f.status FROM facilities f WHERE ${scope.sql} ORDER BY f.status`)
+        .all(...scope.params)
+    ).map((row) => ({ value: row.status, label: row.status }));
+    return { regions: await regionOptions(db, user), statuses };
   }
   if (datasetId === "officers")
     return {
-      regions: regionOptions(db, user),
+      regions: await regionOptions(db, user),
       statuses: [...OFFICER_STATUSES].map((value) => ({ value, label: value })),
     };
-  return { units: unitOptions(db, user) };
+  return { units: await unitOptions(db, user) };
 }
 
-export function listExportDatasets(db, user) {
-  const items = DATASETS.filter((dataset) => canExport(user, dataset)).map((dataset) => ({
-    id: dataset.id,
-    label: dataset.label,
-    formats: ["csv"],
-    filters: filterMetadata(db, user, dataset.id),
-  }));
+export async function listExportDatasets(db, user) {
+  const items = await Promise.all(
+    DATASETS.filter((dataset) => canExport(user, dataset)).map(async (dataset) => ({
+      id: dataset.id,
+      label: dataset.label,
+      formats: ["csv"],
+      filters: await filterMetadata(db, user, dataset.id),
+    })),
+  );
   assert(items.length > 0, 403, "FORBIDDEN", "Bạn chưa được cấp quyền xuất bộ dữ liệu nào.");
   return { items };
 }
@@ -163,7 +168,7 @@ function validateFilters(datasetId, rawFilters) {
   return filters;
 }
 
-function facilityRows(db, user, filters) {
+async function facilityRows(db, user, filters) {
   const scope = facilityScope(user);
   const clauses = [scope.sql];
   const params = [...scope.params];
@@ -182,7 +187,7 @@ function facilityRows(db, user, filters) {
     clauses.push("f.status=?");
     params.push(filters.status);
   }
-  return db
+  return await db
     .prepare(
       `SELECT f.id AS "Mã cơ sở",f.name AS "Tên cơ sở",f.address AS "Địa chỉ",
       f.status AS "Trạng thái",r.id AS "Mã khu phố",r.name AS "Khu phố",
@@ -195,7 +200,7 @@ function facilityRows(db, user, filters) {
     .all(...params, MAX_EXPORT_RECORDS + 1);
 }
 
-function officerRows(db, user, filters) {
+async function officerRows(db, user, filters) {
   const officers = officerScope(user);
   const facilities = facilityScope(user);
   const clauses = [officers.sql];
@@ -217,12 +222,12 @@ function officerRows(db, user, filters) {
     clauses.push("o.status=?");
     params.push(filters.status);
   }
-  return db
+  return await db
     .prepare(
       `SELECT o.officer_code AS "Mã cán bộ",o.full_name AS "Họ và tên",
       o.rank AS "Cấp bậc",o.position AS "Chức vụ",u.name AS "Đơn vị",
       o.business_role AS "Vai trò",o.status AS "Trạng thái",
-      (SELECT group_concat(DISTINCT r.name) FROM facilities f JOIN regions r ON r.id=f.region_id
+      (SELECT string_agg(DISTINCT r.name, ',') FROM facilities f JOIN regions r ON r.id=f.region_id
         WHERE ${scopedFacilities}) AS "Khu vực phụ trách",
       (SELECT count(*) FROM facilities f WHERE ${scopedFacilities})
         AS "Số cơ sở trong phạm vi"
@@ -232,7 +237,7 @@ function officerRows(db, user, filters) {
     .all(...params, MAX_EXPORT_RECORDS + 1);
 }
 
-function regionRows(db, user, filters) {
+async function regionRows(db, user, filters) {
   const scope = regionScope(user);
   const facilities = facilityScope(user);
   const clauses = [scope.sql];
@@ -246,7 +251,7 @@ function regionRows(db, user, filters) {
     clauses.push("r.unit_id=?");
     params.push(filters.unitId);
   }
-  return db
+  return await db
     .prepare(
       `SELECT r.id AS "Mã khu phố",r.name AS "Khu phố",u.id AS "Mã đơn vị",
       u.name AS "Đơn vị",(SELECT count(*) FROM facilities f WHERE f.region_id=r.id AND ${facilities.sql}) AS "Số cơ sở"
@@ -271,8 +276,8 @@ function toCsv(rows, datasetId) {
   return `\uFEFF${lines}\r\n`;
 }
 
-function jobView(db, id) {
-  return db
+async function jobView(db, id) {
+  return await db
     .prepare(
       `SELECT j.id,j.direction,j.dataset_id,j.file_name,j.file_format,j.status,j.filters_json,
       j.total_records,j.successful_records,j.error_count,j.error_summary,j.actor_id,
@@ -282,7 +287,7 @@ function jobView(db, id) {
     .get(id);
 }
 
-export function recordTransferJob(db, actorId, input, ip) {
+export async function recordTransferJob(db, actorId, input, ip) {
   object(input, [
     "direction",
     "datasetId",
@@ -337,28 +342,30 @@ export function recordTransferJob(db, actorId, input, ip) {
   const id = randomUUID();
   const createdAt = Number.isSafeInteger(input.startedAt) ? input.startedAt : Date.now();
   const completedAt = Number.isSafeInteger(input.completedAt) ? input.completedAt : Date.now();
-  transaction(db, () => {
-    db.prepare(
-      `INSERT INTO data_transfer_jobs(id,direction,dataset_id,file_name,file_format,status,
+  await transaction(db, async () => {
+    await db
+      .prepare(
+        `INSERT INTO data_transfer_jobs(id,direction,dataset_id,file_name,file_format,status,
       filters_json,total_records,successful_records,error_count,error_summary,actor_id,created_at,completed_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    ).run(
-      id,
-      input.direction,
-      input.datasetId,
-      input.fileName,
-      input.format,
-      input.status,
-      JSON.stringify(filters),
-      input.totalRecords,
-      input.successfulRecords,
-      input.errorCount,
-      errorSummary,
-      actorId,
-      createdAt,
-      completedAt,
-    );
-    writeAudit(db, {
+      )
+      .run(
+        id,
+        input.direction,
+        input.datasetId,
+        input.fileName,
+        input.format,
+        input.status,
+        JSON.stringify(filters),
+        input.totalRecords,
+        input.successfulRecords,
+        input.errorCount,
+        errorSummary,
+        actorId,
+        createdAt,
+        completedAt,
+      );
+    await writeAudit(db, {
       actorId,
       feature: "M11.data-transfer",
       objectType: "data_transfer_job",
@@ -376,10 +383,10 @@ export function recordTransferJob(db, actorId, input, ip) {
       ip,
     });
   });
-  return jobView(db, id);
+  return await jobView(db, id);
 }
 
-export function exportDataset(db, user, payload, ip) {
+export async function exportDataset(db, user, payload, ip) {
   object(payload, ["dataset", "format", "filters"]);
   const dataset = requireDatasetExport(user, text(payload.dataset, "Loại dữ liệu", 1, 80));
   const format = text(payload.format, "Định dạng file", 1, 10);
@@ -395,7 +402,7 @@ export function exportDataset(db, user, payload, ip) {
   let rows;
   let csv;
   try {
-    rows = query(db, user, filters);
+    rows = await query(db, user, filters);
     assert(
       rows.length <= MAX_EXPORT_RECORDS,
       413,
@@ -404,7 +411,7 @@ export function exportDataset(db, user, payload, ip) {
     );
     csv = toCsv(rows, dataset.id);
   } catch (error) {
-    recordTransferJob(
+    await recordTransferJob(
       db,
       user.id,
       {
@@ -427,7 +434,7 @@ export function exportDataset(db, user, payload, ip) {
     throw error;
   }
   const fileName = `${dataset.id}-${new Date(startedAt).toISOString().replaceAll(/[:.]/g, "-")}.csv`;
-  const job = recordTransferJob(
+  const job = await recordTransferJob(
     db,
     user.id,
     {
@@ -467,7 +474,7 @@ function requireTransferHistoryAccess(user) {
   return false;
 }
 
-export function listTransferJobs(db, user, url) {
+export async function listTransferJobs(db, user, url) {
   const all = requireTransferHistoryAccess(user);
   const { page, pageSize } = pagination(url);
   const clauses = [];
@@ -510,7 +517,7 @@ export function listTransferJobs(db, user, url) {
   }
   const where = clauses.length ? clauses.join(" AND ") : "1=1";
   return {
-    items: db
+    items: await db
       .prepare(
         `SELECT j.id,j.direction,j.dataset_id,j.file_name,j.file_format,j.status,j.filters_json,
         j.total_records,j.successful_records,j.error_count,j.error_summary,j.actor_id,
@@ -519,17 +526,19 @@ export function listTransferJobs(db, user, url) {
         ORDER BY j.created_at DESC,j.id DESC LIMIT ? OFFSET ?`,
       )
       .all(...params, pageSize, (page - 1) * pageSize),
-    total: db
-      .prepare(`SELECT count(*) AS total FROM data_transfer_jobs j WHERE ${where}`)
-      .get(...params).total,
+    total: (
+      await db
+        .prepare(`SELECT count(*) AS total FROM data_transfer_jobs j WHERE ${where}`)
+        .get(...params)
+    ).total,
     page,
     pageSize,
   };
 }
 
-export function transferJobDetail(db, user, id) {
+export async function transferJobDetail(db, user, id) {
   const all = requireTransferHistoryAccess(user);
-  const job = db
+  const job = await db
     .prepare(
       `SELECT j.id,j.direction,j.dataset_id,j.file_name,j.file_format,j.status,j.filters_json,
       j.total_records,j.successful_records,j.error_count,j.error_summary,j.actor_id,
@@ -540,7 +549,7 @@ export function transferJobDetail(db, user, id) {
   assert(job, 404, "NOT_FOUND", "Không tìm thấy lịch sử truyền dữ liệu.");
   return {
     job,
-    errors: db
+    errors: await db
       .prepare(
         "SELECT row_number,field_name,error_code,message,created_at FROM data_transfer_errors WHERE job_id=? ORDER BY row_number,id",
       )

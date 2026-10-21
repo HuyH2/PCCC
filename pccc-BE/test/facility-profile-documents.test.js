@@ -12,16 +12,16 @@ import { createApp } from "../src/app.js";
 const password = "Facility-profile-test-2026";
 
 async function fixture(t) {
-  const db = openDatabase(":memory:");
+  const db = await openDatabase(":memory:");
   await seedDemo(db, password);
-  db.exec("UPDATE accounts SET must_change_password=0");
+  await db.exec("UPDATE accounts SET must_change_password=0");
   const directory = mkdtempSync(join(tmpdir(), "pccc-facility-files-"));
   const server = createApp(db, { uploadDirectory: directory });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   t.after(async () => {
     await new Promise((resolve) => server.close(resolve));
-    db.close();
+    await db.close();
     rmSync(directory, { recursive: true, force: true });
   });
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -132,11 +132,13 @@ function zipContainer(entryNames) {
 
 test("facility personnel migration enforces relationships, history and one active head", async (t) => {
   const { db } = await fixture(t);
-  const tables = db
-    .prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('facility_personnel','attachments')",
-    )
-    .all()
+  const tables = (
+    await db
+      .prepare(
+        "SELECT table_name AS name FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('facility_personnel','attachments')",
+      )
+      .all()
+  )
     .map((row) => row.name)
     .sort();
   assert.deepEqual(tables, ["attachments", "facility_personnel"]);
@@ -146,7 +148,7 @@ test("facility personnel migration enforces relationships, history and one activ
     (id,facility_id,full_name,position,is_head,created_by,updated_by,created_at,updated_at)
     VALUES (?,?,?,?,?,?,?,?,?)`,
   );
-  insert.run(
+  await insert.run(
     "P-1",
     "CS001",
     "Người thứ nhất",
@@ -157,40 +159,44 @@ test("facility personnel migration enforces relationships, history and one activ
     now,
     now,
   );
-  assert.throws(() =>
-    insert.run(
-      "P-2",
-      "CS001",
-      "Người thứ hai",
-      "Người đứng đầu",
-      1,
-      "DEMO-A03",
-      "DEMO-A03",
-      now,
-      now,
-    ),
-  );
-  assert.throws(() => db.prepare("DELETE FROM facility_personnel WHERE id='P-1'").run());
-  assert.throws(() =>
-    db
-      .prepare(
-        `INSERT INTO attachments
-        (id,facility_id,personnel_id,document_type,original_name,stored_name,content_type,size_bytes,
-          storage_path,uploaded_by,uploaded_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-      )
-      .run(
-        "A-1",
-        "CS002",
-        "P-1",
-        "Hồ sơ",
-        "a.pdf",
-        "a.pdf",
-        "application/pdf",
-        10,
-        "a.pdf",
+  await assert.rejects(
+    async () =>
+      await insert.run(
+        "P-2",
+        "CS001",
+        "Người thứ hai",
+        "Người đứng đầu",
+        1,
+        "DEMO-A03",
         "DEMO-A03",
         now,
+        now,
       ),
+  );
+  await assert.rejects(
+    async () => await db.prepare("DELETE FROM facility_personnel WHERE id='P-1'").run(),
+  );
+  await assert.rejects(
+    async () =>
+      await db
+        .prepare(
+          `INSERT INTO attachments
+        (id,facility_id,personnel_id,document_type,original_name,stored_name,content_type,size_bytes,
+          storage_path,uploaded_by,uploaded_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+        )
+        .run(
+          "A-1",
+          "CS002",
+          "P-1",
+          "Hồ sơ",
+          "a.pdf",
+          "a.pdf",
+          "application/pdf",
+          10,
+          "a.pdf",
+          "DEMO-A03",
+          now,
+        ),
   );
 });
 
@@ -283,8 +289,11 @@ test("personnel APIs manage profiles, replace the head and preserve audit under 
   );
   assert.equal((await request("/api/facilities/CS003/personnel", { cookie: officer })).status, 404);
   assert.equal(
-    db.prepare("SELECT count(*) AS n FROM audit_logs WHERE object_type='facility_personnel'").get()
-      .n,
+    (
+      await db
+        .prepare("SELECT count(*) AS n FROM audit_logs WHERE object_type='facility_personnel'")
+        .get()
+    ).n,
     5,
   );
 });
@@ -339,7 +348,7 @@ test("facility attachments validate files and linked personnel, store private pa
   assert.equal(uploaded.data.attachment.issue_date, "2026-01-10");
   assert.equal(uploaded.data.attachment.expiry_date, "2027-01-10");
   assert.ok(!JSON.stringify(uploaded.data).includes("storage_path"));
-  const stored = db
+  const stored = await db
     .prepare("SELECT * FROM attachments WHERE id=?")
     .get(uploaded.data.attachment.id);
   assert.match(stored.storage_path, /^[a-f0-9-]+\.pdf$/);
@@ -373,9 +382,11 @@ test("facility attachments validate files and linked personnel, store private pa
     404,
   );
   assert.equal(
-    db
-      .prepare("SELECT count(*) AS n FROM audit_logs WHERE action='facility.attachment_uploaded'")
-      .get().n,
+    (
+      await db
+        .prepare("SELECT count(*) AS n FROM audit_logs WHERE action='facility.attachment_uploaded'")
+        .get()
+    ).n,
     1,
   );
 
@@ -397,16 +408,20 @@ test("facility attachments validate files and linked personnel, store private pa
     (await request(`${endpoint}/${stored.id}`, { method: "DELETE", cookie: officer })).status,
     200,
   );
-  assert.ok(db.prepare("SELECT deleted_at FROM attachments WHERE id=?").get(stored.id).deleted_at);
+  assert.ok(
+    (await db.prepare("SELECT deleted_at FROM attachments WHERE id=?").get(stored.id)).deleted_at,
+  );
   assert.equal((await request(endpoint, { cookie: viewer })).data.total, 0);
   assert.equal(
     (await request(`${endpoint}/${stored.id}/download`, { cookie: viewer })).status,
     404,
   );
   assert.equal(
-    db
-      .prepare("SELECT count(*) AS n FROM audit_logs WHERE action='facility.attachment_deleted'")
-      .get().n,
+    (
+      await db
+        .prepare("SELECT count(*) AS n FROM audit_logs WHERE action='facility.attachment_deleted'")
+        .get()
+    ).n,
     1,
   );
 });
@@ -443,7 +458,7 @@ test("facility attachments accept verified Word and Excel files", async (t) => {
     assert.equal(download.status, 200);
   }
   assert.equal(
-    db.prepare("SELECT count(*) AS n FROM attachments WHERE deleted_at IS NULL").get().n,
+    (await db.prepare("SELECT count(*) AS n FROM attachments WHERE deleted_at IS NULL").get()).n,
     2,
   );
 });

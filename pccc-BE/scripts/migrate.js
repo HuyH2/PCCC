@@ -1,7 +1,7 @@
 import { openDatabase } from "../src/core/database.js";
-const db = openDatabase();
+const db = await openDatabase();
 console.info(
   "Migrations applied:",
-  db.prepare("SELECT name FROM schema_migrations ORDER BY name").all(),
+  await db.prepare("SELECT name FROM schema_migrations ORDER BY name").all(),
 );
-db.close();
+await db.close();

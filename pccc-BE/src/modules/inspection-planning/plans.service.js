@@ -22,7 +22,7 @@ const PLAN_STATUSES = ["draft", "published", "closed"];
 // List & detail
 // ---------------------------------------------------------------------------
 
-export function listPlans(db, user, url) {
+export async function listPlans(db, user, url) {
   requirePlanning(user);
   const { page, pageSize } = pagination(url);
   const scope = planScope(user);
@@ -53,7 +53,7 @@ export function listPlans(db, user, url) {
   const where = clauses.join(" AND ");
   const base = `FROM inspection_plans p JOIN units u ON u.id=p.unit_id WHERE ${where}`;
   return {
-    items: db
+    items: await db
       .prepare(
         `SELECT p.*,u.name AS unit_name,
           (SELECT count(*) FROM inspections i WHERE i.plan_id=p.id) AS inspection_count,
@@ -61,15 +61,15 @@ export function listPlans(db, user, url) {
         ${base} ORDER BY p.year DESC,p.updated_at DESC LIMIT ? OFFSET ?`,
       )
       .all(...params, pageSize, (page - 1) * pageSize),
-    total: db.prepare(`SELECT count(*) AS n ${base}`).get(...params).n,
+    total: (await db.prepare(`SELECT count(*) AS n ${base}`).get(...params)).n,
     page,
     pageSize,
   };
 }
 
-export function planDetail(db, user, id) {
-  const plan = scopedPlan(db, user, id);
-  const targets = db
+export async function planDetail(db, user, id) {
+  const plan = await scopedPlan(db, user, id);
+  const targets = await db
     .prepare(
       `SELECT t.*,o.full_name AS officer_name,r.name AS region_name,
         (WITH RECURSIVE descendants(id) AS (
@@ -90,7 +90,7 @@ export function planDetail(db, user, id) {
 // Create & update plan
 // ---------------------------------------------------------------------------
 
-export function createPlan(db, user, payload, ip) {
+export async function createPlan(db, user, payload, ip) {
   requirePlanning(user, "create");
   requireRole(user, PLAN_ROLES, "Vai trò hiện tại không được lập kế hoạch kiểm tra năm.");
   object(payload, [
@@ -114,10 +114,10 @@ export function createPlan(db, user, payload, ip) {
     "INVALID_INPUT",
     "Trạng thái kế hoạch không hợp lệ.",
   );
-  const unit = db.prepare("SELECT id FROM units WHERE id=?").get(unitId);
+  const unit = await db.prepare("SELECT id FROM units WHERE id=?").get(unitId);
   assert(unit, 400, "INVALID_INPUT", "Đơn vị lập kế hoạch không tồn tại.");
   const scope = unitScope(user);
-  const unitAllowed = db
+  const unitAllowed = await db
     .prepare(`SELECT 1 FROM units u WHERE ${scope.sql} AND u.id=?`)
     .get(...scope.params, unitId);
   assert(unitAllowed, 403, "FORBIDDEN", "Đơn vị kế hoạch nằm ngoài phạm vi được cấp.");
@@ -126,40 +126,44 @@ export function createPlan(db, user, payload, ip) {
     ? trimmed(payload.code, "Mã kế hoạch", 1, 100)
     : `KHKT-${year}-${randomUUID().slice(0, 8).toUpperCase()}`;
   assert(
-    !db.prepare("SELECT 1 FROM inspection_plans WHERE code=? COLLATE NOCASE").get(code),
+    !(await db.prepare("SELECT 1 FROM inspection_plans WHERE code=?").get(code)),
     409,
     "DUPLICATE",
     "Mã kế hoạch đã tồn tại.",
   );
   const now = Date.now();
-  return transaction(db, () => {
-    db.prepare(
-      `INSERT INTO inspection_plans(
+  return await transaction(db, async () => {
+    await db
+      .prepare(
+        `INSERT INTO inspection_plans(
         id,code,year,title,facility_group,legal_basis,unit_id,annual_target,status,
         created_by,updated_by,created_at,updated_at
       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    ).run(
-      id,
-      code,
-      year,
-      title,
-      optionalText(payload.facility_group, "Nhóm cơ sở", 200),
-      optionalText(payload.legal_basis, "Căn cứ", 2000),
-      unitId,
-      annualTarget,
-      status,
-      user.id,
-      user.id,
-      now,
-      now,
-    );
-    db.prepare(
-      `INSERT INTO inspection_targets(
+      )
+      .run(
+        id,
+        code,
+        year,
+        title,
+        optionalText(payload.facility_group, "Nhóm cơ sở", 200),
+        optionalText(payload.legal_basis, "Căn cứ", 2000),
+        unitId,
+        annualTarget,
+        status,
+        user.id,
+        user.id,
+        now,
+        now,
+      );
+    await db
+      .prepare(
+        `INSERT INTO inspection_targets(
         id,plan_id,period_type,year,target_count,created_by,updated_by,created_at,updated_at
       ) VALUES (?,?,?,?,?,?,?,?,?)`,
-    ).run(randomUUID(), id, "year", year, annualTarget, user.id, user.id, now, now);
-    const created = db.prepare("SELECT * FROM inspection_plans WHERE id=?").get(id);
-    writeAudit(db, {
+      )
+      .run(randomUUID(), id, "year", year, annualTarget, user.id, user.id, now, now);
+    const created = await db.prepare("SELECT * FROM inspection_plans WHERE id=?").get(id);
+    await writeAudit(db, {
       actorId: user.id,
       feature: "M06.planning",
       objectType: "inspection_plan",
@@ -172,7 +176,7 @@ export function createPlan(db, user, payload, ip) {
   });
 }
 
-export function updatePlan(db, user, id, payload, ip) {
+export async function updatePlan(db, user, id, payload, ip) {
   requirePlanning(user, "edit");
   requireRole(user, PLAN_ROLES, "Vai trò hiện tại không được cập nhật kế hoạch kiểm tra.");
   object(payload, [
@@ -184,7 +188,7 @@ export function updatePlan(db, user, id, payload, ip) {
     "version",
     "change_reason",
   ]);
-  const before = scopedPlan(db, user, id);
+  const before = await scopedPlan(db, user, id);
   assert(before.status !== "closed", 409, "INVALID_STATE", "Kế hoạch đã đóng không thể chỉnh sửa.");
   assert(
     Number.isInteger(payload.version) && payload.version === before.version,
@@ -205,11 +209,13 @@ export function updatePlan(db, user, id, payload, ip) {
     payload.annual_target == null
       ? before.annual_target
       : integer(payload.annual_target, "Chỉ tiêu năm", 1, 1000000);
-  const allocated = db
-    .prepare(
-      "SELECT coalesce(sum(target_count),0) AS n FROM inspection_targets WHERE plan_id=? AND period_type='month' AND officer_id IS NULL AND region_id IS NULL",
-    )
-    .get(id).n;
+  const allocated = (
+    await db
+      .prepare(
+        "SELECT coalesce(sum(target_count),0) AS n FROM inspection_targets WHERE plan_id=? AND period_type='month' AND officer_id IS NULL AND region_id IS NULL",
+      )
+      .get(id)
+  ).n;
   assert(
     annualTarget >= allocated,
     409,
@@ -241,26 +247,30 @@ export function updatePlan(db, user, id, payload, ip) {
         : optionalText(payload.legal_basis, "Căn cứ", 2000),
   };
   const now = Date.now();
-  return transaction(db, () => {
-    db.prepare(
-      `UPDATE inspection_plans SET title=?,facility_group=?,legal_basis=?,annual_target=?,status=?,
+  return await transaction(db, async () => {
+    await db
+      .prepare(
+        `UPDATE inspection_plans SET title=?,facility_group=?,legal_basis=?,annual_target=?,status=?,
         version=version+1,updated_by=?,updated_at=? WHERE id=? AND version=?`,
-    ).run(
-      next.title,
-      next.facility_group,
-      next.legal_basis,
-      annualTarget,
-      status,
-      user.id,
-      now,
-      id,
-      before.version,
-    );
-    db.prepare(
-      "UPDATE inspection_targets SET target_count=?,updated_by=?,updated_at=? WHERE plan_id=? AND period_type='year'",
-    ).run(annualTarget, user.id, now, id);
-    const after = db.prepare("SELECT * FROM inspection_plans WHERE id=?").get(id);
-    writeAudit(db, {
+      )
+      .run(
+        next.title,
+        next.facility_group,
+        next.legal_basis,
+        annualTarget,
+        status,
+        user.id,
+        now,
+        id,
+        before.version,
+      );
+    await db
+      .prepare(
+        "UPDATE inspection_targets SET target_count=?,updated_by=?,updated_at=? WHERE plan_id=? AND period_type='year'",
+      )
+      .run(annualTarget, user.id, now, id);
+    const after = await db.prepare("SELECT * FROM inspection_plans WHERE id=?").get(id);
+    await writeAudit(db, {
       actorId: user.id,
       feature: "M06.planning",
       objectType: "inspection_plan",
@@ -278,18 +288,18 @@ export function updatePlan(db, user, id, payload, ip) {
 // Ancillary: options dropdown data and facility listing for a plan
 // ---------------------------------------------------------------------------
 
-export function planningOptions(db, user, url) {
+export async function planningOptions(db, user, url) {
   requirePlanning(user);
   const planId = url.searchParams.get("planId");
-  const plan = planId ? scopedPlan(db, user, planId) : null;
+  const plan = planId ? await scopedPlan(db, user, planId) : null;
   const unitId = plan?.unit_id;
   const scope = unitScope(user);
   return {
-    units: db
+    units: await db
       .prepare(`SELECT id,name FROM units u WHERE ${scope.sql} ORDER BY name`)
       .all(...scope.params),
     regions: unitId
-      ? db
+      ? await db
           .prepare(
             `SELECT id,name,unit_id FROM regions WHERE unit_id IN (
               WITH RECURSIVE d(id) AS (
@@ -300,7 +310,7 @@ export function planningOptions(db, user, url) {
           .all(unitId)
       : [],
     officers: unitId
-      ? db
+      ? await db
           .prepare(
             `SELECT id,officer_code,full_name,position FROM officers WHERE unit_id IN (
               WITH RECURSIVE d(id) AS (
@@ -310,7 +320,7 @@ export function planningOptions(db, user, url) {
           )
           .all(unitId)
       : [],
-    checklists: db
+    checklists: await db
       .prepare(
         "SELECT id,name,facility_type FROM inspection_checklists WHERE is_active=1 ORDER BY name",
       )
@@ -318,8 +328,8 @@ export function planningOptions(db, user, url) {
   };
 }
 
-export function listPlanFacilities(db, user, planId, url) {
-  const plan = scopedPlan(db, user, planId);
+export async function listPlanFacilities(db, user, planId, url) {
+  const plan = await scopedPlan(db, user, planId);
   const { page, pageSize } = pagination(url);
   const scope = facilityScope(user);
   const q = foldSearchText(optionalText(url.searchParams.get("q"), "Từ khóa", 200));
@@ -329,14 +339,14 @@ export function listPlanFacilities(db, user, planId, url) {
   const params = [...scope.params, plan.unit_id, q, q];
   const base = `FROM facilities f JOIN regions r ON r.id=f.region_id LEFT JOIN officer_directory o ON o.officer_id=f.officer_id WHERE ${where}`;
   return {
-    items: db
+    items: await db
       .prepare(
         `SELECT f.id,f.name,f.address,f.region_id,r.name AS region_name,f.officer_id,o.full_name AS officer_name,
       (SELECT count(*) FROM inspections i WHERE i.plan_id=? AND i.facility_id=f.id) AS planned_count
       ${base} ORDER BY f.name LIMIT ? OFFSET ?`,
       )
       .all(planId, ...params, pageSize, (page - 1) * pageSize),
-    total: db.prepare(`SELECT count(*) AS n ${base}`).get(...params).n,
+    total: (await db.prepare(`SELECT count(*) AS n ${base}`).get(...params)).n,
     page,
     pageSize,
   };

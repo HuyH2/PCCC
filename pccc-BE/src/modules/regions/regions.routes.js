@@ -25,8 +25,8 @@ export const regionsRoutes = [
   {
     method: "GET",
     path: "/api/regions",
-    handle: (ctx) =>
-      listRegions(ctx.db, ctx.user, {
+    handle: async (ctx) =>
+      await listRegions(ctx.db, ctx.user, {
         ...pagination(ctx.url),
         search: ctx.url.searchParams.get("search") ?? "",
         unitId: ctx.url.searchParams.get("unitId") ?? "",
@@ -35,8 +35,8 @@ export const regionsRoutes = [
   {
     method: "GET",
     path: "/api/regions/officers",
-    handle: (ctx) =>
-      assignableOfficers(ctx.db, ctx.user, ctx.url.searchParams.get("regionId") ?? ""),
+    handle: async (ctx) =>
+      await assignableOfficers(ctx.db, ctx.user, ctx.url.searchParams.get("regionId") ?? ""),
   },
   {
     method: "POST",
@@ -44,39 +44,39 @@ export const regionsRoutes = [
     async handle(ctx) {
       const payload = await ctx.readJson();
       ctx.status = 201;
-      return createRegion(ctx.db, ctx.user, payload, ctx.ip);
+      return await createRegion(ctx.db, ctx.user, payload, ctx.ip);
     },
   },
   {
     method: "GET",
     path: /^\/api\/regions\/([^/]+)$/,
-    handle: (ctx, match) =>
-      getRegion(ctx.db, ctx.user, decodeRegionId(match[1]), pagination(ctx.url)),
+    handle: async (ctx, match) =>
+      await getRegion(ctx.db, ctx.user, decodeRegionId(match[1]), pagination(ctx.url)),
   },
   {
     method: "PUT",
     path: /^\/api\/regions\/([^/]+)$/,
     async handle(ctx, match) {
       const payload = await ctx.readJson();
-      return updateRegion(ctx.db, ctx.user, decodeRegionId(match[1]), payload, ctx.ip);
+      return await updateRegion(ctx.db, ctx.user, decodeRegionId(match[1]), payload, ctx.ip);
     },
   },
   {
     method: "GET",
     path: /^\/api\/regions\/([^/]+)\/officers$/,
-    handle: (ctx, match) => regionOfficers(ctx.db, ctx.user, decodeRegionId(match[1])),
+    handle: async (ctx, match) => await regionOfficers(ctx.db, ctx.user, decodeRegionId(match[1])),
   },
   {
     method: "POST",
     path: /^\/api\/regions\/([^/]+)\/assignment$/,
     async handle(ctx, match) {
       const payload = await ctx.readJson();
-      return assignRegion(ctx.db, ctx.user, decodeRegionId(match[1]), payload, ctx.ip);
+      return await assignRegion(ctx.db, ctx.user, decodeRegionId(match[1]), payload, ctx.ip);
     },
   },
   {
     method: "GET",
     path: "/api/units",
-    handle: (ctx) => listUnits(ctx.db, ctx.user),
+    handle: async (ctx) => await listUnits(ctx.db, ctx.user),
   },
 ];

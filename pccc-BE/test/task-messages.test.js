@@ -9,15 +9,15 @@ const password = "Task-messages-test-2026";
 const origin = "http://localhost:3000";
 
 async function fixture(t) {
-  const db = openDatabase(":memory:");
+  const db = await openDatabase(":memory:");
   await seedDemo(db, password);
-  db.exec("UPDATE accounts SET must_change_password=0");
+  await db.exec("UPDATE accounts SET must_change_password=0");
   const server = createApp(db);
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   t.after(async () => {
     await new Promise((resolve) => server.close(resolve));
-    db.close();
+    await db.close();
   });
   const base = `http://127.0.0.1:${server.address().port}`;
   async function request(path, { method = "GET", cookie, body } = {}) {
@@ -69,34 +69,40 @@ test("seed creates real tasks and a message once without replacing a conversatio
     ["demo.admin", "demo.tong-hop"],
   );
   await seedDemo(db, password);
-  assert.equal(db.prepare("SELECT count(*) AS n FROM tasks").get().n, 7);
-  assert.equal(db.prepare("SELECT count(*) AS n FROM task_messages").get().n, 13);
-  db.prepare(
-    "DELETE FROM role_permissions WHERE role_code='A03' AND permission_code='M07.edit'",
-  ).run();
+  assert.equal((await db.prepare("SELECT count(*) AS n FROM tasks").get()).n, 7);
+  assert.equal((await db.prepare("SELECT count(*) AS n FROM task_messages").get()).n, 13);
+  await db
+    .prepare("DELETE FROM role_permissions WHERE role_code='A03' AND permission_code='M07.edit'")
+    .run();
   await seedDemo(db, password);
   assert.equal(
-    db
-      .prepare(
-        "SELECT count(*) AS n FROM role_permissions WHERE role_code='A03' AND permission_code='M07.edit'",
-      )
-      .get().n,
+    (
+      await db
+        .prepare(
+          "SELECT count(*) AS n FROM role_permissions WHERE role_code='A03' AND permission_code='M07.edit'",
+        )
+        .get()
+    ).n,
     0,
   );
 });
 
 test("re-seed backfills only untouched pre-progress demo tasks", async (t) => {
   const { db } = await fixture(t);
-  db.prepare("UPDATE tasks SET progress=0,due_at=NULL,updated_at=NULL WHERE id='CV-DEMO-02'").run();
-  db.prepare("UPDATE tasks SET progress=0,due_at=NULL,updated_at=123 WHERE id='CV-DEMO-01'").run();
+  await db
+    .prepare("UPDATE tasks SET progress=0,due_at=NULL,updated_at=NULL WHERE id='CV-DEMO-02'")
+    .run();
+  await db
+    .prepare("UPDATE tasks SET progress=0,due_at=NULL,updated_at=123 WHERE id='CV-DEMO-01'")
+    .run();
   await seedDemo(db, password);
-  const legacy = db
+  const legacy = await db
     .prepare("SELECT progress,due_at,updated_at FROM tasks WHERE id='CV-DEMO-02'")
     .get();
   assert.equal(legacy.progress, 60);
   assert.ok(legacy.due_at > Date.now());
   assert.ok(legacy.updated_at > 123);
-  const edited = db
+  const edited = await db
     .prepare("SELECT progress,due_at,updated_at FROM tasks WHERE id='CV-DEMO-01'")
     .get();
   assert.equal(edited.progress, 0);
@@ -140,12 +146,9 @@ test("only task participants can read and exchange messages; input and paging ar
   assert.equal(received.data.total, 2);
   assert.equal(received.data.items.at(-1).id, sent.data.message.id);
   for (let i = 0; i < 22; i++)
-    db.prepare("INSERT INTO task_messages(task_id,sender_id,body,created_at) VALUES (?,?,?,?)").run(
-      "CV-DEMO-01",
-      "DEMO-A03",
-      `Tin mẫu ${i}`,
-      Date.now() + i,
-    );
+    await db
+      .prepare("INSERT INTO task_messages(task_id,sender_id,body,created_at) VALUES (?,?,?,?)")
+      .run("CV-DEMO-01", "DEMO-A03", `Tin mẫu ${i}`, Date.now() + i);
   const newest = await request(`${path}?page=1&pageSize=20`, { cookie: officer });
   const older = await request(`${path}?page=2&pageSize=20`, { cookie: officer });
   assert.equal(newest.data.total, 24);
@@ -188,17 +191,24 @@ test("author can edit and soft-delete, others cannot; closed tasks reject mutati
   const deleted = visible.data.items.find((message) => message.id === id);
   assert.equal(deleted.body, null);
   assert(deleted.deleted_at);
-  assert.equal(db.prepare("SELECT body FROM task_messages WHERE id=?").get(id).body, "Bản đã sửa");
+  assert.equal(
+    (await db.prepare("SELECT body FROM task_messages WHERE id=?").get(id)).body,
+    "Bản đã sửa",
+  );
   assert.equal(
     (await request(`${path}/${id}`, { method: "PUT", cookie: officer, body: { body: "Sửa lại" } }))
       .status,
     409,
   );
   assert.equal(
-    db.prepare("SELECT count(*) AS n FROM audit_logs WHERE action LIKE 'task_message.%'").get().n,
+    (
+      await db
+        .prepare("SELECT count(*) AS n FROM audit_logs WHERE action LIKE 'task_message.%'")
+        .get()
+    ).n,
     3,
   );
-  db.prepare("UPDATE tasks SET status='completed' WHERE id='CV-DEMO-01'").run();
+  await db.prepare("UPDATE tasks SET status='completed' WHERE id='CV-DEMO-01'").run();
   assert.equal(
     (await request(path, { method: "POST", cookie: officer, body: { body: "Sau đóng" } })).status,
     409,
@@ -209,23 +219,23 @@ test("author can edit and soft-delete, others cannot; closed tasks reject mutati
 test("audit failure rolls back message creation", async (t) => {
   const { db, request, login } = await fixture(t);
   const officer = await login("demo.can-bo");
-  const previous = db.prepare("SELECT count(*) AS n FROM task_messages").get().n;
-  db.exec(`CREATE TRIGGER reject_task_audit BEFORE INSERT ON audit_logs
-    WHEN NEW.action='task_message.sent'
-    BEGIN SELECT RAISE(ABORT,'audit unavailable'); END`);
+  const previous = (await db.prepare("SELECT count(*) AS n FROM task_messages").get()).n;
+  await db.exec(
+    `CREATE TRIGGER reject_task_audit BEFORE INSERT ON audit_logs FOR EACH ROW WHEN (NEW.action='task_message.sent') EXECUTE FUNCTION raise_abort('audit unavailable')`,
+  );
   const result = await request("/api/tasks/CV-DEMO-01/messages", {
     method: "POST",
     cookie: officer,
     body: { body: "Không lưu dở dang" },
   });
   assert.equal(result.status, 500);
-  assert.equal(db.prepare("SELECT count(*) AS n FROM task_messages").get().n, previous);
+  assert.equal((await db.prepare("SELECT count(*) AS n FROM task_messages").get()).n, previous);
 });
 
 test("an assigned account with no active data scope cannot read its task", async (t) => {
   const { db, request, login } = await fixture(t);
   const officer = await login("demo.can-bo");
-  db.prepare("DELETE FROM account_scopes WHERE account_id='DEMO-A03'").run();
+  await db.prepare("DELETE FROM account_scopes WHERE account_id='DEMO-A03'").run();
   assert.equal((await request("/api/tasks", { cookie: officer })).status, 403);
   assert.equal((await request("/api/tasks/CV-DEMO-01/messages", { cookie: officer })).status, 403);
 });
@@ -272,15 +282,17 @@ test("commander assigns a scoped task; assignee updates durable progress and his
   });
   assert.equal(updated.status, 200);
   assert.equal(updated.data.task.progress, 50);
-  assert.equal(db.prepare("SELECT progress FROM tasks WHERE id=?").get(id).progress, 50);
+  assert.equal((await db.prepare("SELECT progress FROM tasks WHERE id=?").get(id)).progress, 50);
   const history = await request(`/api/tasks/${id}/progress-history`, { cookie: commander });
   assert.equal(history.data.total, 1);
   assert.equal(history.data.items[0].after.note, "Đã rà soát một nửa");
   assert.equal((await request(`/api/tasks/${id}/progress-history`, { cookie: admin })).status, 404);
   assert.equal(
-    db
-      .prepare("SELECT count(*) AS n FROM audit_logs WHERE object_id=? AND action LIKE 'task.%'")
-      .get(id).n,
+    (
+      await db
+        .prepare("SELECT count(*) AS n FROM audit_logs WHERE object_id=? AND action LIKE 'task.%'")
+        .get(id)
+    ).n,
     2,
   );
 });
@@ -310,8 +322,12 @@ test("assignment rejects unprivileged, out-of-scope and invalid changes", async 
     ).status,
     400,
   );
-  db.prepare("INSERT INTO units(id,name,code) VALUES ('DV-OTHER','Đơn vị khác','DV-OTHER')").run();
-  db.prepare("UPDATE account_scopes SET unit_id='DV-OTHER' WHERE account_id='DEMO-A04'").run();
+  await db
+    .prepare("INSERT INTO units(id,name,code) VALUES ('DV-OTHER','Đơn vị khác','DV-OTHER')")
+    .run();
+  await db
+    .prepare("UPDATE account_scopes SET unit_id='DV-OTHER' WHERE account_id='DEMO-A04'")
+    .run();
   assert.equal(
     (
       await request("/api/tasks", {
@@ -335,7 +351,7 @@ test("assignment rejects unprivileged, out-of-scope and invalid changes", async 
     ).status,
     400,
   );
-  db.prepare("DELETE FROM account_scopes WHERE account_id='DEMO-A03'").run();
+  await db.prepare("DELETE FROM account_scopes WHERE account_id='DEMO-A03'").run();
   assert.equal(
     (
       await request(`/api/tasks/${id}/progress`, {
@@ -351,10 +367,11 @@ test("assignment rejects unprivileged, out-of-scope and invalid changes", async 
 test("task progress rolls back when audit logging fails", async (t) => {
   const { db, request, login } = await fixture(t);
   const officer = await login("demo.can-bo");
-  const initial = db.prepare("SELECT progress FROM tasks WHERE id='CV-DEMO-01'").get().progress;
-  db.exec(`CREATE TRIGGER reject_progress_audit BEFORE INSERT ON audit_logs
-    WHEN NEW.action='task.progress_updated'
-    BEGIN SELECT RAISE(ABORT,'audit unavailable'); END`);
+  const initial = (await db.prepare("SELECT progress FROM tasks WHERE id='CV-DEMO-01'").get())
+    .progress;
+  await db.exec(
+    `CREATE TRIGGER reject_progress_audit BEFORE INSERT ON audit_logs FOR EACH ROW WHEN (NEW.action='task.progress_updated') EXECUTE FUNCTION raise_abort('audit unavailable')`,
+  );
   const result = await request("/api/tasks/CV-DEMO-01/progress", {
     method: "PUT",
     cookie: officer,
@@ -362,7 +379,7 @@ test("task progress rolls back when audit logging fails", async (t) => {
   });
   assert.equal(result.status, 500);
   assert.equal(
-    db.prepare("SELECT progress FROM tasks WHERE id='CV-DEMO-01'").get().progress,
+    (await db.prepare("SELECT progress FROM tasks WHERE id='CV-DEMO-01'").get()).progress,
     initial,
   );
 });

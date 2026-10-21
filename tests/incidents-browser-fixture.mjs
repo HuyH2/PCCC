@@ -11,10 +11,7 @@ import { runDemoSeed } from "../pccc-BE/scripts/seed-incidents-demo.js";
 const repository = fileURLToPath(new URL("../", import.meta.url));
 const frontendRequire = createRequire(new URL("../pccc-FE/package.json", import.meta.url));
 const nextBinary = frontendRequire.resolve("next/dist/bin/next");
-const databasePath = resolve(
-  repository,
-  "pccc-BE/data/m09-browser-verification/incidents-demo.sqlite",
-);
+const databasePath = resolve(repository, "pccc-BE/data/m09-browser-verification/incidents-demo-db");
 const uploadDirectory = resolve(
   repository,
   "pccc-BE/private/m09-browser-verification/incidents-demo-uploads",
@@ -40,10 +37,12 @@ if (
 ) {
   throw new Error("Browser fixture paths must resolve to their explicit verification directories.");
 }
-const db = openDatabase(databasePath);
+const db = await openDatabase(databasePath);
 // Only this marked synthetic database receives these test grants.
 for (const action of ["view", "create", "edit", "approve", "export"])
-  db.prepare("INSERT OR IGNORE INTO role_permissions VALUES (?,?)").run("A04", `M09.${action}`);
+  await db
+    .prepare("INSERT INTO role_permissions VALUES (?,?) ON CONFLICT DO NOTHING")
+    .run("A04", `M09.${action}`);
 
 const backend = createApp(db, { appOrigin: origin, uploadDirectory });
 let frontend;
@@ -58,7 +57,7 @@ async function stop(code = 0) {
       await ended;
     }
     if (backend.listening) await new Promise((done) => backend.close(done));
-    db.close();
+    await db.close();
     console.info(
       JSON.stringify({
         fixture: "M09_BROWSER_DEMO",

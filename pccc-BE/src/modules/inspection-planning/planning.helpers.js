@@ -116,9 +116,9 @@ export function planScope(user) {
 // Unit hierarchy helper
 // ---------------------------------------------------------------------------
 
-export function unitWithin(db, childUnitId, parentUnitId) {
+export async function unitWithin(db, childUnitId, parentUnitId) {
   return Boolean(
-    db
+    await db
       .prepare(
         `WITH RECURSIVE d(id) AS (
           SELECT id FROM units WHERE id=?

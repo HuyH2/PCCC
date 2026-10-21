@@ -35,14 +35,14 @@ A06 Người xem, A07 (chưa kích hoạt). Quyền = **RBAC** (`Mxx.view/edit�
 process, một database**, chia thành các module nghiệp vụ độc lập.
 
 ```
-Trình duyệt ──► pccc-FE: Next.js 16 (cổng 3000) ──/api/*──► pccc-BE: Node.js (cổng 4000) ──► SQLite
+Trình duyệt ──► pccc-FE: Next.js 16 (cổng 3000) ──/api/*──► pccc-BE: Node.js (cổng 4000) ──► PostgreSQL
                 src/proxy.ts kiểm tra session                app.js → modules/*/routes
 ```
 
 | Phần    | Công nghệ                                                                                            |
 | ------- | ---------------------------------------------------------------------------------------------------- |
 | pccc-FE | Next.js 16 App Router, React 19, TypeScript, Tailwind v4, shadcn/ui, Recharts, react-hook-form + zod |
-| pccc-BE | Node.js >= 22.13, ES modules, không dependency ngoài; SQLite qua `node:sqlite`                       |
+| pccc-BE | Node.js >= 22.13, ES modules; PostgreSQL qua `pg`, PGlite (PostgreSQL nhúng) cho local/test          |
 | Auth    | Session cookie HttpOnly `pccc_session`, mật khẩu scrypt, kiểm tra Origin chống CSRF                  |
 | Test    | `node:test` + `node:assert/strict`, DB `:memory:`, gọi HTTP thật                                     |
 | Tooling | pnpm workspace; ESLint + Prettier dùng chung ở root; CI GitHub Actions                               |
@@ -361,6 +361,15 @@ Thêm mục mới **ở cuối** danh sách, theo mẫu ở §7.
 - **Frontend:** `/co-so` dùng API thật với bộ lọc/phân trang; `/co-so/them` gửi form tới API; chi tiết và sửa tiếp tục dùng dữ liệu backend.
 - **Test:** `pccc-BE/test/facilities.test.js` kiểm tra tạo mới, validation, duplicate, audit, scope, filter và quyền.
 - **Ghi chú:** Schema hiện tại chỉ lưu tên, địa chỉ, khu vực, cán bộ và trạng thái. Các thuộc tính mock như diện tích, số tầng, thông tin liên hệ và lịch kiểm tra không được giả lập là đã lưu.
+
+### F14 — Chuyển database từ SQLite sang PostgreSQL (hạ tầng, phục vụ deploy)
+
+- **Người làm / branch:** Claude Code — `feature/postgresql-migration`.
+- **Mô tả:** Backend chuyển từ `node:sqlite` sang PostgreSQL để deploy được trên hosting không có ổ đĩa lưu lâu dài (database ở Neon/Supabase...). Nghiệp vụ, API và quyền không đổi.
+- **Backend:** `src/core/database.js` viết lại: API async `prepare().get/all/run`, `exec`, `transaction` (AsyncLocalStorage + savepoint, một transaction ghi tại một thời điểm như `BEGIN IMMEDIATE`), tự đổi `?` sang `$n`, BIGINT/NUMERIC trả về number và boolean trả về 1/0. `DATABASE_URL` nhận `postgresql://...` hoặc thư mục PGlite (mặc định `./data/pccc-pg`, local không cần cài PostgreSQL). 28 migration SQLite thay bằng `migrations/001-postgresql-baseline.sql` (66 bảng, trigger append-only, view, hàm `fold`/`search_text`/`instr`, `citext` cho cột không phân biệt hoa thường). Toàn bộ service/route/seed/script chuyển sang `async/await`; script seed M09 dùng thư mục `incidents-demo-db`.
+- **Frontend:** Không đổi (chỉ bỏ biến PostgreSQL thừa trong `.env.example`).
+- **Test:** 160 test backend PASS trên PGlite và trên PostgreSQL 16 (`PCCC_TEST_DATABASE_URL`); `pnpm test:integration` và `tests/incidents-integration.test.mjs` PASS. Bỏ 5 test chỉ kiểm tra đường nâng cấp giữa các migration SQLite cũ.
+- **Ghi chú:** Không chuyển dữ liệu từ file SQLite cũ (chỉ có dữ liệu demo; chạy lại `pnpm migrate` + `pnpm seed`). File upload (tài liệu cơ sở/sự cố) vẫn lưu trên ổ đĩa backend; hosting không có ổ đĩa bền sẽ mất các file này khi restart.
 
 ## 7. Quy tắc khi làm feature
 

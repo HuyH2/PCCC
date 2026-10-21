@@ -11,21 +11,21 @@ import { tokenHash } from "../src/modules/auth/auth.service.js";
 
 const password = "Temporary-test-password-2026";
 const origin = "http://localhost:3000";
-const migrationCount = readdirSync(new URL("../migrations/", import.meta.url)).filter(
-  (f) => f.endsWith(".sql") || f.endsWith(".cjs"),
+const migrationCount = readdirSync(new URL("../migrations/", import.meta.url)).filter((f) =>
+  f.endsWith(".sql"),
 ).length;
 
 async function fixture(t) {
-  const db = openDatabase(":memory:");
+  const db = await openDatabase(":memory:");
   await seedDemo(db, password);
   // Most tests exercise normal access; first-login behavior has its own test.
-  db.exec("UPDATE accounts SET must_change_password=0");
+  await db.exec("UPDATE accounts SET must_change_password=0");
   const server = createApp(db, { appOrigin: origin });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   t.after(async () => {
     await new Promise((resolve) => server.close(resolve));
-    db.close();
+    await db.close();
   });
   const base = `http://127.0.0.1:${server.address().port}`;
   async function request(path, { method = "GET", body, cookie, headers = {} } = {}) {
@@ -59,54 +59,63 @@ async function fixture(t) {
 
 test("migration persists, reopens idempotently, and enforces FK/unique/audit constraints", async () => {
   const directory = mkdtempSync(join(tmpdir(), "pccc-auth-test-"));
-  const path = join(directory, "auth.sqlite");
+  const path = join(directory, "auth-db");
   let db;
   try {
-    db = openDatabase(path);
+    db = await openDatabase(path);
     await seedDemo(db, password);
-    db.close();
-    db = openDatabase(path);
-    assert.equal(db.prepare("SELECT count(*) AS n FROM schema_migrations").get().n, migrationCount);
-    assert.equal(db.prepare("SELECT count(*) AS n FROM accounts").get().n, 6);
-    assert.throws(() =>
-      db.prepare("INSERT INTO role_permissions VALUES (?,?)").run("A99", "M03.view"),
+    await db.close();
+    db = await openDatabase(path);
+    assert.equal(
+      (await db.prepare("SELECT count(*) AS n FROM schema_migrations").get()).n,
+      migrationCount,
     );
-    assert.throws(() =>
-      db.prepare("INSERT INTO role_permissions VALUES (?,?)").run("A03", "M03.view"),
+    assert.equal((await db.prepare("SELECT count(*) AS n FROM accounts").get()).n, 6);
+    await assert.rejects(
+      async () =>
+        await db.prepare("INSERT INTO role_permissions VALUES (?,?)").run("A99", "M03.view"),
     );
-    assert.throws(() =>
-      db
-        .prepare(
-          "INSERT INTO account_scopes(account_id,kind,region_id) VALUES ('DEMO-A03','region','missing')",
-        )
-        .run(),
+    await assert.rejects(
+      async () =>
+        await db.prepare("INSERT INTO role_permissions VALUES (?,?)").run("A03", "M03.view"),
     );
-    db.prepare("INSERT INTO audit_logs(action,occurred_at,ip) VALUES ('test',1,'local')").run();
-    assert.throws(() => db.exec("UPDATE audit_logs SET action='changed'"));
-    assert.throws(() => db.exec("DELETE FROM audit_logs"));
+    await assert.rejects(
+      async () =>
+        await db
+          .prepare(
+            "INSERT INTO account_scopes(account_id,kind,region_id) VALUES ('DEMO-A03','region','missing')",
+          )
+          .run(),
+    );
+    await db
+      .prepare("INSERT INTO audit_logs(action,occurred_at,ip) VALUES ('test',1,'local')")
+      .run();
+    await assert.rejects(async () => await db.exec("UPDATE audit_logs SET action='changed'"));
+    await assert.rejects(async () => await db.exec("DELETE FROM audit_logs"));
   } finally {
-    db?.close();
+    await db?.close();
     rmSync(directory, { recursive: true, force: true });
   }
 });
 
 test("seed preserves existing password, permissions and scopes", async (t) => {
   const { db } = await fixture(t);
-  const before = db.prepare("SELECT password_hash FROM accounts WHERE id='DEMO-A03'").get();
-  db.exec(
+  const before = await db.prepare("SELECT password_hash FROM accounts WHERE id='DEMO-A03'").get();
+  await db.exec(
     "DELETE FROM role_permissions WHERE role_code='A03'; DELETE FROM account_scopes WHERE account_id='DEMO-A03'",
   );
   await seedDemo(db, "Another-temporary-password");
   assert.deepEqual(
-    db.prepare("SELECT password_hash FROM accounts WHERE id='DEMO-A03'").get(),
+    await db.prepare("SELECT password_hash FROM accounts WHERE id='DEMO-A03'").get(),
     before,
   );
   assert.equal(
-    db.prepare("SELECT count(*) AS n FROM role_permissions WHERE role_code='A03'").get().n,
+    (await db.prepare("SELECT count(*) AS n FROM role_permissions WHERE role_code='A03'").get()).n,
     0,
   );
   assert.equal(
-    db.prepare("SELECT count(*) AS n FROM account_scopes WHERE account_id='DEMO-A03'").get().n,
+    (await db.prepare("SELECT count(*) AS n FROM account_scopes WHERE account_id='DEMO-A03'").get())
+      .n,
     0,
   );
 });
@@ -124,7 +133,10 @@ test("login sets HttpOnly session, persists identity, rotates and logs out with 
   assert.ok(!JSON.stringify(result.data).includes("password_hash"));
   const cookie = result.cookie.split(";")[0];
   const token = cookie.split("=")[1];
-  assert.equal(db.prepare("SELECT token_hash FROM sessions").get().token_hash, tokenHash(token));
+  assert.equal(
+    (await db.prepare("SELECT token_hash FROM sessions").get()).token_hash,
+    tokenHash(token),
+  );
   assert.equal((await request("/api/auth/me", { cookie })).data.user.role, "A05");
   const rotation = await request("/api/auth/login", {
     method: "POST",
@@ -141,7 +153,7 @@ test("login sets HttpOnly session, persists identity, rotates and logs out with 
   assert.equal((await request("/api/auth/me", { cookie: activeCookie })).status, 401);
   assert.equal((await request("/api/auth/logout", { method: "POST" })).status, 200);
   assert.equal(
-    db.prepare("SELECT count(*) AS n FROM audit_logs WHERE action='auth.login'").get().n,
+    (await db.prepare("SELECT count(*) AS n FROM audit_logs WHERE action='auth.login'").get()).n,
     2,
   );
   await login("demo.can-bo");
@@ -159,7 +171,7 @@ test("wrong password and missing username have generic failure; locked/inactive/
     assert.equal(result.cookie, null);
   }
   for (const status of ["locked", "inactive"]) {
-    db.prepare("UPDATE accounts SET status=? WHERE id='DEMO-A03'").run(status);
+    await db.prepare("UPDATE accounts SET status=? WHERE id='DEMO-A03'").run(status);
     assert.equal(
       (
         await request("/api/auth/login", {
@@ -170,7 +182,7 @@ test("wrong password and missing username have generic failure; locked/inactive/
       403,
     );
   }
-  db.exec(
+  await db.exec(
     "UPDATE accounts SET status='active' WHERE id='DEMO-A03'; UPDATE roles SET enabled=0 WHERE code='A03'",
   );
   assert.equal(
@@ -182,7 +194,7 @@ test("wrong password and missing username have generic failure; locked/inactive/
     ).status,
     403,
   );
-  assert.equal(db.prepare("SELECT count(*) AS n FROM sessions").get().n, 0);
+  assert.equal((await db.prepare("SELECT count(*) AS n FROM sessions").get()).n, 0);
 });
 
 test("locked account, expired or fabricated session immediately loses access", async (t) => {
@@ -190,9 +202,9 @@ test("locked account, expired or fabricated session immediately loses access", a
   assert.equal((await request("/api/auth/me")).status, 401);
   assert.equal((await request("/api/auth/me", { cookie: "pccc_session=fake" })).status, 401);
   const cookie = await login("demo.can-bo");
-  db.exec("UPDATE accounts SET status='locked' WHERE id='DEMO-A03'");
+  await db.exec("UPDATE accounts SET status='locked' WHERE id='DEMO-A03'");
   assert.equal((await request("/api/auth/me", { cookie })).status, 401);
-  db.exec(
+  await db.exec(
     "UPDATE accounts SET status='active' WHERE id='DEMO-A03'; UPDATE sessions SET expires_at=1",
   );
   assert.equal((await request("/api/auth/me", { cookie })).status, 401);
@@ -200,7 +212,7 @@ test("locked account, expired or fabricated session immediately loses access", a
 
 test("first login requires password change, revokes all sessions, and accepts only the new password", async (t) => {
   const { db, request, login } = await fixture(t);
-  db.exec("UPDATE accounts SET must_change_password=1 WHERE id='DEMO-A03'");
+  await db.exec("UPDATE accounts SET must_change_password=1 WHERE id='DEMO-A03'");
   const result = await request("/api/auth/login", {
     method: "POST",
     body: { username: "demo.can-bo", password },
@@ -257,7 +269,7 @@ test("first login requires password change, revokes all sessions, and accepts on
     ).status,
     200,
   );
-  const audit = JSON.stringify(db.prepare("SELECT * FROM audit_logs").all());
+  const audit = JSON.stringify(await db.prepare("SELECT * FROM audit_logs").all());
   assert.ok(
     !audit.includes(password) && !audit.includes("New-password-2026") && !audit.includes(cookie),
   );
@@ -265,10 +277,9 @@ test("first login requires password change, revokes all sessions, and accepts on
 
 test("skip password change preserves password and session, persists choice and audits once", async (t) => {
   const { db, request, login } = await fixture(t);
-  db.exec("UPDATE accounts SET must_change_password=1 WHERE id='DEMO-A03'");
-  const before = db
-    .prepare("SELECT password_hash FROM accounts WHERE id='DEMO-A03'")
-    .get().password_hash;
+  await db.exec("UPDATE accounts SET must_change_password=1 WHERE id='DEMO-A03'");
+  const before = (await db.prepare("SELECT password_hash FROM accounts WHERE id='DEMO-A03'").get())
+    .password_hash;
   const cookie = await login("demo.can-bo");
   assert.equal((await request("/api/facilities", { cookie })).status, 403);
   const skipped = await request("/api/auth/skip-password-change", { method: "POST", cookie });
@@ -278,7 +289,8 @@ test("skip password change preserves password and session, persists choice and a
   assert.equal((await request("/api/facilities", { cookie })).data.total, 1);
   assert.equal((await request("/api/authorization/roles", { cookie })).status, 403);
   assert.equal(
-    db.prepare("SELECT password_hash FROM accounts WHERE id='DEMO-A03'").get().password_hash,
+    (await db.prepare("SELECT password_hash FROM accounts WHERE id='DEMO-A03'").get())
+      .password_hash,
     before,
   );
   assert.equal(
@@ -286,9 +298,11 @@ test("skip password change preserves password and session, persists choice and a
     200,
   );
   assert.equal(
-    db
-      .prepare("SELECT count(*) AS n FROM audit_logs WHERE action='auth.password_change_skipped'")
-      .get().n,
+    (
+      await db
+        .prepare("SELECT count(*) AS n FROM audit_logs WHERE action='auth.password_change_skipped'")
+        .get()
+    ).n,
     1,
   );
   await request("/api/auth/logout", { method: "POST", cookie });
@@ -302,7 +316,7 @@ test("skip password change preserves password and session, persists choice and a
 
 test("skip requires active authentication and valid origin, and affects only the session account", async (t) => {
   const { db, request, login } = await fixture(t);
-  db.exec("UPDATE accounts SET must_change_password=1");
+  await db.exec("UPDATE accounts SET must_change_password=1");
   assert.equal((await request("/api/auth/skip-password-change", { method: "POST" })).status, 401);
   const cookie = await login();
   assert.equal(
@@ -323,11 +337,11 @@ test("skip requires active authentication and valid origin, and affects only the
   assert.equal(result.status, 200);
   assert.equal(result.data.redirectTo, "/quan-tri/vai-tro");
   assert.equal(
-    db.prepare("SELECT must_change_password FROM accounts WHERE id='DEMO-A03'").get()
+    (await db.prepare("SELECT must_change_password FROM accounts WHERE id='DEMO-A03'").get())
       .must_change_password,
     1,
   );
-  db.exec("UPDATE accounts SET status='locked' WHERE id='DEMO-A05'");
+  await db.exec("UPDATE accounts SET status='locked' WHERE id='DEMO-A05'");
   assert.equal(
     (await request("/api/auth/skip-password-change", { method: "POST", cookie })).status,
     401,
@@ -446,7 +460,7 @@ test("region scope protects list/search/count/detail/dashboard and denies empty 
   assert.equal((await request("/api/facilities/CS002", { cookie })).status, 404);
   assert.equal((await request("/api/facilities?search=CS002", { cookie })).data.total, 0);
   assert.equal((await request("/api/dashboard", { cookie })).data.facilityCount, 1);
-  db.exec("DELETE FROM account_scopes WHERE account_id='DEMO-A03'");
+  await db.exec("DELETE FROM account_scopes WHERE account_id='DEMO-A03'");
   assert.equal((await request("/api/facilities", { cookie })).data.total, 0);
   assert.equal((await request("/api/dashboard", { cookie })).data.facilityCount, 0);
 });
@@ -455,9 +469,9 @@ test("unit scopes include descendants; facility-only scope limits to exactly tha
   const { db, request, login } = await fixture(t);
   const cookie = await login("demo.chi-huy");
   assert.equal((await request("/api/facilities", { cookie })).data.total, 2);
-  db.exec("UPDATE account_scopes SET unit_id='DV-PC07' WHERE account_id='DEMO-A01'");
+  await db.exec("UPDATE account_scopes SET unit_id='DV-PC07' WHERE account_id='DEMO-A01'");
   assert.equal((await request("/api/facilities", { cookie })).data.total, 3);
-  db.exec(
+  await db.exec(
     "DELETE FROM account_scopes WHERE account_id='DEMO-A01'; INSERT INTO account_scopes(account_id,kind,facility_id) VALUES ('DEMO-A01','facility','CS003')",
   );
   assert.equal((await request("/api/facilities", { cookie })).data.items[0].id, "CS003");
@@ -501,7 +515,7 @@ test("admin changes role grants immediately, rejects invalid grants, preserves l
     409,
   );
   assert.ok(
-    db
+    await db
       .prepare(
         "SELECT 1 FROM role_permissions WHERE role_code='A05' AND permission_code='M01.edit'",
       )
@@ -519,7 +533,7 @@ test("admin changes role grants immediately, rejects invalid grants, preserves l
   );
   assert.equal((await request("/api/facilities", { cookie: officer })).status, 403);
   assert.ok(
-    db
+    await db
       .prepare("SELECT 1 FROM audit_logs WHERE action='authorization.role_permissions_changed'")
       .get(),
   );
@@ -548,7 +562,7 @@ test("admin assigns role and validated scope atomically, revokes session and kee
   assert.equal((await request("/api/auth/me", { cookie: officer })).status, 401);
   const newCookie = await login("demo.can-bo");
   assert.equal((await request("/api/facilities", { cookie: newCookie })).data.items[0].id, "CS003");
-  const audit = db
+  const audit = await db
     .prepare("SELECT * FROM audit_logs WHERE action='authorization.account_changed'")
     .get();
   assert.equal(JSON.parse(audit.before_json).role, "A03");
@@ -558,7 +572,7 @@ test("admin assigns role and validated scope atomically, revokes session and kee
 test("scope-limited admin cannot configure global permissions", async (t) => {
   const { db, request, login } = await fixture(t);
   const cookie = await login();
-  db.exec(
+  await db.exec(
     "DELETE FROM account_scopes WHERE account_id='DEMO-A05'; INSERT INTO account_scopes(account_id,kind,region_id) VALUES ('DEMO-A05','region','KP01')",
   );
   assert.equal((await request("/api/authorization/roles", { cookie })).status, 403);

@@ -5,6 +5,6 @@ export const auditRoutes = [
   {
     method: "GET",
     path: "/api/audit-logs",
-    handle: (ctx) => listAuditLogs(ctx.db, ctx.user, ctx.url),
+    handle: async (ctx) => await listAuditLogs(ctx.db, ctx.user, ctx.url),
   },
 ];

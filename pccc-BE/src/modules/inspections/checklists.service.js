@@ -28,8 +28,8 @@ export function requireChecklistAuthor(user) {
 // Private helpers
 // ---------------------------------------------------------------------------
 
-function checklistItems(db, checklistId) {
-  return db
+async function checklistItems(db, checklistId) {
+  return await db
     .prepare(
       `SELECT id,position,content,guidance,legal_reference,is_required
       FROM inspection_checklist_items WHERE checklist_id=? ORDER BY position`,
@@ -42,7 +42,7 @@ function checklistItems(db, checklistId) {
 // ---------------------------------------------------------------------------
 
 /** Active checklists; facilityType keeps general checklists plus that specific type. */
-export function listChecklists(db, user, url) {
+export async function listChecklists(db, user, url) {
   requirePermission(user, "M06.view");
   const facilityType = url.searchParams.get("facilityType");
   const params = [];
@@ -53,7 +53,7 @@ export function listChecklists(db, user, url) {
     params.push(facilityType.trim());
   }
   return {
-    items: db
+    items: await db
       .prepare(
         `SELECT c.id,c.name,c.facility_type,c.description,c.legal_document_id,
           d.title AS legal_document_title,
@@ -65,9 +65,9 @@ export function listChecklists(db, user, url) {
   };
 }
 
-export function checklistDetail(db, user, id) {
+export async function checklistDetail(db, user, id) {
   requirePermission(user, "M06.view");
-  const checklist = db
+  const checklist = await db
     .prepare(
       `SELECT c.id,c.name,c.facility_type,c.description,c.legal_document_id,c.is_active,
         d.title AS legal_document_title
@@ -76,11 +76,11 @@ export function checklistDetail(db, user, id) {
     )
     .get(id);
   assert(checklist, 404, "NOT_FOUND", "Không tìm thấy checklist kiểm tra.");
-  return { checklist, items: checklistItems(db, id) };
+  return { checklist, items: await checklistItems(db, id) };
 }
 
 /** UC-INS-06 — create a checklist with its ordered items (positions follow the array order). */
-export function createChecklist(db, user, payload, ip) {
+export async function createChecklist(db, user, payload, ip) {
   requireChecklistAuthor(user);
   object(payload, ["name", "facility_type", "description", "legal_document_id", "items"]);
   const name = trimmed(payload.name, "Tên checklist", 1, 200);
@@ -116,37 +116,40 @@ export function createChecklist(db, user, payload, ip) {
   });
   if (legalDocumentId)
     assert(
-      db.prepare("SELECT 1 FROM legal_documents WHERE id=?").get(legalDocumentId),
+      await db.prepare("SELECT 1 FROM legal_documents WHERE id=?").get(legalDocumentId),
       400,
       "INVALID_INPUT",
       "Tài liệu hướng dẫn không tồn tại trong kho văn bản.",
     );
-  return transaction(db, () => {
+  return await transaction(db, async () => {
     // SQLite lower() is ASCII-only, so compare Vietnamese names case-insensitively here.
     const key = name.toLocaleLowerCase("vi");
     assert(
-      !db
-        .prepare(
-          `SELECT name FROM inspection_checklists WHERE is_active=1
+      !(
+        await db
+          .prepare(
+            `SELECT name FROM inspection_checklists WHERE is_active=1
           AND coalesce(facility_type,'')=coalesce(?,'')`,
-        )
-        .all(facilityType)
-        .some((row) => row.name.toLocaleLowerCase("vi") === key),
+          )
+          .all(facilityType)
+      ).some((row) => row.name.toLocaleLowerCase("vi") === key),
       409,
       "DUPLICATE_CHECKLIST",
       "Đã có checklist cùng tên cho loại cơ sở này.",
     );
     const id = randomUUID();
-    db.prepare(
-      `INSERT INTO inspection_checklists(id,name,facility_type,description,legal_document_id,created_by,created_at)
+    await db
+      .prepare(
+        `INSERT INTO inspection_checklists(id,name,facility_type,description,legal_document_id,created_by,created_at)
       VALUES (?,?,?,?,?,?,?)`,
-    ).run(id, name, facilityType, description, legalDocumentId, user.id, Date.now());
+      )
+      .run(id, name, facilityType, description, legalDocumentId, user.id, Date.now());
     const insertItem = db.prepare(
       `INSERT INTO inspection_checklist_items(id,checklist_id,position,content,guidance,legal_reference,is_required)
       VALUES (?,?,?,?,?,?,?)`,
     );
-    items.forEach((item, index) =>
-      insertItem.run(
+    for (const [index, item] of items.entries())
+      await insertItem.run(
         randomUUID(),
         id,
         index + 1,
@@ -154,10 +157,9 @@ export function createChecklist(db, user, payload, ip) {
         item.guidance,
         item.legalReference,
         item.required,
-      ),
-    );
-    const after = checklistDetail(db, user, id);
-    writeAudit(db, {
+      );
+    const after = await checklistDetail(db, user, id);
+    await writeAudit(db, {
       actorId: user.id,
       feature: "M06",
       objectType: "inspection_checklist",

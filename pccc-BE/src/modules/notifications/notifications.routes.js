@@ -11,7 +11,7 @@ export const notificationRoutes = [
     method: "POST",
     path: "/api/notifications",
     async handle(ctx) {
-      const result = createNotification(ctx.db, ctx.user, await ctx.readJson(), ctx.ip);
+      const result = await createNotification(ctx.db, ctx.user, await ctx.readJson(), ctx.ip);
       ctx.status = 201;
       return result;
     },
@@ -19,23 +19,23 @@ export const notificationRoutes = [
   {
     method: "GET",
     path: "/api/notifications",
-    handle(ctx) {
-      refreshReportReminders(ctx.db, ctx.user);
-      return listNotifications(ctx.db, ctx.user, ctx.url);
+    async handle(ctx) {
+      await refreshReportReminders(ctx.db, ctx.user);
+      return await listNotifications(ctx.db, ctx.user, ctx.url);
     },
   },
   {
     method: "POST",
     path: "/api/notifications/read-all",
-    handle(ctx) {
-      return markAllNotificationsRead(ctx.db, ctx.user);
+    async handle(ctx) {
+      return await markAllNotificationsRead(ctx.db, ctx.user);
     },
   },
   {
     method: "POST",
     path: /^\/api\/notifications\/([a-zA-Z0-9-]+)\/read$/,
-    handle(ctx, match) {
-      return markNotificationRead(ctx.db, ctx.user, match[1]);
+    async handle(ctx, match) {
+      return await markNotificationRead(ctx.db, ctx.user, match[1]);
     },
   },
 ];

@@ -1,10 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { request as httpRequest } from "node:http";
 import { openDatabase } from "../src/core/database.js";
 import { seedDemo } from "../src/core/seed.js";
@@ -12,22 +11,23 @@ import { createApp } from "../src/app.js";
 
 const password = "Organization-test-password-2026";
 const origin = "http://localhost:3000";
-const migrations = new URL("../migrations/", import.meta.url);
 
 async function fixture(t, databasePath = ":memory:") {
-  const db = openDatabase(databasePath);
+  const db = await openDatabase(databasePath);
   await seedDemo(db, password);
-  db.exec("UPDATE accounts SET must_change_password=0");
+  await db.exec("UPDATE accounts SET must_change_password=0");
   // Grants are test configuration, never an update to the user's database.
   for (const role of ["A01", "A03", "A04", "A05", "A06"])
     for (const permission of ["M02.view", "M02.create", "M02.edit"])
-      db.prepare("INSERT OR IGNORE INTO role_permissions VALUES (?,?)").run(role, permission);
+      await db
+        .prepare("INSERT INTO role_permissions VALUES (?,?) ON CONFLICT DO NOTHING")
+        .run(role, permission);
   const server = createApp(db, { appOrigin: origin, logger: { error() {} } });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   t.after(async () => {
     await new Promise((done) => server.close(done));
-    db.close();
+    await db.close();
   });
   const base = `http://127.0.0.1:${server.address().port}`;
   async function request(path, { method = "GET", body, cookie, headers = {} } = {}) {
@@ -94,58 +94,9 @@ async function fixture(t, databasePath = ":memory:") {
   return { db, server, base, request, login, cookie, officer, unit };
 }
 
-function auditFor(db, id) {
-  return db.prepare("SELECT * FROM audit_logs WHERE object_id=? ORDER BY id").all(id);
+async function auditFor(db, id) {
+  return await db.prepare("SELECT * FROM audit_logs WHERE object_id=? ORDER BY id").all(id);
 }
-
-test("ORG migration upgrades 001 without changing IDs, scope, accounts or facility references", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "pccc-org-upgrade-"));
-  assert.ok(resolve(directory).startsWith(resolve(tmpdir()) + sep));
-  const path = join(directory, "upgrade.sqlite");
-  let db;
-  try {
-    db = new DatabaseSync(path);
-    db.exec("PRAGMA foreign_keys=ON");
-    db.exec(readFileSync(new URL("001-auth.sql", migrations), "utf8"));
-    db.exec(
-      "CREATE TABLE schema_migrations(name TEXT PRIMARY KEY,applied_at INTEGER NOT NULL); INSERT INTO schema_migrations VALUES ('001-auth.sql',1)",
-    );
-    db.exec(`
-      INSERT INTO roles VALUES ('A05','Quản trị mẫu',1);
-      INSERT INTO permissions VALUES ('M02.view','M02','view');
-      INSERT INTO role_permissions VALUES ('A05','M02.view');
-      INSERT INTO accounts(id,username,password_hash,full_name,officer_id,role_code,created_at)
-        VALUES ('OLD-ACCOUNT','legacy','legacy-hash-preserved','Tài khoản giả lập','UNKNOWN-OFFICER','A05',1);
-      INSERT INTO units VALUES ('DV-PC07','PC07 mẫu',NULL),('DV-KV10','Khu vực 10 mẫu','DV-PC07'),('DV-KV11','Khu vực 11 mẫu','DV-PC07');
-      INSERT INTO regions VALUES ('KP01','Khu phố mẫu','DV-KV10');
-      INSERT INTO facilities VALUES ('CS001','Cơ sở giả lập','Địa chỉ giả lập','KP01','UNKNOWN-OFFICER','active');
-      INSERT INTO account_scopes(account_id,kind,unit_id) VALUES ('OLD-ACCOUNT','unit','DV-KV10');
-    `);
-    const snapshot = Object.fromEntries(
-      ["accounts", "account_scopes", "facilities", "role_permissions", "regions", "units"].map(
-        (table) => [table, db.prepare(`SELECT * FROM ${table}`).all()],
-      ),
-    );
-    db.close();
-    db = openDatabase(path);
-    for (const table of ["accounts", "account_scopes", "facilities", "role_permissions"])
-      assert.deepEqual(db.prepare(`SELECT * FROM ${table}`).all(), snapshot[table], table);
-    assert.deepEqual(db.prepare("SELECT id,name,parent_id FROM units").all(), snapshot.units);
-    assert.deepEqual(db.prepare("SELECT id,name,unit_id FROM regions").all(), snapshot.regions);
-    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
-    assert.equal(db.prepare("PRAGMA integrity_check").get().integrity_check, "ok");
-    const count = readdirSync(migrations).filter(
-      (file) => file.endsWith(".sql") || file.endsWith(".cjs"),
-    ).length;
-    assert.equal(db.prepare("SELECT count(*) AS n FROM schema_migrations").get().n, count);
-    db.close();
-    db = openDatabase(path);
-    assert.equal(db.prepare("SELECT count(*) AS n FROM schema_migrations").get().n, count);
-  } finally {
-    db?.close();
-    rmSync(directory, { recursive: true, force: true });
-  }
-});
 
 test("ORG tree uses shared units/regions and readonly root; valid ward and neighborhood persist", async (t) => {
   const f = await fixture(t);
@@ -176,7 +127,8 @@ test("ORG tree uses shared units/regions and readonly root; valid ward and neigh
     after.data.items.some((node) => node.id === result.data.region.id && node.parentId === ward.id),
   );
   assert.equal(
-    f.db.prepare("SELECT unit_id FROM regions WHERE id=?").get(result.data.region.id).unit_id,
+    (await f.db.prepare("SELECT unit_id FROM regions WHERE id=?").get(result.data.region.id))
+      .unit_id,
     ward.id,
   );
   assert.equal((await f.request(`/api/units/${ward.id}`, { cookie: f.cookie })).status, 200);
@@ -198,7 +150,7 @@ test("ORG unit edits, responsible officer and audit commit together with before/
   });
   assert.equal(response.status, 200, JSON.stringify(response.data));
   assert.equal(response.data.unit.leaderOfficerId, officer.id);
-  const logs = auditFor(f.db, ward.id);
+  const logs = await auditFor(f.db, ward.id);
   assert.equal(logs.length, 2);
   assert.equal(logs[1].actor_id, "DEMO-A05");
   assert.ok(logs[1].occurred_at > 0);
@@ -229,8 +181,8 @@ test("ORG invalid parent, level, self/cycle, duplicate code and responsible pers
     const result = await f.request("/api/units", { method: "POST", cookie: f.cookie, body });
     assert.ok([400, 404, 409].includes(result.status), JSON.stringify(result));
   }
-  const before = f.db.prepare("SELECT * FROM units WHERE id=?").get(ward.id);
-  const auditCount = auditFor(f.db, ward.id).length;
+  const before = await f.db.prepare("SELECT * FROM units WHERE id=?").get(ward.id);
+  const auditCount = (await auditFor(f.db, ward.id)).length;
   for (const body of [
     { parentId: ward.id },
     { parentId: "DV-PC07" },
@@ -243,8 +195,8 @@ test("ORG invalid parent, level, self/cycle, duplicate code and responsible pers
     });
     assert.ok([400, 404, 409].includes(result.status), JSON.stringify(result));
   }
-  assert.deepEqual(f.db.prepare("SELECT * FROM units WHERE id=?").get(ward.id), before);
-  assert.equal(auditFor(f.db, ward.id).length, auditCount);
+  assert.deepEqual(await f.db.prepare("SELECT * FROM units WHERE id=?").get(ward.id), before);
+  assert.equal((await auditFor(f.db, ward.id)).length, auditCount);
   assert.ok(
     [400, 409].includes(
       (
@@ -278,8 +230,11 @@ test("ORG empty units deactivate without physical delete; active children and re
     body: { status: "INACTIVE" },
   });
   assert.equal(result.status, 200, JSON.stringify(result.data));
-  assert.equal(f.db.prepare("SELECT status FROM units WHERE id=?").get(ward.id).status, "INACTIVE");
-  assert.equal(auditFor(f.db, ward.id).length, 2);
+  assert.equal(
+    (await f.db.prepare("SELECT status FROM units WHERE id=?").get(ward.id)).status,
+    "INACTIVE",
+  );
+  assert.equal((await auditFor(f.db, ward.id)).length, 2);
   assert.equal(
     (
       await f.request("/api/units/DV-KV10/status", {
@@ -304,12 +259,12 @@ test("ORG empty units deactivate without physical delete; active children and re
     (await f.request(`/api/units/${ward.id}`, { method: "DELETE", cookie: f.cookie })).status,
     404,
   );
-  assert.ok(f.db.prepare("SELECT 1 FROM units WHERE id=?").get(ward.id));
+  assert.ok(await f.db.prepare("SELECT 1 FROM units WHERE id=?").get(ward.id));
 });
 
 test("ORG M02 permissions, session, CSRF and forged actor are enforced on every endpoint", async (t) => {
   const f = await fixture(t);
-  f.db
+  await f.db
     .prepare("DELETE FROM role_permissions WHERE role_code='A02' AND permission_code LIKE 'M02.%'")
     .run();
   for (const path of [
@@ -350,7 +305,7 @@ test("ORG M02 permissions, session, CSRF and forged actor are enforced on every 
     ).status,
     400,
   );
-  f.db
+  await f.db
     .prepare("DELETE FROM role_permissions WHERE role_code='A05' AND permission_code='M02.edit'")
     .run();
   assert.equal(
@@ -363,7 +318,7 @@ test("ORG M02 permissions, session, CSRF and forged actor are enforced on every 
     ).status,
     403,
   );
-  f.db
+  await f.db
     .prepare("DELETE FROM role_permissions WHERE role_code='A05' AND permission_code='M02.create'")
     .run();
   assert.equal(
@@ -452,10 +407,11 @@ test("ORG officer create returns 201; NOCASE code/email duplicates and concurren
   );
   assert.deepEqual(results.map((r) => r.status).sort(), [201, 409]);
   assert.equal(
-    f.db.prepare("SELECT count(*) AS n FROM officers WHERE officer_code='CONCURRENT'").get().n,
+    (await f.db.prepare("SELECT count(*) AS n FROM officers WHERE officer_code='CONCURRENT'").get())
+      .n,
     1,
   );
-  const log = auditFor(f.db, officer.id)[0];
+  const log = (await auditFor(f.db, officer.id))[0];
   assert.equal(log.actor_id, "DEMO-A05");
   assert.equal(log.before_json, null);
   assert.equal(JSON.parse(log.after_json).officerCode, "CASE-CODE");
@@ -463,7 +419,7 @@ test("ORG officer create returns 201; NOCASE code/email duplicates and concurren
 
 test("ORG officer validation rejects missing, malformed, oversized, disabled role and unknown unit", async (t) => {
   const f = await fixture(t);
-  const before = f.db.prepare("SELECT count(*) AS n FROM officers").get().n;
+  const before = (await f.db.prepare("SELECT count(*) AS n FROM officers").get()).n;
   for (const overrides of [
     { officerCode: "" },
     { fullName: " " },
@@ -491,15 +447,17 @@ test("ORG officer validation rejects missing, malformed, oversized, disabled rol
     });
     assert.ok([400, 404, 409].includes(result.status), JSON.stringify(result));
   }
-  assert.equal(f.db.prepare("SELECT count(*) AS n FROM officers").get().n, before);
+  assert.equal((await f.db.prepare("SELECT count(*) AS n FROM officers").get()).n, before);
 });
 
 test("ORG officer partial edit preserves omitted fields and never changes linked account role/scope", async (t) => {
   const f = await fixture(t);
   const officer = await f.officer();
-  f.db.prepare("UPDATE accounts SET officer_id=? WHERE id='DEMO-A04'").run(officer.id);
-  const account = f.db.prepare("SELECT * FROM accounts WHERE id='DEMO-A04'").get();
-  const scopes = f.db.prepare("SELECT * FROM account_scopes WHERE account_id='DEMO-A04'").all();
+  await f.db.prepare("UPDATE accounts SET officer_id=? WHERE id='DEMO-A04'").run(officer.id);
+  const account = await f.db.prepare("SELECT * FROM accounts WHERE id='DEMO-A04'").get();
+  const scopes = await f.db
+    .prepare("SELECT * FROM account_scopes WHERE account_id='DEMO-A04'")
+    .all();
   const response = await f.request(`/api/officers/${officer.id}`, {
     method: "PATCH",
     cookie: f.cookie,
@@ -509,9 +467,9 @@ test("ORG officer partial edit preserves omitted fields and never changes linked
   assert.equal(response.data.officer.fullName, officer.fullName);
   assert.equal(response.data.officer.email, officer.email);
   assert.equal(response.data.officer.businessRole, "A02");
-  assert.deepEqual(f.db.prepare("SELECT * FROM accounts WHERE id='DEMO-A04'").get(), account);
+  assert.deepEqual(await f.db.prepare("SELECT * FROM accounts WHERE id='DEMO-A04'").get(), account);
   assert.deepEqual(
-    f.db.prepare("SELECT * FROM account_scopes WHERE account_id='DEMO-A04'").all(),
+    await f.db.prepare("SELECT * FROM account_scopes WHERE account_id='DEMO-A04'").all(),
     scopes,
   );
   const detail = await f.request(`/api/officers/${officer.id}`, { cookie: f.cookie });
@@ -590,7 +548,7 @@ test("ORG ACTIVE to INACTIVE/TRANSFERRED requires real date, reason and keeps pr
     });
     assert.equal(response.status, 200, JSON.stringify(response.data));
     assert.equal(response.data.officer.status, status);
-    const log = auditFor(f.db, target.id).at(-1);
+    const log = (await auditFor(f.db, target.id)).at(-1);
     assert.equal(JSON.parse(log.before_json).status, "ACTIVE");
     assert.equal(JSON.parse(log.after_json).status, status);
     assert.ok(log.after_json.includes("Lý do kiểm thử"));
@@ -599,7 +557,7 @@ test("ORG ACTIVE to INACTIVE/TRANSFERRED requires real date, reason and keeps pr
         .status,
       404,
     );
-    assert.ok(f.db.prepare("SELECT 1 FROM officers WHERE id=?").get(target.id));
+    assert.ok(await f.db.prepare("SELECT 1 FROM officers WHERE id=?").get(target.id));
   }
 });
 
@@ -638,7 +596,7 @@ test("ORG officer assignment references block departure or incompatible unit mov
     409,
   );
   assert.equal(
-    f.db.prepare("SELECT status FROM officers WHERE id=?").get(officer.id).status,
+    (await f.db.prepare("SELECT status FROM officers WHERE id=?").get(officer.id)).status,
     "ACTIVE",
   );
 });
@@ -647,11 +605,11 @@ test("ORG all officer/unit/status mutations rollback entirely when audit insert 
   const f = await fixture(t);
   const ward = await f.unit();
   const officer = await f.officer();
-  const beforeUnit = f.db.prepare("SELECT * FROM units WHERE id=?").get(ward.id);
-  const beforeOfficer = f.db.prepare("SELECT * FROM officers WHERE id=?").get(officer.id);
-  const beforeCount = f.db.prepare("SELECT count(*) AS n FROM officers").get().n;
-  f.db.exec(
-    "CREATE TRIGGER fail_org_audit BEFORE INSERT ON audit_logs BEGIN SELECT RAISE(ABORT,'simulated audit failure'); END",
+  const beforeUnit = await f.db.prepare("SELECT * FROM units WHERE id=?").get(ward.id);
+  const beforeOfficer = await f.db.prepare("SELECT * FROM officers WHERE id=?").get(officer.id);
+  const beforeCount = (await f.db.prepare("SELECT count(*) AS n FROM officers").get()).n;
+  await f.db.exec(
+    "CREATE TRIGGER fail_org_audit BEFORE INSERT ON audit_logs FOR EACH ROW EXECUTE FUNCTION raise_abort('simulated audit failure')",
   );
   for (const [path, body] of [
     [`/api/units/${ward.id}`, { name: "Ne doit pas rester" }],
@@ -669,26 +627,26 @@ test("ORG all officer/unit/status mutations rollback entirely when audit insert 
     );
   await f.officer({}, 500);
   await f.unit({}, 500);
-  assert.deepEqual(f.db.prepare("SELECT * FROM units WHERE id=?").get(ward.id), beforeUnit);
+  assert.deepEqual(await f.db.prepare("SELECT * FROM units WHERE id=?").get(ward.id), beforeUnit);
   assert.deepEqual(
-    f.db.prepare("SELECT * FROM officers WHERE id=?").get(officer.id),
+    await f.db.prepare("SELECT * FROM officers WHERE id=?").get(officer.id),
     beforeOfficer,
   );
-  assert.equal(f.db.prepare("SELECT count(*) AS n FROM officers").get().n, beforeCount);
-  assert.equal(auditFor(f.db, officer.id).length, 1);
+  assert.equal((await f.db.prepare("SELECT count(*) AS n FROM officers").get()).n, beforeCount);
+  assert.equal((await auditFor(f.db, officer.id)).length, 1);
 });
 
 test("ORG region/facility scopes never grant entire unit staff or owning-unit mutations; empty scope denies all", async (t) => {
   const f = await fixture(t);
   const shown = await f.officer({ fullName: "Người phụ trách trong phạm vi" });
   const hidden = await f.officer({ fullName: "Người cùng đơn vị ngoài phạm vi" });
-  f.db.prepare("UPDATE facilities SET officer_id=? WHERE id='CS001'").run(shown.id);
-  f.db.prepare("UPDATE facilities SET officer_id=? WHERE id='CS002'").run(hidden.id);
+  await f.db.prepare("UPDATE facilities SET officer_id=? WHERE id='CS001'").run(shown.id);
+  await f.db.prepare("UPDATE facilities SET officer_id=? WHERE id='CS002'").run(hidden.id);
   const cookie = await f.login("demo.can-bo");
   for (const kind of ["region", "facility"]) {
-    f.db.prepare("DELETE FROM account_scopes WHERE account_id='DEMO-A03'").run();
+    await f.db.prepare("DELETE FROM account_scopes WHERE account_id='DEMO-A03'").run();
     const column = kind === "region" ? "region_id" : "facility_id";
-    f.db
+    await f.db
       .prepare(`INSERT INTO account_scopes(account_id,kind,${column}) VALUES (?,?,?)`)
       .run("DEMO-A03", kind, kind === "region" ? "KP01" : "CS001");
     const list = await f.request("/api/officers", { cookie });
@@ -715,7 +673,7 @@ test("ORG region/facility scopes never grant entire unit staff or owning-unit mu
       ),
     );
   }
-  f.db.prepare("DELETE FROM account_scopes WHERE account_id='DEMO-A03'").run();
+  await f.db.prepare("DELETE FROM account_scopes WHERE account_id='DEMO-A03'").run();
   assert.equal((await f.request("/api/officers", { cookie })).data.total, 0);
   assert.deepEqual((await f.request("/api/organization/tree", { cookie })).data.items, []);
   assert.deepEqual((await f.request("/api/organization/options", { cookie })).data.officers, []);
@@ -746,7 +704,7 @@ test("ORG valid empty ward reparent succeeds; references prevent changing author
     409,
   );
   assert.equal(
-    f.db.prepare("SELECT parent_id FROM units WHERE id=?").get(occupied.id).parent_id,
+    (await f.db.prepare("SELECT parent_id FROM units WHERE id=?").get(occupied.id)).parent_id,
     "DV-KV10",
   );
   assert.equal((await f.request("/api/facilities", { cookie })).data.total, 2);
@@ -755,25 +713,32 @@ test("ORG valid empty ward reparent succeeds; references prevent changing author
 test("ORG DB constraints enforce officer FK, unique, statuses and no physical deletion", async (t) => {
   const f = await fixture(t);
   const officer = await f.officer();
-  assert.throws(() =>
-    f.db.prepare("UPDATE officers SET unit_id='missing' WHERE id=?").run(officer.id),
+  await assert.rejects(
+    async () =>
+      await f.db.prepare("UPDATE officers SET unit_id='missing' WHERE id=?").run(officer.id),
   );
-  assert.throws(() =>
-    f.db.prepare("UPDATE officers SET business_role='A99' WHERE id=?").run(officer.id),
+  await assert.rejects(
+    async () =>
+      await f.db.prepare("UPDATE officers SET business_role='A99' WHERE id=?").run(officer.id),
   );
-  assert.throws(() =>
-    f.db.prepare("UPDATE officers SET status='UNKNOWN' WHERE id=?").run(officer.id),
+  await assert.rejects(
+    async () =>
+      await f.db.prepare("UPDATE officers SET status='UNKNOWN' WHERE id=?").run(officer.id),
   );
-  assert.throws(() =>
-    f.db
-      .prepare(
-        "UPDATE officers SET status='INACTIVE',status_reason=NULL,status_effective_date=NULL WHERE id=?",
-      )
-      .run(officer.id),
+  await assert.rejects(
+    async () =>
+      await f.db
+        .prepare(
+          "UPDATE officers SET status='INACTIVE',status_reason=NULL,status_effective_date=NULL WHERE id=?",
+        )
+        .run(officer.id),
   );
-  assert.throws(() => f.db.prepare("DELETE FROM officers WHERE id=?").run(officer.id));
-  assert.throws(() => f.db.prepare("UPDATE units SET parent_id=id WHERE id='DV-KV10'").run());
-  assert.deepEqual(f.db.prepare("PRAGMA foreign_key_check").all(), []);
+  await assert.rejects(
+    async () => await f.db.prepare("DELETE FROM officers WHERE id=?").run(officer.id),
+  );
+  await assert.rejects(
+    async () => await f.db.prepare("UPDATE units SET parent_id=id WHERE id='DV-KV10'").run(),
+  );
 });
 
 test("ORG duplicate edit returns 409 and inactive unit/leader cannot be assigned", async (t) => {
@@ -830,17 +795,17 @@ test("ORG duplicate edit returns 409 and inactive unit/leader cannot be assigned
   );
 });
 
-test("ORG real SQLite reopen retains officers, edits, status and audit; reseed never overwrites", async () => {
+test("ORG database reopen retains officers, edits, status and audit; reseed never overwrites", async () => {
   const directory = mkdtempSync(join(tmpdir(), "pccc-org-restart-"));
   assert.ok(resolve(directory).startsWith(resolve(tmpdir()) + sep));
-  const path = join(directory, "restart.sqlite");
+  const path = join(directory, "restart-db");
   let db;
   let server;
   try {
-    db = openDatabase(path);
+    db = await openDatabase(path);
     await seedDemo(db, password);
-    db.exec(
-      "UPDATE accounts SET must_change_password=0; INSERT OR IGNORE INTO role_permissions VALUES ('A05','M02.create'); INSERT OR IGNORE INTO role_permissions VALUES ('A05','M02.view'); INSERT OR IGNORE INTO role_permissions VALUES ('A05','M02.edit')",
+    await db.exec(
+      "UPDATE accounts SET must_change_password=0; INSERT INTO role_permissions VALUES ('A05','M02.create') ON CONFLICT DO NOTHING; INSERT INTO role_permissions VALUES ('A05','M02.view') ON CONFLICT DO NOTHING; INSERT INTO role_permissions VALUES ('A05','M02.edit') ON CONFLICT DO NOTHING",
     );
     server = createApp(db, { appOrigin: origin });
     server.listen(0, "127.0.0.1");
@@ -871,25 +836,27 @@ test("ORG real SQLite reopen retains officers, edits, status and audit; reseed n
     const officer = (await created.json()).officer;
     await new Promise((done) => server.close(done));
     server = null;
-    const record = db.prepare("SELECT * FROM officers WHERE id=?").get(officer.id);
-    const logs = auditFor(db, officer.id);
-    db.close();
-    db = openDatabase(path);
-    assert.deepEqual(db.prepare("SELECT * FROM officers WHERE id=?").get(officer.id), record);
-    assert.deepEqual(auditFor(db, officer.id), logs);
-    db.prepare("UPDATE officers SET notes='Người dùng đã chỉnh sửa' WHERE id=?").run(officer.id);
-    const count = db.prepare("SELECT count(*) AS n FROM officers").get().n;
-    const grants = db.prepare("SELECT * FROM role_permissions").all();
+    const record = await db.prepare("SELECT * FROM officers WHERE id=?").get(officer.id);
+    const logs = await auditFor(db, officer.id);
+    await db.close();
+    db = await openDatabase(path);
+    assert.deepEqual(await db.prepare("SELECT * FROM officers WHERE id=?").get(officer.id), record);
+    assert.deepEqual(await auditFor(db, officer.id), logs);
+    await db
+      .prepare("UPDATE officers SET notes='Người dùng đã chỉnh sửa' WHERE id=?")
+      .run(officer.id);
+    const count = (await db.prepare("SELECT count(*) AS n FROM officers").get()).n;
+    const grants = await db.prepare("SELECT * FROM role_permissions").all();
     await seedDemo(db, password);
-    assert.equal(db.prepare("SELECT count(*) AS n FROM officers").get().n, count);
+    assert.equal((await db.prepare("SELECT count(*) AS n FROM officers").get()).n, count);
     assert.equal(
-      db.prepare("SELECT notes FROM officers WHERE id=?").get(officer.id).notes,
+      (await db.prepare("SELECT notes FROM officers WHERE id=?").get(officer.id)).notes,
       "Người dùng đã chỉnh sửa",
     );
-    assert.deepEqual(db.prepare("SELECT * FROM role_permissions").all(), grants);
+    assert.deepEqual(await db.prepare("SELECT * FROM role_permissions").all(), grants);
   } finally {
     if (server) await new Promise((done) => server.close(done));
-    db?.close();
+    await db?.close();
     rmSync(directory, { recursive: true, force: true });
   }
 });
@@ -898,14 +865,14 @@ test("ORG ancestor context cannot reveal notes and hidden leaders survive ordina
   const f = await fixture(t);
   const leader = await f.officer();
   const ward = await f.unit({ leaderOfficerId: leader.id });
-  f.db.prepare("UPDATE units SET notes='PRIVATE-AREA-NOTES' WHERE id='DV-KV10'").run();
+  await f.db.prepare("UPDATE units SET notes='PRIVATE-AREA-NOTES' WHERE id='DV-KV10'").run();
   const narrowCookie = await f.login("demo.can-bo");
   const tree = await f.request("/api/organization/tree", { cookie: narrowCookie });
   assert.ok(!JSON.stringify(tree.data).includes("PRIVATE-AREA-NOTES"));
   const context = await f.request("/api/units/DV-KV10", { cookie: narrowCookie });
   assert.ok(!JSON.stringify(context.data).includes("PRIVATE-AREA-NOTES"));
-  f.db.prepare("DELETE FROM account_scopes WHERE account_id='DEMO-A04'").run();
-  f.db
+  await f.db.prepare("DELETE FROM account_scopes WHERE account_id='DEMO-A04'").run();
+  await f.db
     .prepare("INSERT INTO account_scopes(account_id,kind,unit_id) VALUES ('DEMO-A04','unit',?)")
     .run(ward.id);
   const cookie = await f.login("demo.tong-hop");
@@ -918,9 +885,13 @@ test("ORG ancestor context cannot reveal notes and hidden leaders survive ordina
     body: { name: "Chỉ sửa tên" },
   });
   assert.equal(edited.status, 200, JSON.stringify(edited.data));
-  assert.equal(JSON.parse(auditFor(f.db, ward.id).at(-1).before_json).leaderOfficerId, leader.id);
   assert.equal(
-    f.db.prepare("SELECT leader_officer_id FROM units WHERE id=?").get(ward.id).leader_officer_id,
+    JSON.parse((await auditFor(f.db, ward.id)).at(-1).before_json).leaderOfficerId,
+    leader.id,
+  );
+  assert.equal(
+    (await f.db.prepare("SELECT leader_officer_id FROM units WHERE id=?").get(ward.id))
+      .leader_officer_id,
     leader.id,
   );
 });
@@ -936,7 +907,7 @@ test("ORG unit staff scope does not expand through cross-unit legacy facility as
   assert.ok(!options.data.officers.some((row) => row.id === "CB-OTHER"));
   assert.equal((await f.request("/api/facilities", { cookie })).data.total, 2);
   assert.equal(
-    f.db.prepare("SELECT officer_id FROM facilities WHERE id='CS002'").get().officer_id,
+    (await f.db.prepare("SELECT officer_id FROM facilities WHERE id='CS002'").get()).officer_id,
     "CB-OTHER",
   );
 });
@@ -973,9 +944,9 @@ test("ORG neighborhood edit/status audit and rollback share the existing regions
   });
   assert.equal(edited.status, 200);
   assert.equal(edited.data.region.name, created.data.region.name);
-  const before = f.db.prepare("SELECT * FROM regions WHERE id=?").get(id);
-  f.db.exec(
-    "CREATE TRIGGER fail_region_audit BEFORE INSERT ON audit_logs BEGIN SELECT RAISE(ABORT,'test rollback'); END",
+  const before = await f.db.prepare("SELECT * FROM regions WHERE id=?").get(id);
+  await f.db.exec(
+    "CREATE TRIGGER fail_region_audit BEFORE INSERT ON audit_logs FOR EACH ROW EXECUTE FUNCTION raise_abort('test rollback')",
   );
   assert.equal(
     (
@@ -987,8 +958,8 @@ test("ORG neighborhood edit/status audit and rollback share the existing regions
     ).status,
     500,
   );
-  assert.deepEqual(f.db.prepare("SELECT * FROM regions WHERE id=?").get(id), before);
-  f.db.exec("DROP TRIGGER fail_region_audit");
+  assert.deepEqual(await f.db.prepare("SELECT * FROM regions WHERE id=?").get(id), before);
+  await f.db.exec("DROP TRIGGER fail_region_audit ON audit_logs");
   assert.equal(
     (
       await f.request(`/api/organization/regions/${id}/status`, {
@@ -999,12 +970,12 @@ test("ORG neighborhood edit/status audit and rollback share the existing regions
     ).status,
     200,
   );
-  assert.equal(JSON.parse(auditFor(f.db, id).at(-1).after_json).status, "INACTIVE");
+  assert.equal(JSON.parse((await auditFor(f.db, id)).at(-1).after_json).status, "INACTIVE");
 });
 
 test("ORG revoked session while request body is streaming cannot commit an officer", async (t) => {
   const f = await fixture(t);
-  const before = f.db.prepare("SELECT count(*) AS n FROM officers").get().n;
+  const before = (await f.db.prepare("SELECT count(*) AS n FROM officers").get()).n;
   const body = JSON.stringify({
     officerCode: "REVOKED",
     fullName: "Cán bộ không được tạo",
@@ -1038,8 +1009,8 @@ test("ORG revoked session while request body is streaming cannot commit an offic
   const first = body.indexOf(",");
   request.write(body.slice(0, first));
   await new Promise((done) => setTimeout(done, 30));
-  f.db.prepare("DELETE FROM sessions WHERE account_id='DEMO-A05'").run();
+  await f.db.prepare("DELETE FROM sessions WHERE account_id='DEMO-A05'").run();
   request.end(body.slice(first));
   assert.equal(await completed, 401);
-  assert.equal(f.db.prepare("SELECT count(*) AS n FROM officers").get().n, before);
+  assert.equal((await f.db.prepare("SELECT count(*) AS n FROM officers").get()).n, before);
 });

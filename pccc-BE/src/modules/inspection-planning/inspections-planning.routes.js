@@ -15,42 +15,51 @@ export const inspectionsPlanningRoutes = [
   {
     method: "GET",
     path: "/api/inspection-schedules",
-    handle: (ctx) => listSchedules(ctx.db, ctx.user, ctx.url),
+    handle: async (ctx) => await listSchedules(ctx.db, ctx.user, ctx.url),
   },
   {
     method: "GET",
     path: new RegExp(`^/api/inspections/${ID}/planning$`),
-    handle: (ctx, match) => planningInspectionDetail(ctx.db, ctx.user, match[1]),
+    handle: async (ctx, match) => await planningInspectionDetail(ctx.db, ctx.user, match[1]),
   },
   {
     method: "GET",
     path: new RegExp(`^/api/inspections/${ID}/reschedules$`),
-    handle: (ctx, match) => listReschedules(ctx.db, ctx.user, match[1]),
+    handle: async (ctx, match) => await listReschedules(ctx.db, ctx.user, match[1]),
   },
   {
     method: "GET",
     path: new RegExp(`^/api/inspections/${ID}/notice/file$`),
-    handle: (ctx, match) =>
-      sendFile(ctx.response, planningFile(ctx.db, ctx.user, match[1], "notice")),
+    handle: async (ctx, match) =>
+      sendFile(ctx.response, await planningFile(ctx.db, ctx.user, match[1], "notice")),
   },
   {
     method: "GET",
     path: new RegExp(`^/api/inspections/${ID}/planning-documents/${ID}/file$`),
-    handle: (ctx, match) =>
-      sendFile(ctx.response, planningFile(ctx.db, ctx.user, match[1], "document", match[2])),
+    handle: async (ctx, match) =>
+      sendFile(ctx.response, await planningFile(ctx.db, ctx.user, match[1], "document", match[2])),
   },
   {
     method: "GET",
     path: new RegExp(`^/api/inspections/${ID}/reschedules/${ID}/file$`),
-    handle: (ctx, match) =>
-      sendFile(ctx.response, planningFile(ctx.db, ctx.user, match[1], "reschedule", match[2])),
+    handle: async (ctx, match) =>
+      sendFile(
+        ctx.response,
+        await planningFile(ctx.db, ctx.user, match[1], "reschedule", match[2]),
+      ),
   },
   {
     method: "PUT",
     path: new RegExp(`^/api/inspections/${ID}/lead-officer$`),
     async handle(ctx, match) {
       return {
-        inspection: assignLeadOfficer(ctx.db, ctx.user, match[1], await ctx.readJson(), ctx.ip),
+        inspection: await assignLeadOfficer(
+          ctx.db,
+          ctx.user,
+          match[1],
+          await ctx.readJson(),
+          ctx.ip,
+        ),
       };
     },
   },
@@ -59,7 +68,7 @@ export const inspectionsPlanningRoutes = [
     path: new RegExp(`^/api/inspections/${ID}/schedule$`),
     async handle(ctx, match) {
       return {
-        inspection: updateSchedule(ctx.db, ctx.user, match[1], await ctx.readJson(), ctx.ip),
+        inspection: await updateSchedule(ctx.db, ctx.user, match[1], await ctx.readJson(), ctx.ip),
       };
     },
   },
@@ -68,7 +77,13 @@ export const inspectionsPlanningRoutes = [
     path: new RegExp(`^/api/inspections/${ID}/notice$`),
     async handle(ctx, match) {
       return {
-        notice: upsertNotice(ctx.db, ctx.user, match[1], await ctx.readJson(10485760), ctx.ip),
+        notice: await upsertNotice(
+          ctx.db,
+          ctx.user,
+          match[1],
+          await ctx.readJson(10485760),
+          ctx.ip,
+        ),
       };
     },
   },
@@ -77,7 +92,13 @@ export const inspectionsPlanningRoutes = [
     path: new RegExp(`^/api/inspections/${ID}/reschedules$`),
     async handle(ctx, match) {
       ctx.status = 201;
-      return rescheduleInspection(ctx.db, ctx.user, match[1], await ctx.readJson(10485760), ctx.ip);
+      return await rescheduleInspection(
+        ctx.db,
+        ctx.user,
+        match[1],
+        await ctx.readJson(10485760),
+        ctx.ip,
+      );
     },
   },
 ];

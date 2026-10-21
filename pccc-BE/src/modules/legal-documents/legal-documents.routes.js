@@ -16,9 +16,11 @@ const DOCUMENT_JSON_LIMIT = Math.ceil(MAX_DOCUMENT_BYTES / 3) * 4 + 20000;
 const DOCUMENT_PATH = /^\/api\/legal-documents\/([a-zA-Z0-9-]+)$/;
 const FILE_PATH = /^\/api\/legal-documents\/([a-zA-Z0-9-]+)\/file$/;
 
-function downloadFile(ctx, id) {
-  documentDetail(ctx.db, ctx.user, id);
-  const file = ctx.db.prepare("SELECT file_name,file_data FROM legal_documents WHERE id=?").get(id);
+async function downloadFile(ctx, id) {
+  await documentDetail(ctx.db, ctx.user, id);
+  const file = await ctx.db
+    .prepare("SELECT file_name,file_data FROM legal_documents WHERE id=?")
+    .get(id);
   assert(file.file_data, 404, "NOT_FOUND", "Văn bản không có file đính kèm.");
   const { response } = ctx;
   response.statusCode = 200;
@@ -33,7 +35,7 @@ function downloadFile(ctx, id) {
 
 async function uploadFile(ctx, id) {
   requireDocumentAccess(ctx.user, "edit");
-  documentDetail(ctx.db, ctx.user, id);
+  await documentDetail(ctx.db, ctx.user, id);
   const { request } = ctx;
   assert(
     request.headers["content-type"] === "application/pdf",
@@ -55,7 +57,7 @@ async function uploadFile(ctx, id) {
     throw new ApiError(400, "INVALID_INPUT", "Tên file không hợp lệ.");
   }
   return {
-    document: replaceDocumentFile(
+    document: await replaceDocumentFile(
       ctx.db,
       ctx.user,
       id,
@@ -71,15 +73,15 @@ export const legalDocumentsRoutes = [
   {
     method: "GET",
     path: "/api/legal-document-categories",
-    handle: (ctx) => ({
-      items: documentCategories(ctx.db, ctx.user),
+    handle: async (ctx) => ({
+      items: await documentCategories(ctx.db, ctx.user),
       maxFileBytes: MAX_DOCUMENT_BYTES,
     }),
   },
   {
     method: "GET",
     path: "/api/legal-documents",
-    handle: (ctx) => listDocuments(ctx.db, ctx.user, ctx.url),
+    handle: async (ctx) => await listDocuments(ctx.db, ctx.user, ctx.url),
   },
   {
     method: "POST",
@@ -88,13 +90,13 @@ export const legalDocumentsRoutes = [
       requireDocumentAccess(ctx.user, "create");
       const payload = await ctx.readJson(DOCUMENT_JSON_LIMIT);
       ctx.status = 201;
-      return { document: saveDocument(ctx.db, ctx.user, payload, null, ctx.ip) };
+      return { document: await saveDocument(ctx.db, ctx.user, payload, null, ctx.ip) };
     },
   },
   {
     method: "GET",
     path: DOCUMENT_PATH,
-    handle: (ctx, match) => ({ document: documentDetail(ctx.db, ctx.user, match[1]) }),
+    handle: async (ctx, match) => ({ document: await documentDetail(ctx.db, ctx.user, match[1]) }),
   },
   {
     method: "PUT",
@@ -102,14 +104,22 @@ export const legalDocumentsRoutes = [
     async handle(ctx, match) {
       requireDocumentAccess(ctx.user, "edit");
       const payload = await ctx.readJson(DOCUMENT_JSON_LIMIT);
-      return { document: saveDocument(ctx.db, ctx.user, payload, match[1], ctx.ip) };
+      return { document: await saveDocument(ctx.db, ctx.user, payload, match[1], ctx.ip) };
     },
   },
   {
     method: "GET",
     path: /^\/api\/legal-documents\/([a-zA-Z0-9-]+)\/history$/,
-    handle: (ctx, match) => documentHistory(ctx.db, ctx.user, match[1], ctx.url),
+    handle: async (ctx, match) => await documentHistory(ctx.db, ctx.user, match[1], ctx.url),
   },
-  { method: "GET", path: FILE_PATH, handle: (ctx, match) => downloadFile(ctx, match[1]) },
-  { method: "POST", path: FILE_PATH, handle: (ctx, match) => uploadFile(ctx, match[1]) },
+  {
+    method: "GET",
+    path: FILE_PATH,
+    handle: async (ctx, match) => await downloadFile(ctx, match[1]),
+  },
+  {
+    method: "POST",
+    path: FILE_PATH,
+    handle: async (ctx, match) => await uploadFile(ctx, match[1]),
+  },
 ];

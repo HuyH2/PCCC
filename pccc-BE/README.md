@@ -12,7 +12,7 @@ chuyển đơn vị được kiểm tra quan hệ và lưu audit.
 
 Trên database mới, `pnpm seed` tạo 15 đơn vị và 79 hồ sơ cán bộ để thử danh sách,
 tìm kiếm, lọc trạng thái và phân trang. Trong đó 12 đơn vị và 72 hồ sơ mở rộng có mã
-`DEMO-ORG-*`, tên ghi `(mẫu)` và thông tin liên hệ giả lập. Đây là bản ghi SQLite thực
+`DEMO-ORG-*`, tên ghi `(mẫu)` và thông tin liên hệ giả lập. Đây là bản ghi PostgreSQL thực
 (không phải mock frontend), nhưng không phải danh tính cán bộ thật. Seed chạy lại không
 ghi đè hồ sơ đã chỉnh sửa; chỉ dùng trên môi trường demo/local.
 
@@ -53,7 +53,7 @@ pnpm dev:fe
 
 Mở http://localhost:3000/dang-nhap. Backend mặc định http://127.0.0.1:4000, frontend proxy `/api/*` sang backend. Nếu đổi cổng/domain, đặt `APP_ORIGIN` của backend bằng origin frontend; `BACKEND_URL` của Next.js bằng URL backend và khởi động/build lại frontend. Không trộn `localhost` với `127.0.0.1` ở URL frontend vì Origin phải khớp chính xác.
 
-Database mặc định `pccc-BE/data/pccc.sqlite` (script chạy trong thư mục `pccc-BE`). Migration tự chạy khi server khởi động, có bảng theo dõi và transaction; CLI `migrate` dùng để kiểm tra riêng. Không commit database, `.env`, mật khẩu thật hoặc session. Mật khẩu demo công khai bên dưới phục vụ team test.
+Database là PostgreSQL theo `DATABASE_URL`: URL `postgresql://...` (server) hoặc thư mục PostgreSQL nhúng PGlite, mặc định `pccc-BE/data/pccc-pg` (script chạy trong thư mục `pccc-BE`, không cần cài PostgreSQL khi chạy local). Migration tự chạy khi server khởi động, có bảng theo dõi và transaction; CLI `migrate` dùng để kiểm tra riêng. Không commit database, `.env`, mật khẩu thật hoặc session. Mật khẩu demo công khai bên dưới phục vụ team test.
 
 ## Tài khoản mẫu
 
@@ -197,7 +197,7 @@ pnpm check
 pnpm test
 ```
 
-Kiểm thử thật qua HTTP với SQLite: migration persistence/idempotence/constraints, seed không ghi đè, login/password/status/rate-limit/CSRF, session hết hạn/thu hồi, RBAC, scopes (all/unit/region/facility/empty), search/count/dashboard/detail, transaction rollback khi mất admin cuối, audit trước/sau và cấm sửa log. Tests dùng password giả và database tạm, không thay DB đang chạy.
+Kiểm thử thật qua HTTP với PostgreSQL (PGlite; đặt `PCCC_TEST_DATABASE_URL` để chạy trên PostgreSQL server): migration persistence/idempotence/constraints, seed không ghi đè, login/password/status/rate-limit/CSRF, session hết hạn/thu hồi, RBAC, scopes (all/unit/region/facility/empty), search/count/dashboard/detail, transaction rollback khi mất admin cuối, audit trước/sau và cấm sửa log. Tests dùng password giả và database tạm, không thay DB đang chạy.
 
 Tại root: `pnpm typecheck`, `pnpm build`, `pnpm test:integration` (sau build). Test tích hợp cần cổng 4000 và 3100 trống, tự chạy/dừng server và dùng DB in-memory. Backend JavaScript chạy trực tiếp; không có build/TypeScript compile riêng.
 

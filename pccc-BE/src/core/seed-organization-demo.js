@@ -39,16 +39,16 @@ const positions = [
 ];
 const ranks = ["Thiếu úy", "Trung úy", "Thượng úy", "Đại úy", "Thiếu tá"];
 
-export function seedOrganizationDemo(db) {
+export async function seedOrganizationDemo(db) {
   const now = Date.now();
   const insertedUnits = new Set();
   const insertUnit = db.prepare(
-    `INSERT OR IGNORE INTO units
+    `INSERT INTO units
      (id,code,name,parent_id,level,status,notes,created_at,updated_at)
-     VALUES (?,?,?,?,?,'ACTIVE',?,?,?)`,
+     VALUES (?,?,?,?,?,'ACTIVE',?,?,?) ON CONFLICT DO NOTHING`,
   );
   for (const [id, code, name, parentId, level] of demoUnits) {
-    const result = insertUnit.run(
+    const result = await insertUnit.run(
       id,
       code,
       name,
@@ -59,15 +59,15 @@ export function seedOrganizationDemo(db) {
       now,
     );
     if (result.changes) insertedUnits.add(id);
-    const saved = db.prepare("SELECT code FROM units WHERE id=?").get(id);
+    const saved = await db.prepare("SELECT code FROM units WHERE id=?").get(id);
     if (saved?.code !== code) throw new Error(`Demo unit ID conflict: ${id}`);
   }
 
   const insertOfficer = db.prepare(
-    `INSERT OR IGNORE INTO officers
+    `INSERT INTO officers
      (id,officer_code,full_name,rank,position,phone,email,notes,unit_id,business_role,
       status,status_reason,status_effective_date,created_at,updated_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`,
   );
   for (let index = 0; index < 72; index++) {
     const number = String(index + 1).padStart(3, "0");
@@ -81,7 +81,7 @@ export function seedOrganizationDemo(db) {
         : index > 0 && index % 11 === 0
           ? "INACTIVE"
           : "ACTIVE";
-    insertOfficer.run(
+    await insertOfficer.run(
       id,
       officerCode,
       `${surnames[Math.floor(index / 6)]} ${givenNames[index % 6]} (mẫu)`,
@@ -98,12 +98,12 @@ export function seedOrganizationDemo(db) {
       now,
       now,
     );
-    const saved = db.prepare("SELECT officer_code FROM officers WHERE id=?").get(id);
+    const saved = await db.prepare("SELECT officer_code FROM officers WHERE id=?").get(id);
     if (saved?.officer_code !== officerCode) throw new Error(`Demo officer ID conflict: ${id}`);
   }
 
   const setLeader = db.prepare("UPDATE units SET leader_officer_id=? WHERE id=?");
   for (const [index, [unitId]] of demoUnits.entries())
     if (insertedUnits.has(unitId))
-      setLeader.run(`DEMO-ORG-O${String(index * 6 + 1).padStart(3, "0")}`, unitId);
+      await setLeader.run(`DEMO-ORG-O${String(index * 6 + 1).padStart(3, "0")}`, unitId);
 }

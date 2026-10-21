@@ -1,5 +1,5 @@
 /** Demo-only records; re-running seed never replaces a task or conversation. */
-export function seedTasks(db) {
+export async function seedTasks(db) {
   const now = Date.now();
   for (const [id, code, title, description, assigner, assignee, progress, daysUntilDue, kind] of [
     [
@@ -81,55 +81,65 @@ export function seedTasks(db) {
     ],
   ]) {
     if (
-      !db.prepare("SELECT 1 FROM accounts WHERE id=?").get(assigner) ||
-      !db.prepare("SELECT 1 FROM accounts WHERE id=?").get(assignee)
+      !(await db.prepare("SELECT 1 FROM accounts WHERE id=?").get(assigner)) ||
+      !(await db.prepare("SELECT 1 FROM accounts WHERE id=?").get(assignee))
     )
       continue;
-    db.prepare(
-      `INSERT OR IGNORE INTO tasks
+    await db
+      .prepare(
+        `INSERT INTO tasks
       (id,code,title,description,assigned_by,assigned_to,kind,due_at,progress,created_at,updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-    ).run(
-      id,
-      code,
-      title,
-      description,
-      assigner,
-      assignee,
-      kind,
-      now + daysUntilDue * 86400000,
-      progress,
-      now,
-      now,
-    );
+      VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`,
+      )
+      .run(
+        id,
+        code,
+        title,
+        description,
+        assigner,
+        assignee,
+        kind,
+        now + daysUntilDue * 86400000,
+        progress,
+        now,
+        now,
+      );
     // 015 added nullable due_at/updated_at to pre-existing demo rows. Fill only
     // untouched sample rows; never replace a task whose progress was edited.
-    db.prepare(
-      `UPDATE tasks SET kind=?,due_at=?,progress=?,updated_at=?
+    await db
+      .prepare(
+        `UPDATE tasks SET kind=?,due_at=?,progress=?,updated_at=?
       WHERE id=? AND code=? AND assigned_by=? AND assigned_to=?
         AND status='open' AND due_at IS NULL AND updated_at IS NULL AND progress=0`,
-    ).run(kind, now + daysUntilDue * 86400000, progress, now, id, code, assigner, assignee);
-    db.prepare(
-      `INSERT OR IGNORE INTO task_assignments
-      (task_id,assignee_id,assigned_by,assigned_at,note) VALUES (?,?,?,?,?)`,
-    ).run(id, assignee, assigner, now, "Giao việc mẫu");
-    if (!db.prepare("SELECT 1 FROM task_progress WHERE task_id=?").get(id))
-      db.prepare(
-        `INSERT INTO task_progress(task_id,account_id,progress,status,note,created_at)
+      )
+      .run(kind, now + daysUntilDue * 86400000, progress, now, id, code, assigner, assignee);
+    await db
+      .prepare(
+        `INSERT INTO task_assignments
+      (task_id,assignee_id,assigned_by,assigned_at,note) VALUES (?,?,?,?,?) ON CONFLICT DO NOTHING`,
+      )
+      .run(id, assignee, assigner, now, "Giao việc mẫu");
+    if (!(await db.prepare("SELECT 1 FROM task_progress WHERE task_id=?").get(id)))
+      await db
+        .prepare(
+          `INSERT INTO task_progress(task_id,account_id,progress,status,note,created_at)
         VALUES (?,?,?,'open','Tiến độ khởi tạo',?)`,
-      ).run(id, assignee, progress, now);
+        )
+        .run(id, assignee, progress, now);
   }
-  if (db.prepare("SELECT 1 FROM tasks WHERE id='CV-DEMO-01'").get())
-    db.prepare(
-      `INSERT OR IGNORE INTO task_messages
-      (task_id,sender_id,body,created_at,seed_key) VALUES (?,?,?,?,?)`,
-    ).run(
-      "CV-DEMO-01",
-      "DEMO-A01",
-      "Vui lòng cập nhật kết quả rà soát tại đây (dữ liệu mẫu).",
-      now,
-      "TASK-DEMO-01",
-    );
+  if (await db.prepare("SELECT 1 FROM tasks WHERE id='CV-DEMO-01'").get())
+    await db
+      .prepare(
+        `INSERT INTO task_messages
+      (task_id,sender_id,body,created_at,seed_key) VALUES (?,?,?,?,?) ON CONFLICT DO NOTHING`,
+      )
+      .run(
+        "CV-DEMO-01",
+        "DEMO-A01",
+        "Vui lòng cập nhật kết quả rà soát tại đây (dữ liệu mẫu).",
+        now,
+        "TASK-DEMO-01",
+      );
 
   const conversations = [
     [
@@ -175,14 +185,17 @@ export function seedTasks(db) {
       "Đã tổng hợp các buổi triển khai, tiếp tục bổ sung số liệu (mẫu).",
     ],
   ];
-  const insertMessage = db.prepare(`INSERT OR IGNORE INTO task_messages
-    (task_id,sender_id,body,created_at,seed_key) VALUES (?,?,?,?,?)`);
+  const insertMessage = db.prepare(`INSERT INTO task_messages
+    (task_id,sender_id,body,created_at,seed_key) VALUES (?,?,?,?,?) ON CONFLICT DO NOTHING`);
   for (const [taskId, assigner, assignee, request, response] of conversations) {
-    const task = db.prepare("SELECT assigned_by,assigned_to FROM tasks WHERE id=?").get(taskId);
+    const task = await db
+      .prepare("SELECT assigned_by,assigned_to FROM tasks WHERE id=?")
+      .get(taskId);
     if (!task || task.assigned_by !== assigner || task.assigned_to !== assignee) continue;
     // Never inject demo chat into a conversation that a user has already started.
-    if (db.prepare("SELECT 1 FROM task_messages WHERE task_id=? LIMIT 1").get(taskId)) continue;
-    insertMessage.run(taskId, assigner, request, now - 120000, `${taskId}-MESSAGE-01`);
-    insertMessage.run(taskId, assignee, response, now - 60000, `${taskId}-MESSAGE-02`);
+    if (await db.prepare("SELECT 1 FROM task_messages WHERE task_id=? LIMIT 1").get(taskId))
+      continue;
+    await insertMessage.run(taskId, assigner, request, now - 120000, `${taskId}-MESSAGE-01`);
+    await insertMessage.run(taskId, assignee, response, now - 60000, `${taskId}-MESSAGE-02`);
   }
 }

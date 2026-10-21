@@ -29,19 +29,19 @@ export function requireDocumentAccess(user, action = "view") {
   );
 }
 
-export function documentCategories(db, user) {
+export async function documentCategories(db, user) {
   requireDocumentAccess(user);
-  return db.prepare("SELECT * FROM legal_document_categories ORDER BY name").all();
+  return await db.prepare("SELECT * FROM legal_document_categories ORDER BY name").all();
 }
 
-export function documentDetail(db, user, id) {
+export async function documentDetail(db, user, id) {
   requireDocumentAccess(user);
-  const row = db.prepare(`SELECT ${columns} FROM ${joined} WHERE d.id=?`).get(id);
+  const row = await db.prepare(`SELECT ${columns} FROM ${joined} WHERE d.id=?`).get(id);
   assert(row, 404, "NOT_FOUND", "Không tìm thấy văn bản.");
   return row;
 }
 
-export function listDocuments(db, user, url) {
+export async function listDocuments(db, user, url) {
   requireDocumentAccess(user);
   const { page, pageSize } = pagination(url);
   const q = text(url.searchParams.get("q") ?? "", "Từ khóa", 0, 200).trim();
@@ -66,12 +66,13 @@ export function listDocuments(db, user, url) {
   }
   const where = clauses.join(" AND ");
   return {
-    items: db
+    items: await db
       .prepare(
         `SELECT ${columns} FROM ${joined} WHERE ${where} ORDER BY d.updated_at DESC,d.id LIMIT ? OFFSET ?`,
       )
       .all(...params, pageSize, (page - 1) * pageSize),
-    total: db.prepare(`SELECT count(*) AS n FROM ${joined} WHERE ${where}`).get(...params).n,
+    total: (await db.prepare(`SELECT count(*) AS n FROM ${joined} WHERE ${where}`).get(...params))
+      .n,
     page,
     pageSize,
   };
@@ -114,7 +115,7 @@ export function validateDocumentFile(name, data) {
   return { name, data };
 }
 
-function validateDocument(db, payload) {
+async function validateDocument(db, payload) {
   object(payload, [
     "category_id",
     "title",
@@ -142,7 +143,7 @@ function validateDocument(db, payload) {
       max,
     );
   assert(
-    db.prepare("SELECT 1 FROM legal_document_categories WHERE id=?").get(result.category_id),
+    await db.prepare("SELECT 1 FROM legal_document_categories WHERE id=?").get(result.category_id),
     400,
     "INVALID_INPUT",
     "Loại văn bản không tồn tại.",
@@ -193,11 +194,11 @@ function validateDocument(db, payload) {
   return { values: result, file };
 }
 
-export function saveDocument(db, user, payload, id, ip) {
+export async function saveDocument(db, user, payload, id, ip) {
   requireDocumentAccess(user, id ? "edit" : "create");
-  const { values: v, file } = validateDocument(db, payload);
-  return transaction(db, () => {
-    const before = id ? documentDetail(db, user, id) : null;
+  const { values: v, file } = await validateDocument(db, payload);
+  return await transaction(db, async () => {
+    const before = id ? await documentDetail(db, user, id) : null;
     if (before)
       assert(
         Number.isInteger(payload.version) && before.version === payload.version,
@@ -211,60 +212,62 @@ export function saveDocument(db, user, payload, id, ip) {
       "INVALID_INPUT",
       "Vui lòng cung cấp file PDF hoặc đường dẫn văn bản.",
     );
-    const duplicate = db
+    const duplicate = await db
       .prepare("SELECT id FROM legal_documents WHERE reference_number=? AND id<>?")
       .get(v.reference_number, id ?? "");
     assert(!duplicate, 409, "DUPLICATE_DOCUMENT", "Số/ký hiệu văn bản đã tồn tại.");
     const now = Date.now();
     const documentId = id ?? randomUUID();
     if (before) {
-      db.prepare(
-        `UPDATE legal_documents SET category_id=?,title=?,reference_number=?,issuing_authority=?,issued_date=?,effective_date=?,status=?,source_url=?,notes=?,updated_by=?,updated_at=?,version=version+1 WHERE id=?`,
-      ).run(
-        v.category_id,
-        v.title,
-        v.reference_number,
-        v.issuing_authority,
-        v.issued_date,
-        v.effective_date,
-        v.status,
-        v.source_url,
-        v.notes,
-        user.id,
-        now,
-        documentId,
-      );
-      if (file)
-        db.prepare("UPDATE legal_documents SET file_name=?,file_data=? WHERE id=?").run(
-          file.name,
-          file.data,
+      await db
+        .prepare(
+          `UPDATE legal_documents SET category_id=?,title=?,reference_number=?,issuing_authority=?,issued_date=?,effective_date=?,status=?,source_url=?,notes=?,updated_by=?,updated_at=?,version=version+1 WHERE id=?`,
+        )
+        .run(
+          v.category_id,
+          v.title,
+          v.reference_number,
+          v.issuing_authority,
+          v.issued_date,
+          v.effective_date,
+          v.status,
+          v.source_url,
+          v.notes,
+          user.id,
+          now,
           documentId,
         );
+      if (file)
+        await db
+          .prepare("UPDATE legal_documents SET file_name=?,file_data=? WHERE id=?")
+          .run(file.name, file.data, documentId);
     } else {
-      db.prepare(
-        `INSERT INTO legal_documents(id,category_id,title,reference_number,issuing_authority,issued_date,effective_date,status,source_url,notes,file_name,file_data,created_by,updated_by,created_at,updated_at)
+      await db
+        .prepare(
+          `INSERT INTO legal_documents(id,category_id,title,reference_number,issuing_authority,issued_date,effective_date,status,source_url,notes,file_name,file_data,created_by,updated_by,created_at,updated_at)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      ).run(
-        documentId,
-        v.category_id,
-        v.title,
-        v.reference_number,
-        v.issuing_authority,
-        v.issued_date,
-        v.effective_date,
-        v.status,
-        v.source_url,
-        v.notes,
-        file?.name ?? null,
-        file?.data ?? null,
-        user.id,
-        user.id,
-        now,
-        now,
-      );
+        )
+        .run(
+          documentId,
+          v.category_id,
+          v.title,
+          v.reference_number,
+          v.issuing_authority,
+          v.issued_date,
+          v.effective_date,
+          v.status,
+          v.source_url,
+          v.notes,
+          file?.name ?? null,
+          file?.data ?? null,
+          user.id,
+          user.id,
+          now,
+          now,
+        );
     }
-    const after = documentDetail(db, user, documentId);
-    writeAudit(db, {
+    const after = await documentDetail(db, user, documentId);
+    await writeAudit(db, {
       actorId: user.id,
       feature: "M05",
       objectType: "legal_document",
@@ -278,22 +281,24 @@ export function saveDocument(db, user, payload, id, ip) {
   });
 }
 
-export function replaceDocumentFile(db, user, id, name, data, version, ip) {
+export async function replaceDocumentFile(db, user, id, name, data, version, ip) {
   requireDocumentAccess(user, "edit");
   const file = validateDocumentFile(name, data);
-  return transaction(db, () => {
-    const before = documentDetail(db, user, id);
+  return await transaction(db, async () => {
+    const before = await documentDetail(db, user, id);
     assert(
       version === before.version,
       409,
       "VERSION_CONFLICT",
       "Văn bản đã thay đổi. Hãy tải lại.",
     );
-    db.prepare(
-      "UPDATE legal_documents SET file_name=?,file_data=?,version=version+1,updated_at=?,updated_by=? WHERE id=?",
-    ).run(file.name, file.data, Date.now(), user.id, id);
-    const after = documentDetail(db, user, id);
-    writeAudit(db, {
+    await db
+      .prepare(
+        "UPDATE legal_documents SET file_name=?,file_data=?,version=version+1,updated_at=?,updated_by=? WHERE id=?",
+      )
+      .run(file.name, file.data, Date.now(), user.id, id);
+    const after = await documentDetail(db, user, id);
+    await writeAudit(db, {
       actorId: user.id,
       feature: "M05",
       objectType: "legal_document",
@@ -307,18 +312,18 @@ export function replaceDocumentFile(db, user, id, name, data, version, ip) {
   });
 }
 
-export function documentHistory(db, user, id, url) {
-  documentDetail(db, user, id);
+export async function documentHistory(db, user, id, url) {
+  await documentDetail(db, user, id);
   const { page, pageSize } = pagination(url);
   const where = "l.object_type='legal_document' AND l.object_id=?";
   return {
-    items: db
+    items: await db
       .prepare(
         `SELECT l.id,l.action,l.occurred_at,l.before_json,l.after_json,a.full_name AS actor_name
     FROM audit_logs l LEFT JOIN accounts a ON a.id=l.actor_id WHERE ${where} ORDER BY l.id DESC LIMIT ? OFFSET ?`,
       )
       .all(id, pageSize, (page - 1) * pageSize),
-    total: db.prepare(`SELECT count(*) AS n FROM audit_logs l WHERE ${where}`).get(id).n,
+    total: (await db.prepare(`SELECT count(*) AS n FROM audit_logs l WHERE ${where}`).get(id)).n,
     page,
     pageSize,
   };

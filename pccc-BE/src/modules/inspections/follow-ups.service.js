@@ -15,13 +15,13 @@ import { scopedInspection } from "./inspections.queries.js";
 // One open request at a time per inspection.
 // ---------------------------------------------------------------------------
 
-export function createFollowUp(db, user, id, payload, ip) {
+export async function createFollowUp(db, user, id, payload, ip) {
   requireInspectionAccess(user, "edit");
   object(payload, ["requirement", "due_date"]);
   const requirement = trimmed(payload.requirement, "Nội dung yêu cầu khắc phục", 1, 2000);
   const dueDate = date(payload.due_date, "Hạn hậu kiểm");
-  return transaction(db, () => {
-    const inspection = scopedInspection(db, user, id);
+  return await transaction(db, async () => {
+    const inspection = await scopedInspection(db, user, id);
     assert(
       inspection.status === "completed",
       409,
@@ -35,9 +35,9 @@ export function createFollowUp(db, user, id, payload, ip) {
       "Hạn hậu kiểm không được trước ngày kiểm tra.",
     );
     assert(
-      !db
+      !(await db
         .prepare("SELECT 1 FROM follow_up_inspections WHERE inspection_id=? AND status='open'")
-        .get(id),
+        .get(id)),
       409,
       "DUPLICATE_FOLLOW_UP",
       "Đã có yêu cầu hậu kiểm đang mở cho cuộc kiểm tra này.",
@@ -51,11 +51,13 @@ export function createFollowUp(db, user, id, payload, ip) {
       created_by: user.id,
       created_at: Date.now(),
     };
-    db.prepare(
-      `INSERT INTO follow_up_inspections(id,inspection_id,requirement,due_date,created_by,created_at)
+    await db
+      .prepare(
+        `INSERT INTO follow_up_inspections(id,inspection_id,requirement,due_date,created_by,created_at)
       VALUES (?,?,?,?,?,?)`,
-    ).run(followUp.id, id, requirement, dueDate, user.id, followUp.created_at);
-    writeInspectionAudit(db, user, ip, id, "inspection.follow_up_created", null, followUp);
+      )
+      .run(followUp.id, id, requirement, dueDate, user.id, followUp.created_at);
+    await writeInspectionAudit(db, user, ip, id, "inspection.follow_up_created", null, followUp);
     return followUp;
   });
 }
@@ -64,7 +66,7 @@ export function createFollowUp(db, user, id, payload, ip) {
 // UC-INS-08 — record the outcome of a follow-up inspection
 // ---------------------------------------------------------------------------
 
-export function completeFollowUp(db, user, id, followUpId, payload, ip) {
+export async function completeFollowUp(db, user, id, followUpId, payload, ip) {
   requireInspectionAccess(user, "edit");
   object(payload, ["outcome", "result_note"]);
   assert(
@@ -74,10 +76,10 @@ export function completeFollowUp(db, user, id, followUpId, payload, ip) {
     "Kết quả hậu kiểm không hợp lệ.",
   );
   const resultNote = trimmed(payload.result_note, "Kết quả hậu kiểm", 1, 2000);
-  return transaction(db, () => {
-    scopedInspection(db, user, id);
+  return await transaction(db, async () => {
+    await scopedInspection(db, user, id);
     const select = db.prepare("SELECT * FROM follow_up_inspections WHERE id=? AND inspection_id=?");
-    const before = select.get(followUpId, id);
+    const before = await select.get(followUpId, id);
     assert(before, 404, "NOT_FOUND", "Không tìm thấy yêu cầu hậu kiểm.");
     assert(
       before.status === "open",
@@ -85,12 +87,14 @@ export function completeFollowUp(db, user, id, followUpId, payload, ip) {
       "INVALID_STATE",
       "Yêu cầu hậu kiểm đã được cập nhật kết quả.",
     );
-    db.prepare(
-      `UPDATE follow_up_inspections SET status='completed',outcome=?,result_note=?,completed_by=?,
+    await db
+      .prepare(
+        `UPDATE follow_up_inspections SET status='completed',outcome=?,result_note=?,completed_by=?,
         completed_at=? WHERE id=?`,
-    ).run(payload.outcome, resultNote, user.id, Date.now(), followUpId);
-    const after = select.get(followUpId, id);
-    writeInspectionAudit(db, user, ip, id, "inspection.follow_up_completed", before, after);
+      )
+      .run(payload.outcome, resultNote, user.id, Date.now(), followUpId);
+    const after = await select.get(followUpId, id);
+    await writeInspectionAudit(db, user, ip, id, "inspection.follow_up_completed", before, after);
     return after;
   });
 }

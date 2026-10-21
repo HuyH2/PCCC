@@ -21,7 +21,7 @@ const handle = async (ctx) => {
       result = body;
     },
     readBody: ctx.readJson,
-    authenticateAgain: () => authenticate(ctx.db, ctx.token),
+    authenticateAgain: async () => await authenticate(ctx.db, ctx.token),
   });
   if (!handled) throw new ApiError(404, "NOT_FOUND", "API không tồn tại.");
   return result;

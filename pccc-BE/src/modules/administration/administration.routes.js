@@ -29,19 +29,19 @@ import {
 async function accountDetail(ctx, match, permission) {
   requireAdministrator(ctx.user, permission);
   const id = decodeURIComponent(match[1]);
-  assert(findAccount(ctx.db, id), 404, "NOT_FOUND", "Không tìm thấy tài khoản.");
+  assert(await findAccount(ctx.db, id), 404, "NOT_FOUND", "Không tìm thấy tài khoản.");
   if (ctx.method === "PUT") {
     const payload = await ctx.readJson();
-    const result = updateAccountAuthorization(
+    const result = await updateAccountAuthorization(
       ctx.db,
-      authenticate(ctx.db, ctx.token),
+      await authenticate(ctx.db, ctx.token),
       id,
       payload,
       ctx.ip,
     );
-    return { account: findAccount(ctx.db, id), ...result };
+    return { account: await findAccount(ctx.db, id), ...result };
   }
-  return { account: findAccount(ctx.db, id), scopes: scopesFor(ctx.db, id) };
+  return { account: await findAccount(ctx.db, id), scopes: await scopesFor(ctx.db, id) };
 }
 
 const ACCOUNT_PATH = /^\/api\/authorization\/accounts\/([^/]+)$/;
@@ -50,9 +50,9 @@ export const administrationRoutes = [
   {
     method: "POST",
     path: /^\/api\/authorization\/accounts\/([^/]+)\/(lock|unlock)$/,
-    handle(ctx, match) {
+    async handle(ctx, match) {
       return {
-        account: changeAccountStatus(
+        account: await changeAccountStatus(
           ctx.db,
           ctx.user,
           decodeURIComponent(match[1]),
@@ -69,7 +69,7 @@ export const administrationRoutes = [
     async handle(ctx) {
       const payload = await ctx.readJson();
       ctx.status = 201;
-      return createAccount(ctx.db, ctx.user, payload, ctx.ip);
+      return await createAccount(ctx.db, ctx.user, payload, ctx.ip);
     },
   },
   {
@@ -79,7 +79,13 @@ export const administrationRoutes = [
       const payload = await ctx.readJson();
       const status = payload?.status;
       return {
-        account: setAccountStatus(ctx.db, ctx.user, decodeURIComponent(match[1]), status, ctx.ip),
+        account: await setAccountStatus(
+          ctx.db,
+          ctx.user,
+          decodeURIComponent(match[1]),
+          status,
+          ctx.ip,
+        ),
       };
     },
   },
@@ -88,7 +94,7 @@ export const administrationRoutes = [
     path: /^\/api\/authorization\/accounts\/([^/]+)\/reset-password$/,
     async handle(ctx, match) {
       const payload = await ctx.readJson();
-      return resetAccountPassword(
+      return await resetAccountPassword(
         ctx.db,
         ctx.user,
         decodeURIComponent(match[1]),
@@ -100,21 +106,21 @@ export const administrationRoutes = [
   {
     method: "GET",
     path: "/api/account-transfers/candidates",
-    handle: (ctx) => transferCandidates(ctx.db, ctx.user),
+    handle: async (ctx) => await transferCandidates(ctx.db, ctx.user),
   },
   {
     method: "GET",
     path: "/api/account-transfers/assignments",
-    handle(ctx) {
+    async handle(ctx) {
       const sourceId = ctx.url.searchParams.get("sourceAccountId");
       assert(sourceId, 400, "INVALID_INPUT", "Chọn cán bộ chuyển giao.");
-      return managedAssignments(ctx.db, ctx.user, sourceId);
+      return await managedAssignments(ctx.db, ctx.user, sourceId);
     },
   },
   {
     method: "GET",
     path: "/api/account-transfers",
-    handle: (ctx) => listTransfers(ctx.db, ctx.user, ctx.url),
+    handle: async (ctx) => await listTransfers(ctx.db, ctx.user, ctx.url),
   },
   {
     method: "POST",
@@ -122,15 +128,15 @@ export const administrationRoutes = [
     async handle(ctx) {
       const payload = await ctx.readJson();
       ctx.status = 201;
-      return { transfer: createTransfer(ctx.db, ctx.user, payload, ctx.ip) };
+      return { transfer: await createTransfer(ctx.db, ctx.user, payload, ctx.ip) };
     },
   },
   {
     method: "GET",
     path: "/api/authorization/roles",
-    handle(ctx) {
+    async handle(ctx) {
       requireAdministrator(ctx.user, "M01.view");
-      return listRoles(ctx.db);
+      return await listRoles(ctx.db);
     },
   },
   {
@@ -139,35 +145,45 @@ export const administrationRoutes = [
     async handle(ctx, match) {
       requireAdministrator(ctx.user);
       const payload = await ctx.readJson();
-      updateRolePermissions(ctx.db, authenticate(ctx.db, ctx.token), match[1], payload, ctx.ip);
-      return { permissions: permissionsFor(ctx.db, match[1]) };
+      await updateRolePermissions(
+        ctx.db,
+        await authenticate(ctx.db, ctx.token),
+        match[1],
+        payload,
+        ctx.ip,
+      );
+      return { permissions: await permissionsFor(ctx.db, match[1]) };
     },
   },
   {
     method: "GET",
     path: ACCOUNT_PATH,
-    handle: (ctx, match) => accountDetail(ctx, match, "M01.view"),
+    handle: async (ctx, match) => await accountDetail(ctx, match, "M01.view"),
   },
   {
     method: "PUT",
     path: ACCOUNT_PATH,
-    handle: (ctx, match) => accountDetail(ctx, match, "M01.edit"),
+    handle: async (ctx, match) => await accountDetail(ctx, match, "M01.edit"),
   },
   {
     method: "GET",
     path: "/api/authorization/accounts",
-    handle(ctx) {
+    async handle(ctx) {
       requireAdministrator(ctx.user, "M01.view");
-      return listAccounts(ctx.db, pagination(ctx.url), ctx.url.searchParams.get("search") ?? "");
+      return await listAccounts(
+        ctx.db,
+        pagination(ctx.url),
+        ctx.url.searchParams.get("search") ?? "",
+      );
     },
   },
   {
     method: "GET",
     path: "/api/authorization/scope-options",
-    handle(ctx) {
+    async handle(ctx) {
       requireAdministrator(ctx.user, "M01.view");
       const paging = pagination(ctx.url);
-      return listScopeOptions(ctx.db, ctx.url.searchParams.get("kind"), paging);
+      return await listScopeOptions(ctx.db, ctx.url.searchParams.get("kind"), paging);
     },
   },
 ];

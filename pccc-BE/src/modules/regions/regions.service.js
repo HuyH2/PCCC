@@ -35,11 +35,11 @@ function regionSelect(principal) {
   };
 }
 
-function regionRow(db, principal, id, permission = "M02.view") {
+async function regionRow(db, principal, id, permission = "M02.view") {
   requirePermission(principal, permission);
   const select = regionSelect(principal);
   const scope = regionScope(principal);
-  const row = db
+  const row = await db
     .prepare(`${select.sql} WHERE r.id=? AND ${scope.sql}`)
     .get(...select.params, id, ...scope.params);
   assert(row, 404, "NOT_FOUND", "Không tìm thấy khu vực trong phạm vi được cấp.");
@@ -48,7 +48,7 @@ function regionRow(db, principal, id, permission = "M02.view") {
 
 const SEARCH = "(instr(fold(r.name),fold(?))>0 OR instr(fold(r.id),fold(?))>0)";
 
-export function listRegions(db, principal, { page, pageSize, search, unitId }) {
+export async function listRegions(db, principal, { page, pageSize, search, unitId }) {
   requirePermission(principal, "M02.view");
   assert(search.length <= 100, 400, "INVALID_INPUT", "Từ khóa tìm kiếm quá dài.");
   const select = regionSelect(principal);
@@ -66,36 +66,38 @@ export function listRegions(db, principal, { page, pageSize, search, unitId }) {
   }
   const where = clauses.join(" AND ");
   return {
-    items: db
+    items: await db
       .prepare(`${select.sql} WHERE ${where} ORDER BY u.name,r.name,r.id LIMIT ? OFFSET ?`)
       .all(...select.params, ...scope.params, ...filterParams, pageSize, (page - 1) * pageSize),
-    total: db
-      .prepare(`SELECT count(*) AS n FROM regions r WHERE ${where}`)
-      .get(...scope.params, ...filterParams).n,
+    total: (
+      await db
+        .prepare(`SELECT count(*) AS n FROM regions r WHERE ${where}`)
+        .get(...scope.params, ...filterParams)
+    ).n,
     page,
     pageSize,
   };
 }
 
-export function getRegion(db, principal, id, { page = 1, pageSize = 20 } = {}) {
-  const region = regionRow(db, principal, id);
+export async function getRegion(db, principal, id, { page = 1, pageSize = 20 } = {}) {
+  const region = await regionRow(db, principal, id);
   const facilities = facilityScope(principal);
   return {
     region,
-    facilities: db
+    facilities: await db
       .prepare(
         `SELECT f.id,f.name,f.address,f.status,f.officer_id,o.full_name AS officer_name
       FROM facilities f LEFT JOIN officer_directory o ON o.officer_id=f.officer_id
       WHERE f.region_id=? AND ${facilities.sql} ORDER BY f.name,f.id`,
       )
       .all(id, ...facilities.params),
-    officers: regionOfficers(db, principal, id).officers,
-    history_total: db
-      .prepare("SELECT count(*) AS n FROM assignment_events WHERE region_id=?")
-      .get(id).n,
+    officers: (await regionOfficers(db, principal, id)).officers,
+    history_total: (
+      await db.prepare("SELECT count(*) AS n FROM assignment_events WHERE region_id=?").get(id)
+    ).n,
     history_page: page,
     history_page_size: pageSize,
-    history: db
+    history: await db
       .prepare(
         `SELECT e.id,e.action,e.reason,e.effective_date,e.occurred_at,
       af.full_name AS from_name,at.full_name AS to_name,p.full_name AS performed_by_name
@@ -109,10 +111,10 @@ export function getRegion(db, principal, id, { page = 1, pageSize = 20 } = {}) {
   };
 }
 
-function assertUnit(db, unitId) {
+async function assertUnit(db, unitId) {
   text(unitId, "Đơn vị", 1, 100);
   assert(
-    db.prepare("SELECT 1 FROM units WHERE id=?").get(unitId),
+    await db.prepare("SELECT 1 FROM units WHERE id=?").get(unitId),
     400,
     "INVALID_INPUT",
     "Đơn vị không tồn tại.",
@@ -120,17 +122,19 @@ function assertUnit(db, unitId) {
   return unitId;
 }
 
-function assertUnitInScope(db, principal, unitId) {
+async function assertUnitInScope(db, principal, unitId) {
   const scope = unitScope(principal);
   assert(
-    db.prepare(`SELECT 1 FROM units u WHERE u.id=? AND ${scope.sql}`).get(unitId, ...scope.params),
+    await db
+      .prepare(`SELECT 1 FROM units u WHERE u.id=? AND ${scope.sql}`)
+      .get(unitId, ...scope.params),
     403,
     "UNIT_OUT_OF_SCOPE",
     "Đơn vị ngoài phạm vi được cấp.",
   );
 }
 
-export function createRegion(db, principal, payload, ip) {
+export async function createRegion(db, principal, payload, ip) {
   requirePermission(principal, "M02.view");
   requirePermission(principal, "M02.create");
   object(payload, ["id", "name", "unitId"]);
@@ -142,23 +146,20 @@ export function createRegion(db, principal, payload, ip) {
     "Mã khu vực chỉ gồm chữ, số, dấu chấm, gạch dưới hoặc gạch ngang.",
   );
   const name = text(payload.name?.trim(), "Tên khu vực", 1, 200);
-  const unitId = assertUnit(db, payload.unitId);
-  assertUnitInScope(db, principal, unitId);
-  return transaction(db, () => {
+  const unitId = await assertUnit(db, payload.unitId);
+  await assertUnitInScope(db, principal, unitId);
+  return await transaction(db, async () => {
     assert(
-      !db.prepare("SELECT 1 FROM regions WHERE id=?").get(id),
+      !(await db.prepare("SELECT 1 FROM regions WHERE id=?").get(id)),
       409,
       "DUPLICATE_CODE",
       "Mã khu vực đã tồn tại.",
     );
-    db.prepare("INSERT INTO regions(id,name,unit_id,code) VALUES (?,?,?,?)").run(
-      id,
-      name,
-      unitId,
-      id,
-    );
-    const created = regionRow(db, principal, id);
-    writeAudit(db, {
+    await db
+      .prepare("INSERT INTO regions(id,name,unit_id,code) VALUES (?,?,?,?)")
+      .run(id, name, unitId, id);
+    const created = await regionRow(db, principal, id);
+    await writeAudit(db, {
       actorId: principal.id,
       feature: "M02",
       objectType: "region",
@@ -171,17 +172,17 @@ export function createRegion(db, principal, payload, ip) {
   });
 }
 
-export function updateRegion(db, principal, id, payload, ip) {
+export async function updateRegion(db, principal, id, payload, ip) {
   requirePermission(principal, "M02.view");
-  const before = regionRow(db, principal, id, "M02.edit");
+  const before = await regionRow(db, principal, id, "M02.edit");
   object(payload, ["name", "unitId"]);
   const name = text(payload.name?.trim(), "Tên khu vực", 1, 200);
-  const unitId = assertUnit(db, payload.unitId);
-  assertUnitInScope(db, principal, unitId);
-  return transaction(db, () => {
-    db.prepare("UPDATE regions SET name=?,unit_id=? WHERE id=?").run(name, unitId, id);
-    const after = regionRow(db, principal, id, "M02.edit");
-    writeAudit(db, {
+  const unitId = await assertUnit(db, payload.unitId);
+  await assertUnitInScope(db, principal, unitId);
+  return await transaction(db, async () => {
+    await db.prepare("UPDATE regions SET name=?,unit_id=? WHERE id=?").run(name, unitId, id);
+    const after = await regionRow(db, principal, id, "M02.edit");
+    await writeAudit(db, {
       actorId: principal.id,
       feature: "M02",
       objectType: "region",
@@ -195,34 +196,39 @@ export function updateRegion(db, principal, id, payload, ip) {
   });
 }
 
-function grantDirectScope(db, accountId, kind, targetId) {
-  if (db.prepare("SELECT 1 FROM account_scopes WHERE account_id=? AND kind='all'").get(accountId))
+async function grantDirectScope(db, accountId, kind, targetId) {
+  if (
+    await db
+      .prepare("SELECT 1 FROM account_scopes WHERE account_id=? AND kind='all'")
+      .get(accountId)
+  )
     return;
   const column = kind === "region" ? "region_id" : "facility_id";
-  db.prepare(`INSERT OR IGNORE INTO account_scopes(account_id,kind,${column}) VALUES (?,?,?)`).run(
-    accountId,
-    kind,
-    targetId,
-  );
+  await db
+    .prepare(
+      `INSERT INTO account_scopes(account_id,kind,${column}) VALUES (?,?,?) ON CONFLICT DO NOTHING`,
+    )
+    .run(accountId, kind, targetId);
 }
 
-function unitChain(db, unitId) {
+async function unitChain(db, unitId) {
   const ids = [];
   const seen = new Set();
   let current = unitId;
   while (current && !seen.has(current)) {
     seen.add(current);
     ids.push(current);
-    current = db.prepare("SELECT parent_id FROM units WHERE id=?").get(current)?.parent_id ?? null;
+    current =
+      (await db.prepare("SELECT parent_id FROM units WHERE id=?").get(current))?.parent_id ?? null;
   }
   return ids;
 }
 
 // A region-scoped commander can still hand a region to an officer of the same unit
 // (or a parent unit), even though that officer has no region scope yet.
-function assignmentAccountScope(db, principal, region) {
+async function assignmentAccountScope(db, principal, region) {
   const base = accountScope(principal);
-  const unitIds = unitChain(db, region.unit_id);
+  const unitIds = await unitChain(db, region.unit_id);
   const placeholders = unitIds.map(() => "?").join(",");
   return {
     sql: `(${base.sql} OR a.id IN (
@@ -250,7 +256,7 @@ function dateOnly(value, field) {
   return value;
 }
 
-export function assignRegion(db, principal, id, payload, ip) {
+export async function assignRegion(db, principal, id, payload, ip) {
   requirePermission(principal, "M02.view");
   requirePermission(principal, "M02.edit");
   object(payload, ["accountId", "effectiveDate", "note"]);
@@ -264,8 +270,8 @@ export function assignRegion(db, principal, id, payload, ip) {
       ? null
       : text(payload.note.trim(), "Ghi chú", 1, 500);
 
-  return transaction(db, () => {
-    const region = regionRow(db, principal, id, "M02.edit");
+  return await transaction(db, async () => {
+    const region = await regionRow(db, principal, id, "M02.edit");
     assert(
       accountId !== region.officer_account_id,
       409,
@@ -274,16 +280,16 @@ export function assignRegion(db, principal, id, payload, ip) {
     );
     const now = Date.now();
     if (accountId) {
-      const account = db
+      const account = await db
         .prepare(
           `SELECT a.id,a.officer_id FROM accounts a JOIN roles r ON r.code=a.role_code
         WHERE a.id=? AND a.status='active' AND r.enabled=1`,
         )
         .get(accountId);
       assert(account, 409, "ACCOUNT_UNAVAILABLE", "Tài khoản cán bộ không hoạt động.");
-      const visible = assignmentAccountScope(db, principal, region);
+      const visible = await assignmentAccountScope(db, principal, region);
       assert(
-        db
+        await db
           .prepare(`SELECT 1 FROM accounts a WHERE a.id=? AND ${visible.sql}`)
           .get(accountId, ...visible.params),
         403,
@@ -291,38 +297,43 @@ export function assignRegion(db, principal, id, payload, ip) {
         "Tài khoản cán bộ ngoài phạm vi được cấp.",
       );
       assert(
-        db.prepare("SELECT count(*) AS n FROM accounts WHERE officer_id=?").get(account.officer_id)
-          .n === 1,
+        (
+          await db
+            .prepare("SELECT count(*) AS n FROM accounts WHERE officer_id=?")
+            .get(account.officer_id)
+        ).n === 1,
         409,
         "AMBIGUOUS_OFFICER",
         "Mã cán bộ đang gắn nhiều tài khoản.",
       );
-      db.prepare(
-        `INSERT INTO region_assignments(region_id,account_id,assigned_at) VALUES (?,?,?)
+      await db
+        .prepare(
+          `INSERT INTO region_assignments(region_id,account_id,assigned_at) VALUES (?,?,?)
         ON CONFLICT(region_id) DO UPDATE SET account_id=excluded.account_id,assigned_at=excluded.assigned_at`,
-      ).run(id, accountId, now);
-      grantDirectScope(db, accountId, "region", id);
+        )
+        .run(id, accountId, now);
+      await grantDirectScope(db, accountId, "region", id);
     } else {
-      db.prepare("DELETE FROM region_assignments WHERE region_id=?").run(id);
+      await db.prepare("DELETE FROM region_assignments WHERE region_id=?").run(id);
     }
 
     if (region.officer_account_id && region.officer_account_id !== accountId) {
-      db.prepare(
-        "DELETE FROM account_scopes WHERE account_id=? AND kind='region' AND region_id=?",
-      ).run(region.officer_account_id, id);
-      const oldAccount = db
+      await db
+        .prepare("DELETE FROM account_scopes WHERE account_id=? AND kind='region' AND region_id=?")
+        .run(region.officer_account_id, id);
+      const oldAccount = await db
         .prepare("SELECT officer_id FROM accounts WHERE id=?")
         .get(region.officer_account_id);
       if (oldAccount) {
-        const remaining = db
+        const remaining = await db
           .prepare("SELECT id FROM facilities WHERE region_id=? AND officer_id=?")
           .all(id, oldAccount.officer_id);
         for (const facility of remaining)
-          grantDirectScope(db, region.officer_account_id, "facility", facility.id);
+          await grantDirectScope(db, region.officer_account_id, "facility", facility.id);
       }
     }
 
-    const auditId = writeAudit(db, {
+    const auditId = await writeAudit(db, {
       actorId: principal.id,
       feature: "M02",
       objectType: "region",
@@ -332,37 +343,39 @@ export function assignRegion(db, principal, id, payload, ip) {
       after: { accountId, effectiveDate, note },
       ip,
     });
-    db.prepare(
-      `INSERT INTO assignment_events(region_id,from_account_id,to_account_id,action,reason,
+    await db
+      .prepare(
+        `INSERT INTO assignment_events(region_id,from_account_id,to_account_id,action,reason,
         effective_date,performed_by,occurred_at,audit_log_id)
       VALUES (?,?,?,?,?,?,?,?,?)`,
-    ).run(
-      id,
-      region.officer_account_id,
-      accountId,
-      accountId ? "assign" : "unassign",
-      note,
-      effectiveDate,
-      principal.id,
-      now,
-      auditId,
-    );
+      )
+      .run(
+        id,
+        region.officer_account_id,
+        accountId,
+        accountId ? "assign" : "unassign",
+        note,
+        effectiveDate,
+        principal.id,
+        now,
+        auditId,
+      );
 
-    return getRegion(db, principal, id);
+    return await getRegion(db, principal, id);
   });
 }
 
-export function regionOfficers(db, principal, id) {
-  regionRow(db, principal, id);
+export async function regionOfficers(db, principal, id) {
+  await regionRow(db, principal, id);
   const facilities = facilityScope(principal);
-  const rows = db
+  const rows = await db
     .prepare(
       `SELECT f.officer_id,a.full_name,a.id AS account_id,a.role_code,a.status
       FROM facilities f LEFT JOIN accounts a ON a.officer_id=f.officer_id
       WHERE f.region_id=? AND ${facilities.sql} ORDER BY f.officer_id`,
     )
     .all(id, ...facilities.params);
-  const owner = db
+  const owner = await db
     .prepare(
       `SELECT a.officer_id,a.full_name,a.id AS account_id,a.role_code,a.status
       FROM region_assignments ra JOIN accounts a ON a.id=ra.account_id
@@ -383,17 +396,17 @@ export function regionOfficers(db, principal, id) {
   return { officers };
 }
 
-export function assignableOfficers(db, principal, regionId = "") {
+export async function assignableOfficers(db, principal, regionId = "") {
   requirePermission(principal, "M02.edit");
   let scope;
   if (regionId) {
-    const region = regionRow(db, principal, regionId, "M02.edit");
-    scope = assignmentAccountScope(db, principal, region);
+    const region = await regionRow(db, principal, regionId, "M02.edit");
+    scope = await assignmentAccountScope(db, principal, region);
   } else {
     scope = accountScope(principal);
   }
   return {
-    items: db
+    items: await db
       .prepare(
         `SELECT a.id,a.full_name,a.officer_id,a.role_code,
       (SELECT count(*) FROM region_assignments ra WHERE ra.account_id=a.id) AS region_count
@@ -405,11 +418,11 @@ export function assignableOfficers(db, principal, regionId = "") {
   };
 }
 
-export function listUnits(db, principal) {
+export async function listUnits(db, principal) {
   requirePermission(principal, "M02.view");
   const scope = unitScope(principal);
   return {
-    items: db
+    items: await db
       .prepare(
         `SELECT u.id,u.name,u.parent_id FROM units u WHERE ${scope.sql} ORDER BY u.parent_id,u.id`,
       )

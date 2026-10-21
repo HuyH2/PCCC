@@ -40,22 +40,26 @@ function requireAssignmentPermission(user) {
   );
 }
 
-function reachableRegions(db, scopes) {
+async function filterAsync(items, predicate) {
+  const keep = await Promise.all(items.map(predicate));
+  return items.filter((_, index) => keep[index]);
+}
+
+async function reachableRegions(db, scopes) {
   const principal = { scopes };
   const filter = regionScope(principal);
   return new Set(
-    db
-      .prepare(`SELECT r.id FROM regions r WHERE ${filter.sql}`)
-      .all(...filter.params)
-      .map((r) => r.id),
+    (await db.prepare(`SELECT r.id FROM regions r WHERE ${filter.sql}`).all(...filter.params)).map(
+      (r) => r.id,
+    ),
   );
 }
 
-export function listTaskAssignees(db, user) {
+export async function listTaskAssignees(db, user) {
   requireAssignmentPermission(user);
   const ownAll = user.scopes.some((scope) => scope.kind === "all");
-  const regions = ownAll ? null : reachableRegions(db, user.scopes);
-  const accounts = db
+  const regions = ownAll ? null : await reachableRegions(db, user.scopes);
+  const accounts = await db
     .prepare(
       `SELECT a.id,a.full_name,a.username,a.role_code FROM accounts a
     JOIN role_permissions rp ON rp.role_code=a.role_code AND rp.permission_code='M07.view'
@@ -65,17 +69,17 @@ export function listTaskAssignees(db, user) {
     )
     .all(user.id);
   return {
-    items: accounts.filter((account) => {
+    items: await filterAsync(accounts, async (account) => {
       if (ownAll) return true;
-      const candidateScopes = scopesFor(db, account.id);
+      const candidateScopes = await scopesFor(db, account.id);
       if (candidateScopes.some((scope) => scope.kind === "all")) return true;
-      const candidateRegions = reachableRegions(db, candidateScopes);
+      const candidateRegions = await reachableRegions(db, candidateScopes);
       return [...candidateRegions].some((region) => regions.has(region));
     }),
   };
 }
 
-export function createTask(db, user, input, ip) {
+export async function createTask(db, user, input, ip) {
   requireAssignmentPermission(user);
   object(input, ["title", "description", "kind", "dueDate", "assigneeId"]);
   const title = text(
@@ -112,25 +116,29 @@ export function createTask(db, user, input, ip) {
     "Hạn hoàn thành không hợp lệ.",
   );
   assert(
-    listTaskAssignees(db, user).items.some((account) => account.id === assigneeId),
+    (await listTaskAssignees(db, user)).items.some((account) => account.id === assigneeId),
     403,
     "FORBIDDEN",
     "Cán bộ không thuộc phạm vi giao việc hoặc không hoạt động.",
   );
-  return transaction(db, () => {
+  return await transaction(db, async () => {
     const now = Date.now();
     const id = randomUUID();
     const code = `CV-${id.slice(0, 13).toUpperCase()}`;
-    db.prepare(
-      `INSERT INTO tasks
+    await db
+      .prepare(
+        `INSERT INTO tasks
       (id,code,title,description,assigned_by,assigned_to,status,kind,due_at,progress,created_at,updated_at)
       VALUES (?,?,?,?,?,?,'open',?,?,0,?,?)`,
-    ).run(id, code, title, description, user.id, assigneeId, input.kind, dueAt, now, now);
-    db.prepare(
-      `INSERT INTO task_assignments(task_id,assignee_id,assigned_by,assigned_at,note)
+      )
+      .run(id, code, title, description, user.id, assigneeId, input.kind, dueAt, now, now);
+    await db
+      .prepare(
+        `INSERT INTO task_assignments(task_id,assignee_id,assigned_by,assigned_at,note)
       VALUES (?,?,?,?,?)`,
-    ).run(id, assigneeId, user.id, now, "Giao việc");
-    writeAudit(db, {
+      )
+      .run(id, assigneeId, user.id, now, "Giao việc");
+    await writeAudit(db, {
       actorId: user.id,
       feature: "M07",
       objectType: "task",
@@ -139,13 +147,13 @@ export function createTask(db, user, input, ip) {
       after: { title, assigneeId, kind: input.kind, dueAt },
       ip,
     });
-    return taskDetail(db, user, id);
+    return await taskDetail(db, user, id);
   });
 }
 
-export function updateTaskProgress(db, user, id, input, ip) {
+export async function updateTaskProgress(db, user, id, input, ip) {
   requireTaskPermission(user, "edit");
-  const { task } = taskDetail(db, user, id);
+  const { task } = await taskDetail(db, user, id);
   assert(
     task.assigned_to === user.id,
     403,
@@ -170,19 +178,21 @@ export function updateTaskProgress(db, user, id, input, ip) {
     "NO_CHANGE",
     "Tiến độ không thay đổi.",
   );
-  return transaction(db, () => {
+  return await transaction(db, async () => {
     const now = Date.now();
-    const changed = db
+    const changed = await db
       .prepare(
         "UPDATE tasks SET progress=?,updated_at=? WHERE id=? AND progress=? AND status='open'",
       )
       .run(input.progress, now, id, task.progress);
     assert(changed.changes === 1, 409, "TASK_CHANGED", "Công việc đã thay đổi. Hãy tải lại.");
-    db.prepare(
-      `INSERT INTO task_progress(task_id,account_id,progress,status,note,created_at)
+    await db
+      .prepare(
+        `INSERT INTO task_progress(task_id,account_id,progress,status,note,created_at)
       VALUES (?,?,?,'open',?,?)`,
-    ).run(id, user.id, input.progress, note || null, now);
-    writeAudit(db, {
+      )
+      .run(id, user.id, input.progress, note || null, now);
+    await writeAudit(db, {
       actorId: user.id,
       feature: "M07",
       objectType: "task",
@@ -192,13 +202,13 @@ export function updateTaskProgress(db, user, id, input, ip) {
       after: { progress: input.progress, note },
       ip,
     });
-    return taskDetail(db, user, id);
+    return await taskDetail(db, user, id);
   });
 }
 
-export function updateTaskStatus(db, user, id, input, ip) {
+export async function updateTaskStatus(db, user, id, input, ip) {
   requireTaskPermission(user, "edit");
-  const { task } = taskDetail(db, user, id);
+  const { task } = await taskDetail(db, user, id);
   object(input, ["status", "note"]);
   const status = input.status;
   assert(
@@ -227,11 +237,11 @@ export function updateTaskStatus(db, user, id, input, ip) {
     input.note === undefined
       ? ""
       : text(typeof input.note === "string" ? input.note.trim() : input.note, "Ghi chú", 0, 1000);
-  return transaction(db, () => {
+  return await transaction(db, async () => {
     const now = Date.now();
     const nextProgress = status === "completed" ? 100 : task.progress;
     const completedAt = status === "completed" ? now : null;
-    const changed = db
+    const changed = await db
       .prepare(
         `UPDATE tasks SET status=?,progress=?,completed_at=?,updated_at=?
         WHERE id=? AND status=?`,
@@ -244,11 +254,13 @@ export function updateTaskStatus(db, user, id, input, ip) {
         : status === "cancelled"
           ? "Hủy công việc"
           : "Mở lại công việc";
-    db.prepare(
-      `INSERT INTO task_progress(task_id,account_id,progress,status,note,created_at)
+    await db
+      .prepare(
+        `INSERT INTO task_progress(task_id,account_id,progress,status,note,created_at)
       VALUES (?,?,?,?,?,?)`,
-    ).run(id, user.id, nextProgress, status, note || defaultNote, now);
-    writeAudit(db, {
+      )
+      .run(id, user.id, nextProgress, status, note || defaultNote, now);
+    await writeAudit(db, {
       actorId: user.id,
       feature: "M07",
       objectType: "task",
@@ -258,44 +270,47 @@ export function updateTaskStatus(db, user, id, input, ip) {
       after: { status, progress: nextProgress, note },
       ip,
     });
-    return taskDetail(db, user, id);
+    return await taskDetail(db, user, id);
   });
 }
 
-export function listTaskProgressHistory(db, user, id, url) {
-  taskDetail(db, user, id);
+export async function listTaskProgressHistory(db, user, id, url) {
+  await taskDetail(db, user, id);
   const { page, pageSize } = pagination(url);
   const where = "tp.task_id=?";
-  const rows = db
-    .prepare(
-      `SELECT tp.id,tp.account_id,a.full_name AS actor_name,tp.progress,tp.status,tp.note,
+  const rows = (
+    await db
+      .prepare(
+        `SELECT tp.id,tp.account_id,a.full_name AS actor_name,tp.progress,tp.status,tp.note,
         tp.created_at AS occurred_at,
         LAG(tp.progress,1,0) OVER (ORDER BY tp.created_at,tp.id) AS before_progress
       FROM task_progress tp JOIN accounts a ON a.id=tp.account_id
       WHERE ${where}
       ORDER BY tp.created_at DESC,tp.id DESC LIMIT ? OFFSET ?`,
-    )
-    .all(id, pageSize, (page - 1) * pageSize)
-    .map((row) => ({
-      id: row.id,
-      account_id: row.account_id,
-      actor_name: row.actor_name,
-      occurred_at: row.occurred_at,
-      status: row.status,
-      before: { progress: row.before_progress },
-      after: { progress: row.progress, note: row.note ?? "" },
-    }));
+      )
+      .all(id, pageSize, (page - 1) * pageSize)
+  ).map((row) => ({
+    id: row.id,
+    account_id: row.account_id,
+    actor_name: row.actor_name,
+    occurred_at: row.occurred_at,
+    status: row.status,
+    before: { progress: row.before_progress },
+    after: { progress: row.progress, note: row.note ?? "" },
+  }));
   return {
     items: rows,
-    total: db.prepare("SELECT count(*) AS n FROM task_progress tp WHERE tp.task_id=?").get(id).n,
+    total: (
+      await db.prepare("SELECT count(*) AS n FROM task_progress tp WHERE tp.task_id=?").get(id)
+    ).n,
     page,
     pageSize,
   };
 }
 
-export function taskDetail(db, user, id) {
+export async function taskDetail(db, user, id) {
   requireTaskPermission(user);
-  const task = db
+  const task = await db
     .prepare(
       `SELECT ${taskColumns} FROM ${taskJoins}
     WHERE t.id=? AND (t.assigned_by=? OR t.assigned_to=?)`,
@@ -325,7 +340,7 @@ function dateBoundary(value, field) {
   return epoch;
 }
 
-export function listTasks(db, user, url, forcedView = "") {
+export async function listTasks(db, user, url, forcedView = "") {
   requireTaskPermission(user);
   const { page, pageSize } = pagination(url);
   const view = forcedView || url.searchParams.get("view") || "all";
@@ -383,21 +398,21 @@ export function listTasks(db, user, url, forcedView = "") {
   const order =
     url.searchParams.get("sort") === "due" ? "t.due_at ASC,t.id" : "t.created_at DESC,t.id DESC";
   return {
-    items: db
+    items: await db
       .prepare(
         `SELECT ${taskColumns} FROM ${taskJoins} WHERE ${where}
       ORDER BY ${order} LIMIT ? OFFSET ?`,
       )
       .all(...params, pageSize, (page - 1) * pageSize),
-    total: db.prepare(`SELECT count(*) AS n FROM tasks t WHERE ${where}`).get(...params).n,
+    total: (await db.prepare(`SELECT count(*) AS n FROM tasks t WHERE ${where}`).get(...params)).n,
     page,
     pageSize,
     view,
   };
 }
 
-function messageDetail(db, taskId, id) {
-  const message = db
+async function messageDetail(db, taskId, id) {
+  const message = await db
     .prepare(
       `SELECT ${messageColumns}
     FROM task_messages m JOIN accounts a ON a.id=m.sender_id
@@ -412,22 +427,25 @@ function visibleMessage(message) {
   return { ...message, body: message.deleted_at === null ? message.body : null };
 }
 
-export function listTaskMessages(db, user, taskId, url) {
-  taskDetail(db, user, taskId);
+export async function listTaskMessages(db, user, taskId, url) {
+  await taskDetail(db, user, taskId);
   const { page, pageSize } = pagination(url);
   // Page 1 is the newest window; each returned window reads oldest to newest.
-  const items = db
-    .prepare(
-      `SELECT ${messageColumns}
+  const items = (
+    await db
+      .prepare(
+        `SELECT ${messageColumns}
     FROM task_messages m JOIN accounts a ON a.id=m.sender_id
     WHERE m.task_id=? ORDER BY m.created_at DESC,m.id DESC LIMIT ? OFFSET ?`,
-    )
-    .all(taskId, pageSize, (page - 1) * pageSize)
+      )
+      .all(taskId, pageSize, (page - 1) * pageSize)
+  )
     .reverse()
     .map(visibleMessage);
   return {
     items,
-    total: db.prepare("SELECT count(*) AS n FROM task_messages WHERE task_id=?").get(taskId).n,
+    total: (await db.prepare("SELECT count(*) AS n FROM task_messages WHERE task_id=?").get(taskId))
+      .n,
     page,
     pageSize,
   };
@@ -443,21 +461,21 @@ function validatedBody(input) {
   );
 }
 
-export function sendTaskMessage(db, user, taskId, input, ip) {
+export async function sendTaskMessage(db, user, taskId, input, ip) {
   requireTaskPermission(user, "create");
-  const { task } = taskDetail(db, user, taskId);
+  const { task } = await taskDetail(db, user, taskId);
   assert(task.status === "open", 409, "TASK_CLOSED", "Công việc đã đóng, không thể gửi tin nhắn.");
   const body = validatedBody(input);
-  return transaction(db, () => {
+  return await transaction(db, async () => {
     const now = Date.now();
-    const result = db
+    const result = await db
       .prepare(
         `INSERT INTO task_messages(task_id,sender_id,body,created_at)
-      VALUES (?,?,?,?)`,
+      VALUES (?,?,?,?) RETURNING id`,
       )
       .run(taskId, user.id, body, now);
     const id = Number(result.lastInsertRowid);
-    writeAudit(db, {
+    await writeAudit(db, {
       actorId: user.id,
       feature: "M07",
       objectType: "task_message",
@@ -466,15 +484,15 @@ export function sendTaskMessage(db, user, taskId, input, ip) {
       after: { taskId },
       ip,
     });
-    return { message: visibleMessage(messageDetail(db, taskId, id)) };
+    return { message: visibleMessage(await messageDetail(db, taskId, id)) };
   });
 }
 
-function editableMessage(db, user, taskId, id) {
+async function editableMessage(db, user, taskId, id) {
   requireTaskPermission(user, "edit");
-  const { task } = taskDetail(db, user, taskId);
+  const { task } = await taskDetail(db, user, taskId);
   assert(task.status === "open", 409, "TASK_CLOSED", "Công việc đã đóng, không thể sửa tin nhắn.");
-  const message = messageDetail(db, taskId, id);
+  const message = await messageDetail(db, taskId, id);
   assert(
     message.sender_id === user.id,
     403,
@@ -485,19 +503,19 @@ function editableMessage(db, user, taskId, id) {
   return message;
 }
 
-export function editTaskMessage(db, user, taskId, id, input, ip) {
-  const previous = editableMessage(db, user, taskId, id);
+export async function editTaskMessage(db, user, taskId, id, input, ip) {
+  const previous = await editableMessage(db, user, taskId, id);
   const body = validatedBody(input);
   assert(body !== previous.body, 409, "NO_CHANGE", "Nội dung tin nhắn không thay đổi.");
-  return transaction(db, () => {
-    const changed = db
+  return await transaction(db, async () => {
+    const changed = await db
       .prepare(
         `UPDATE task_messages SET body=?,edited_at=?
       WHERE id=? AND task_id=? AND sender_id=? AND deleted_at IS NULL`,
       )
       .run(body, Date.now(), id, taskId, user.id);
     assert(changed.changes === 1, 409, "MESSAGE_CHANGED", "Tin nhắn đã thay đổi. Hãy tải lại.");
-    writeAudit(db, {
+    await writeAudit(db, {
       actorId: user.id,
       feature: "M07",
       objectType: "task_message",
@@ -506,21 +524,21 @@ export function editTaskMessage(db, user, taskId, id, input, ip) {
       after: { taskId },
       ip,
     });
-    return { message: visibleMessage(messageDetail(db, taskId, id)) };
+    return { message: visibleMessage(await messageDetail(db, taskId, id)) };
   });
 }
 
-export function deleteTaskMessage(db, user, taskId, id, ip) {
-  editableMessage(db, user, taskId, id);
-  return transaction(db, () => {
-    const changed = db
+export async function deleteTaskMessage(db, user, taskId, id, ip) {
+  await editableMessage(db, user, taskId, id);
+  return await transaction(db, async () => {
+    const changed = await db
       .prepare(
         `UPDATE task_messages SET deleted_at=?,deleted_by=?
       WHERE id=? AND task_id=? AND sender_id=? AND deleted_at IS NULL`,
       )
       .run(Date.now(), user.id, id, taskId, user.id);
     assert(changed.changes === 1, 409, "MESSAGE_CHANGED", "Tin nhắn đã thay đổi. Hãy tải lại.");
-    writeAudit(db, {
+    await writeAudit(db, {
       actorId: user.id,
       feature: "M07",
       objectType: "task_message",
@@ -529,6 +547,6 @@ export function deleteTaskMessage(db, user, taskId, id, ip) {
       after: { taskId },
       ip,
     });
-    return { message: visibleMessage(messageDetail(db, taskId, id)) };
+    return { message: visibleMessage(await messageDetail(db, taskId, id)) };
   });
 }

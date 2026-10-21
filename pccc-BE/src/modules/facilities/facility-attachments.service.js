@@ -344,11 +344,11 @@ async function readUpload(request) {
  * List attachments associated with a facility (optionally linked to personnel),
  * sorted newest first, with pagination.
  */
-export function listFacilityAttachments(db, user, facilityId, url) {
-  getFacility(db, user, facilityId);
+export async function listFacilityAttachments(db, user, facilityId, url) {
+  await getFacility(db, user, facilityId);
   const { page, pageSize } = pagination(url);
 
-  const items = db
+  const items = await db
     .prepare(
       `SELECT ${attachmentColumns}
        FROM attachments a
@@ -360,9 +360,11 @@ export function listFacilityAttachments(db, user, facilityId, url) {
     )
     .all(facilityId, pageSize, (page - 1) * pageSize);
 
-  const total = db
-    .prepare(`SELECT count(*) AS n FROM attachments WHERE facility_id = ? AND deleted_at IS NULL`)
-    .get(facilityId).n;
+  const total = (
+    await db
+      .prepare(`SELECT count(*) AS n FROM attachments WHERE facility_id = ? AND deleted_at IS NULL`)
+      .get(facilityId)
+  ).n;
 
   return {
     items,
@@ -398,14 +400,14 @@ export async function uploadFacilityAttachment(
   refreshPrincipal = () => user,
 ) {
   requirePermission(user, "M03.edit");
-  getFacility(db, user, facilityId);
+  await getFacility(db, user, facilityId);
 
   const upload = await readUpload(request);
 
   // A streamed upload can outlive a session/grant change; authorize again before writing anything.
-  const currentUser = refreshPrincipal();
+  const currentUser = await refreshPrincipal();
   requirePermission(currentUser, "M03.edit");
-  getFacility(db, currentUser, facilityId);
+  await getFacility(db, currentUser, facilityId);
 
   const detected = detectFile(upload.name, upload.bytes);
   assert(
@@ -416,7 +418,7 @@ export async function uploadFacilityAttachment(
   );
   if (upload.personnelId) {
     assert(
-      personnelRow(db, facilityId, upload.personnelId),
+      await personnelRow(db, facilityId, upload.personnelId),
       400,
       "INVALID_INPUT",
       "Nhân sự được liên kết không thuộc cơ sở này.",
@@ -439,34 +441,36 @@ export async function uploadFacilityAttachment(
       closeSync(descriptor);
     }
 
-    return transaction(db, () => {
+    return await transaction(db, async () => {
       const now = Date.now();
-      db.prepare(
-        `INSERT INTO attachments (
+      await db
+        .prepare(
+          `INSERT INTO attachments (
            id, facility_id, personnel_id, document_type, description,
            original_name, stored_name, content_type, size_bytes, checksum,
            issue_date, expiry_date, storage_path, uploaded_by, uploaded_at
          )
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(
-        id,
-        facilityId,
-        upload.personnelId,
-        upload.documentType,
-        upload.description,
-        upload.name,
-        storedName,
-        detected.contentType,
-        upload.bytes.length,
-        createHash("sha256").update(upload.bytes).digest("hex"),
-        upload.issueDate,
-        upload.expiryDate,
-        storedName,
-        currentUser.id,
-        now,
-      );
+        )
+        .run(
+          id,
+          facilityId,
+          upload.personnelId,
+          upload.documentType,
+          upload.description,
+          upload.name,
+          storedName,
+          detected.contentType,
+          upload.bytes.length,
+          createHash("sha256").update(upload.bytes).digest("hex"),
+          upload.issueDate,
+          upload.expiryDate,
+          storedName,
+          currentUser.id,
+          now,
+        );
 
-      const attachment = db
+      const attachment = await db
         .prepare(
           `SELECT ${attachmentColumns}
            FROM attachments a
@@ -476,7 +480,7 @@ export async function uploadFacilityAttachment(
         )
         .get(id);
 
-      writeAudit(db, {
+      await writeAudit(db, {
         actorId: currentUser.id,
         feature: "M03",
         objectType: "facility_attachment",
@@ -504,10 +508,10 @@ export async function uploadFacilityAttachment(
  * Retrieve raw attachment file content along with metadata for inline viewing or download.
  * Validates safe storage path, ensures regular file (no symlinks), and verifies byte length.
  */
-export function facilityAttachmentFile(db, user, facilityId, attachmentId, directory) {
-  getFacility(db, user, facilityId);
+export async function facilityAttachmentFile(db, user, facilityId, attachmentId, directory) {
+  await getFacility(db, user, facilityId);
 
-  const attachment = db
+  const attachment = await db
     .prepare("SELECT * FROM attachments WHERE id = ? AND facility_id = ?")
     .get(attachmentId, facilityId);
 
@@ -558,22 +562,20 @@ export function facilityAttachmentFile(db, user, facilityId, attachmentId, direc
   return { attachment, bytes };
 }
 
-export function softDeleteFacilityAttachment(db, user, facilityId, attachmentId, ip) {
+export async function softDeleteFacilityAttachment(db, user, facilityId, attachmentId, ip) {
   requirePermission(user, "M03.edit");
-  getFacility(db, user, facilityId);
-  const attachment = db
+  await getFacility(db, user, facilityId);
+  const attachment = await db
     .prepare("SELECT id FROM attachments WHERE id = ? AND facility_id = ? AND deleted_at IS NULL")
     .get(attachmentId, facilityId);
   assert(attachment, 404, "NOT_FOUND", "Không tìm thấy tài liệu trong cơ sở này.");
 
-  return transaction(db, () => {
+  return await transaction(db, async () => {
     const now = Date.now();
-    db.prepare("UPDATE attachments SET deleted_at = ?, deleted_by = ? WHERE id = ?").run(
-      now,
-      user.id,
-      attachmentId,
-    );
-    writeAudit(db, {
+    await db
+      .prepare("UPDATE attachments SET deleted_at = ?, deleted_by = ? WHERE id = ?")
+      .run(now, user.id, attachmentId);
+    await writeAudit(db, {
       actorId: user.id,
       feature: "M03",
       objectType: "facility_attachment",

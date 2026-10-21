@@ -9,15 +9,15 @@ const password = "Temporary-test-password-2026";
 const origin = "http://localhost:3000";
 
 async function fixture(t) {
-  const db = openDatabase(":memory:");
+  const db = await openDatabase(":memory:");
   await seedDemo(db, password);
-  db.exec("UPDATE accounts SET must_change_password=0");
+  await db.exec("UPDATE accounts SET must_change_password=0");
   const server = createApp(db, { appOrigin: origin });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   t.after(async () => {
     await new Promise((resolve) => server.close(resolve));
-    db.close();
+    await db.close();
   });
   const base = `http://127.0.0.1:${server.address().port}`;
   async function get(path, cookie) {
@@ -41,19 +41,20 @@ const search = (get, cookie, q, extra = "") =>
   get(`/api/search?q=${encodeURIComponent(q)}${extra}`, cookie);
 
 test("migration exposes read-only views joined to the shared catalog", async () => {
-  const db = openDatabase(":memory:");
+  const db = await openDatabase(":memory:");
   try {
     await seedDemo(db, password);
-    const row = db.prepare("SELECT * FROM facility_overview WHERE id='CS001'").get();
+    const row = await db.prepare("SELECT * FROM facility_overview WHERE id='CS001'").get();
     assert.equal(row.region_name, "Khu phố 01 (mẫu)");
     assert.equal(row.unit_id, "DV-KV10");
     assert.equal(row.officer_name, "Cán bộ kiểm tra/Quản lý địa bàn (dữ liệu mẫu)");
     assert.equal(
-      db.prepare("SELECT officer_name FROM facility_overview WHERE id='CS002'").get().officer_name,
+      (await db.prepare("SELECT officer_name FROM facility_overview WHERE id='CS002'").get())
+        .officer_name,
       "Cán bộ khu vực 11 (dữ liệu mẫu)",
     );
   } finally {
-    db.close();
+    await db.close();
   }
 });
 
@@ -84,7 +85,7 @@ test("dashboard totals and breakdowns agree for system-wide scope", async (t) =>
 
 test("dashboard follows unit, region, facility and empty scopes, including empty regions", async (t) => {
   const { db, get, login } = await fixture(t);
-  db.exec(
+  await db.exec(
     "INSERT INTO regions(id,name,unit_id,code) VALUES ('KP04','Khu phố 04 (mẫu)','DV-KV10','KP04')",
   );
   const commander = await login("demo.chi-huy");
@@ -108,7 +109,7 @@ test("dashboard follows unit, region, facility and empty scopes, including empty
     officerCount: 1,
     regionCount: 1,
   });
-  db.exec(
+  await db.exec(
     "DELETE FROM account_scopes WHERE account_id='DEMO-A01'; INSERT INTO account_scopes(account_id,kind,facility_id) VALUES ('DEMO-A01','facility','CS003')",
   );
   const facilityOnly = (await get("/api/dashboard/facilities-by-region", commander)).data;
@@ -116,7 +117,7 @@ test("dashboard follows unit, region, facility and empty scopes, including empty
     facilityOnly.items.map((item) => [item.regionId, item.facilityCount]),
     [["KP03", 1]],
   );
-  db.exec("DELETE FROM account_scopes WHERE account_id='DEMO-A01'");
+  await db.exec("DELETE FROM account_scopes WHERE account_id='DEMO-A01'");
   assert.deepEqual((await get("/api/dashboard", commander)).data, {
     facilityCount: 0,
     officerCount: 0,
@@ -138,7 +139,7 @@ test("dashboard paginates breakdowns and validates paging input", async (t) => {
 
 test("search is accent-insensitive and groups results by data type", async (t) => {
   const { db, get, login } = await fixture(t);
-  db.exec(
+  await db.exec(
     "INSERT INTO facilities(id,name,address,region_id,officer_id) VALUES ('CS900','Nhà hàng Đông Á (mẫu)','Đường Lê Lợi','KP01','CB-A03')",
   );
   const cookie = await login();
@@ -189,7 +190,7 @@ test("search never returns objects outside the caller's data scope", async (t) =
   ]);
   assert.equal(groups.facilities.total, 2);
 
-  db.exec("DELETE FROM account_scopes WHERE account_id='DEMO-A03'");
+  await db.exec("DELETE FROM account_scopes WHERE account_id='DEMO-A03'");
   groups = (await search(get, officer, "mau")).data.groups;
   for (const name of ["facilities", "officers", "regions", "units"])
     assert.equal(groups[name].total, 0, name);
@@ -200,13 +201,17 @@ test("search and dashboard enforce authentication, permissions and input limits"
   assert.equal((await search(get, null, "mau")).status, 401);
   assert.equal((await get("/api/dashboard", null)).status, 401);
   const cookie = await login("demo.to-truong");
-  db.exec("DELETE FROM role_permissions WHERE role_code='A02' AND permission_code='M03.view'");
+  await db.exec(
+    "DELETE FROM role_permissions WHERE role_code='A02' AND permission_code='M03.view'",
+  );
   const withoutFacilities = await search(get, cookie, "mau");
   assert.equal(withoutFacilities.status, 200);
   assert.deepEqual(Object.keys(withoutFacilities.data.groups).sort(), ["regions", "units"]);
   assert.equal((await get("/api/dashboard", cookie)).status, 403);
   assert.equal((await get("/api/dashboard/facilities-by-region", cookie)).status, 403);
-  db.exec("DELETE FROM role_permissions WHERE role_code='A02' AND permission_code='M10.view'");
+  await db.exec(
+    "DELETE FROM role_permissions WHERE role_code='A02' AND permission_code='M10.view'",
+  );
   const forbidden = await search(get, cookie, "x");
   assert.equal(forbidden.status, 403);
   assert.equal(forbidden.data.error.code, "FORBIDDEN");

@@ -10,15 +10,15 @@ const password = "Report-export-test-2026";
 const origin = "http://localhost:3000";
 
 async function fixture(t) {
-  const db = openDatabase(":memory:");
+  const db = await openDatabase(":memory:");
   await seedDemo(db, password);
-  db.exec("UPDATE accounts SET must_change_password=0");
+  await db.exec("UPDATE accounts SET must_change_password=0");
   const server = createApp(db);
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   t.after(async () => {
     await new Promise((resolve) => server.close(resolve));
-    db.close();
+    await db.close();
   });
   const base = `http://127.0.0.1:${server.address().port}`;
   async function request(path, { method = "GET", cookie, body } = {}) {
@@ -60,10 +60,13 @@ async function fixture(t) {
 
 test("migration adds report tables and M08 report grants", async (t) => {
   const { db } = await fixture(t);
-  const tables = db
-    .prepare("SELECT name FROM sqlite_master WHERE type='table'")
-    .all()
-    .map((row) => row.name);
+  const tables = (
+    await db
+      .prepare(
+        "SELECT table_name AS name FROM information_schema.tables WHERE table_schema='public'",
+      )
+      .all()
+  ).map((row) => row.name);
   for (const table of [
     "report_export_types",
     "report_templates",
@@ -73,11 +76,11 @@ test("migration adds report tables and M08 report grants", async (t) => {
   ])
     assert.ok(tables.includes(table), `missing ${table}`);
   assert.equal(
-    db.prepare("SELECT count(*) AS n FROM report_export_types WHERE is_active=1").get().n,
+    (await db.prepare("SELECT count(*) AS n FROM report_export_types WHERE is_active=1").get()).n,
     4,
   );
   assert.ok(
-    db
+    await db
       .prepare(
         "SELECT 1 FROM role_permissions WHERE role_code='A06' AND permission_code='M08.view'",
       )
@@ -85,14 +88,14 @@ test("migration adds report tables and M08 report grants", async (t) => {
   );
   for (const permission of ["M08.export", "M08.create"])
     assert.equal(
-      db
+      await db
         .prepare("SELECT 1 FROM role_permissions WHERE role_code='A06' AND permission_code=?")
         .get(permission),
       undefined,
     );
   for (const role of ["A01", "A04", "A05"])
     assert.ok(
-      db
+      await db
         .prepare(
           "SELECT 1 FROM role_permissions WHERE role_code=? AND permission_code='M08.export'",
         )
@@ -252,9 +255,11 @@ test("exports XLSX/PDF, stores history and protects download", async (t) => {
   assert.equal(pdfFile.headers.get("content-type"), "application/pdf");
   assert.equal(pdfFile.buffer.subarray(0, 8).toString(), "%PDF-1.7");
   assert.ok(pdfFile.buffer.length > 100_000);
-  assert.ok(db.prepare("SELECT 1 FROM report_export_submissions WHERE file_size > 0").get());
+  assert.ok(await db.prepare("SELECT 1 FROM report_export_submissions WHERE file_size > 0").get());
   assert.ok(
-    db.prepare("SELECT 1 FROM audit_logs WHERE action='report.exported' AND feature='M08'").get(),
+    await db
+      .prepare("SELECT 1 FROM audit_logs WHERE action='report.exported' AND feature='M08'")
+      .get(),
   );
 
   const empty = await request("/api/report-export/exports", {
@@ -371,12 +376,18 @@ test("date range and row caps reject oversized exports before writing history", 
   const insert = db.prepare(
     "INSERT INTO facilities(id,name,address,region_id,officer_id,status) VALUES (?,?,?,?,?,'active')",
   );
-  const load = () =>
-    transaction(db, () => {
+  const load = async () =>
+    await transaction(db, async () => {
       for (let index = 0; index <= 5000; index++)
-        insert.run(`CS-BULK-${index}`, `Cơ sở bulk ${index}`, "Địa chỉ bulk", "KP01", "CB-A03");
+        await insert.run(
+          `CS-BULK-${index}`,
+          `Cơ sở bulk ${index}`,
+          "Địa chỉ bulk",
+          "KP01",
+          "CB-A03",
+        );
     });
-  load();
+  await load();
 
   assert.equal(
     (await request("/api/report-export/preview?type=R01", { cookie: commander })).status,
@@ -392,5 +403,5 @@ test("date range and row caps reject oversized exports before writing history", 
     ).status,
     413,
   );
-  assert.equal(db.prepare("SELECT count(*) AS n FROM report_export_history").get().n, 0);
+  assert.equal((await db.prepare("SELECT count(*) AS n FROM report_export_history").get()).n, 0);
 });

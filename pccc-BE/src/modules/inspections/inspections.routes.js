@@ -32,7 +32,7 @@ function header(request, name, label) {
 // Raw file body (PDF/JPEG/PNG); metadata travels in URI-encoded X-* headers.
 async function upload(ctx, id) {
   requireInspectionAccess(ctx.user, "edit");
-  scopedInspection(ctx.db, ctx.user, id);
+  await scopedInspection(ctx.db, ctx.user, id);
   const { request } = ctx;
   assert(
     Number(request.headers["content-length"] ?? 0) <= MAX_INSPECTION_FILE_BYTES,
@@ -49,7 +49,7 @@ async function upload(ctx, id) {
   }
   ctx.status = 201;
   return {
-    document: uploadDocument(
+    document: await uploadDocument(
       ctx.db,
       ctx.user,
       id,
@@ -70,7 +70,7 @@ const inspectionOnlyRoutes = [
   {
     method: "GET",
     path: "/api/inspections",
-    handle: (ctx) => listInspections(ctx.db, ctx.user, ctx.url),
+    handle: async (ctx) => await listInspections(ctx.db, ctx.user, ctx.url),
   },
   {
     method: "POST",
@@ -79,20 +79,20 @@ const inspectionOnlyRoutes = [
       requireInspectionAccess(ctx.user, "create");
       const payload = await ctx.readJson();
       ctx.status = 201;
-      return { inspection: createInspection(ctx.db, ctx.user, payload, ctx.ip) };
+      return { inspection: await createInspection(ctx.db, ctx.user, payload, ctx.ip) };
     },
   },
   {
     method: "GET",
     path: path(),
-    handle: (ctx, match) => inspectionDetail(ctx.db, ctx.user, match[1]),
+    handle: async (ctx, match) => await inspectionDetail(ctx.db, ctx.user, match[1]),
   },
   {
     method: "PUT",
     path: path("\\/results"),
     async handle(ctx, match) {
       requireInspectionAccess(ctx.user, "edit");
-      return saveResults(ctx.db, ctx.user, match[1], await ctx.readJson(65536), ctx.ip);
+      return await saveResults(ctx.db, ctx.user, match[1], await ctx.readJson(65536), ctx.ip);
     },
   },
   {
@@ -101,7 +101,7 @@ const inspectionOnlyRoutes = [
     async handle(ctx, match) {
       requireInspectionAccess(ctx.user, "edit");
       const payload = await ctx.readJson();
-      return { inspection: saveConclusion(ctx.db, ctx.user, match[1], payload, ctx.ip) };
+      return { inspection: await saveConclusion(ctx.db, ctx.user, match[1], payload, ctx.ip) };
     },
   },
   {
@@ -110,15 +110,19 @@ const inspectionOnlyRoutes = [
     async handle(ctx, match) {
       requireInspectionAccess(ctx.user, "edit");
       const payload = await ctx.readJson();
-      return { inspection: completeInspection(ctx.db, ctx.user, match[1], payload, ctx.ip) };
+      return { inspection: await completeInspection(ctx.db, ctx.user, match[1], payload, ctx.ip) };
     },
   },
-  { method: "POST", path: path("\\/documents"), handle: (ctx, match) => upload(ctx, match[1]) },
+  {
+    method: "POST",
+    path: path("\\/documents"),
+    handle: async (ctx, match) => await upload(ctx, match[1]),
+  },
   {
     method: "GET",
     path: path(`\\/documents\\/${ID}\\/file`),
-    handle: (ctx, match) =>
-      sendFile(ctx.response, documentFile(ctx.db, ctx.user, match[1], match[2])),
+    handle: async (ctx, match) =>
+      sendFile(ctx.response, await documentFile(ctx.db, ctx.user, match[1], match[2])),
   },
   {
     method: "POST",
@@ -127,7 +131,7 @@ const inspectionOnlyRoutes = [
       requireInspectionAccess(ctx.user, "edit");
       const payload = await ctx.readJson();
       ctx.status = 201;
-      return { followUp: createFollowUp(ctx.db, ctx.user, match[1], payload, ctx.ip) };
+      return { followUp: await createFollowUp(ctx.db, ctx.user, match[1], payload, ctx.ip) };
     },
   },
   {
@@ -137,7 +141,7 @@ const inspectionOnlyRoutes = [
       requireInspectionAccess(ctx.user, "edit");
       const payload = await ctx.readJson();
       return {
-        followUp: completeFollowUp(ctx.db, ctx.user, match[1], match[2], payload, ctx.ip),
+        followUp: await completeFollowUp(ctx.db, ctx.user, match[1], match[2], payload, ctx.ip),
       };
     },
   },

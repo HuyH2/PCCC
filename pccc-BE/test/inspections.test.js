@@ -11,15 +11,15 @@ const pdf = Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n
 const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
 
 async function fixture(t) {
-  const db = openDatabase(":memory:");
+  const db = await openDatabase(":memory:");
   await seedDemo(db, password);
-  db.exec("UPDATE accounts SET must_change_password=0");
+  await db.exec("UPDATE accounts SET must_change_password=0");
   const server = createApp(db);
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   t.after(async () => {
     await new Promise((resolve) => server.close(resolve));
-    db.close();
+    await db.close();
   });
   const base = `http://127.0.0.1:${server.address().port}`;
   async function request(path, { method = "GET", body, cookie, headers = {}, raw } = {}) {
@@ -77,21 +77,27 @@ const unscheduled = (extra = {}) => ({
 });
 
 test("migration and seed create checklists, items and sample inspections idempotently", async () => {
-  const db = openDatabase(":memory:");
+  const db = await openDatabase(":memory:");
   try {
     await seedDemo(db, password);
     await seedDemo(db, password);
-    assert.equal(db.prepare("SELECT count(*) AS n FROM inspection_checklists").get().n, 2);
-    assert.equal(db.prepare("SELECT count(*) AS n FROM inspection_checklist_items").get().n, 9);
-    assert.equal(db.prepare("SELECT count(*) AS n FROM inspections").get().n, 2);
-    assert.throws(() =>
-      db.exec(
-        "INSERT INTO inspections(id,code,facility_id,kind,scheduled_date,lead_officer_id,created_by,updated_by,created_at,updated_at) VALUES ('x','y','CS001','thematic','2026-01-01','CB-A03','DEMO-A03','DEMO-A03',1,1)",
-      ),
+    assert.equal((await db.prepare("SELECT count(*) AS n FROM inspection_checklists").get()).n, 2);
+    assert.equal(
+      (await db.prepare("SELECT count(*) AS n FROM inspection_checklist_items").get()).n,
+      9,
     );
-    assert.throws(() => db.exec("UPDATE inspections SET status='completed' WHERE id='DEMO-INS-1'"));
+    assert.equal((await db.prepare("SELECT count(*) AS n FROM inspections").get()).n, 2);
+    await assert.rejects(
+      async () =>
+        await db.exec(
+          "INSERT INTO inspections(id,code,facility_id,kind,scheduled_date,lead_officer_id,created_by,updated_by,created_at,updated_at) VALUES ('x','y','CS001','thematic','2026-01-01','CB-A03','DEMO-A03','DEMO-A03',1,1)",
+        ),
+    );
+    await assert.rejects(
+      async () => await db.exec("UPDATE inspections SET status='completed' WHERE id='DEMO-INS-1'"),
+    );
   } finally {
-    db.close();
+    await db.close();
   }
 });
 
@@ -309,12 +315,13 @@ test("full flow: create unscheduled → checklist → record → results → con
   assert.equal(detail.followUps.length, 1);
   assert.equal(detail.items.find((i) => i.id === "CL-CHUNG-3").note, "Bình chữa cháy hết hạn");
 
-  const actions = db
-    .prepare(
-      "SELECT action FROM audit_logs WHERE object_type='inspection' AND object_id=? ORDER BY id",
-    )
-    .all(id)
-    .map((r) => r.action);
+  const actions = (
+    await db
+      .prepare(
+        "SELECT action FROM audit_logs WHERE object_type='inspection' AND object_id=? ORDER BY id",
+      )
+      .all(id)
+  ).map((r) => r.action);
   assert.deepEqual(actions, [
     "inspection.created",
     "inspection.results_saved",
@@ -329,7 +336,7 @@ test("full flow: create unscheduled → checklist → record → results → con
     "inspection.document_uploaded",
     "inspection.follow_up_completed",
   ]);
-  const audit = db
+  const audit = await db
     .prepare(
       "SELECT actor_id,feature,after_json FROM audit_logs WHERE action='inspection.document_uploaded' LIMIT 1",
     )
@@ -484,7 +491,7 @@ test("APIs require a session (401) and M06 permissions (403)", async (t) => {
     ).status,
     403,
   );
-  db.exec("UPDATE accounts SET must_change_password=1 WHERE id='DEMO-A03'");
+  await db.exec("UPDATE accounts SET must_change_password=1 WHERE id='DEMO-A03'");
   const pending = await login("demo.can-bo");
   assert.equal(
     (await request("/api/inspections", { cookie: pending })).data?.error?.code,
@@ -551,7 +558,7 @@ test("data scope: list, detail, files and mutations never reach out-of-scope fac
   );
   assert.equal((await request("/api/inspections", { cookie: leader })).data.total, 2);
   // Empty scope sees nothing.
-  db.exec("DELETE FROM account_scopes WHERE account_id='DEMO-A03'");
+  await db.exec("DELETE FROM account_scopes WHERE account_id='DEMO-A03'");
   const empty = await request("/api/inspections", { cookie: officer });
   assert.equal(empty.data.total, 0);
   assert.equal((await request("/api/inspections/DEMO-INS-1", { cookie: officer })).status, 404);
@@ -591,9 +598,9 @@ test("UC-INS-06: only commanders (A01) and deputies (A02) create checklists", as
     ],
   );
   const id = created.data.checklist.id;
-  const row = db.prepare("SELECT created_by FROM inspection_checklists WHERE id=?").get(id);
+  const row = await db.prepare("SELECT created_by FROM inspection_checklists WHERE id=?").get(id);
   assert.equal(row.created_by, "DEMO-A01");
-  const audit = db
+  const audit = await db
     .prepare("SELECT actor_id,feature FROM audit_logs WHERE action='inspection_checklist.created'")
     .get();
   assert.deepEqual({ ...audit }, { actor_id: "DEMO-A01", feature: "M06" });

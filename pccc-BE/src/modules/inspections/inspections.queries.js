@@ -11,10 +11,10 @@ import { requireInspectionAccess } from "./inspections.helpers.js";
  * Returns the inspection row visible to the caller, or 404.
  * Never reveals records outside the caller's facility scope.
  */
-export function scopedInspection(db, user, id) {
+export async function scopedInspection(db, user, id) {
   requireInspectionAccess(user);
   const scope = facilityScope(user);
-  const row = db
+  const row = await db
     .prepare(`SELECT ${inspectionColumns} FROM ${inspectionJoins} WHERE ${scope.sql} AND i.id=?`)
     .get(...scope.params, id);
   assert(row, 404, "NOT_FOUND", "Không tìm thấy cuộc kiểm tra trong phạm vi được cấp.");
@@ -25,10 +25,10 @@ export function scopedInspection(db, user, id) {
 // Detail query (inspection + items + documents + follow-ups)
 // ---------------------------------------------------------------------------
 
-export function inspectionDetail(db, user, id) {
-  const inspection = scopedInspection(db, user, id);
+export async function inspectionDetail(db, user, id) {
+  const inspection = await scopedInspection(db, user, id);
   const items = inspection.checklist_id
-    ? db
+    ? await db
         .prepare(
           `SELECT it.id,it.position,it.content,it.guidance,it.legal_reference,it.is_required,
             coalesce(res.status,'pending') AS status,coalesce(res.note,'') AS note,res.updated_at
@@ -38,7 +38,7 @@ export function inspectionDetail(db, user, id) {
         )
         .all(id, inspection.checklist_id)
     : [];
-  const documents = db
+  const documents = await db
     .prepare(
       `SELECT d.id,d.kind,d.follow_up_id,d.record_number,d.description,d.file_name,d.content_type,
         d.file_size,d.uploaded_by,a.full_name AS uploaded_by_name,d.uploaded_at
@@ -46,7 +46,7 @@ export function inspectionDetail(db, user, id) {
       WHERE d.inspection_id=? ORDER BY d.uploaded_at,d.id`,
     )
     .all(id);
-  const followUps = db
+  const followUps = await db
     .prepare(
       `SELECT fu.id,fu.requirement,fu.due_date,fu.status,fu.outcome,fu.result_note,fu.created_by,
         fu.created_at,fu.completed_by,a.full_name AS completed_by_name,fu.completed_at

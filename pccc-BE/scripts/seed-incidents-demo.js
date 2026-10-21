@@ -1,4 +1,3 @@
-import { DatabaseSync } from "node:sqlite";
 import {
   existsSync,
   linkSync,
@@ -13,7 +12,7 @@ import {
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { randomUUID } from "node:crypto";
-import { openDatabase, transaction } from "../src/core/database.js";
+import { isPostgresUrl, openDatabase, transaction } from "../src/core/database.js";
 import { seedDemo } from "../src/core/seed.js";
 import { audit } from "../src/modules/audit/audit.service.js";
 
@@ -37,33 +36,37 @@ function samePath(left, right) {
   return left.toLowerCase() === right.toLowerCase();
 }
 
-function hasDemoMarker(db) {
+const demoDatabaseName = "incidents-demo-db";
+
+async function hasDemoMarker(db) {
   return (
-    db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='m09_demo_seed'").get() &&
-    db.prepare("SELECT value FROM m09_demo_seed WHERE name='purpose'").get()?.value === marker
+    (await db.prepare("SELECT to_regclass('m09_demo_seed') IS NOT NULL AS present").get())
+      .present === 1 &&
+    (await db.prepare("SELECT value FROM m09_demo_seed WHERE name='purpose'").get())?.value ===
+      marker
   );
 }
 
 /** Guard before opening through openDatabase, which applies migrations. */
-export function verifyDemoTarget(databasePath, uploadsDirectory) {
+export async function verifyDemoTarget(databasePath, uploadsDirectory) {
   if (process.env.NODE_ENV === "production")
     throw new Error("Demo seed is prohibited in production.");
+  if (isPostgresUrl(databasePath))
+    throw new Error(`Use a separate embedded database directory named ${demoDatabaseName}.`);
   const database = canonicalPath(databasePath);
-  const liveDatabase = canonicalPath(join(repoDirectory, "pccc-BE", "data", "pccc.sqlite"));
-  if (
-    basename(database).toLowerCase() !== "incidents-demo.sqlite" ||
-    samePath(database, liveDatabase)
-  )
+  const liveDatabase = canonicalPath(join(repoDirectory, "pccc-BE", "data", "pccc-pg"));
+  if (basename(database).toLowerCase() !== demoDatabaseName || samePath(database, liveDatabase))
     throw new Error(
-      "Use a separate database named incidents-demo.sqlite; the live database is prohibited.",
+      `Use a separate database directory named ${demoDatabaseName}; the live database is prohibited.`,
     );
-  if (existsSync(database)) {
-    const db = new DatabaseSync(database, { readOnly: true });
+  if (existsSync(database) && readdirSync(database).length) {
+    // Inspect without applying migrations, so an unrelated database is never modified.
+    const db = await openDatabase(database, { migrations: false });
     try {
-      if (!hasDemoMarker(db))
+      if (!(await hasDemoMarker(db)))
         throw new Error("Existing database is not an explicitly marked M09 demo database.");
     } finally {
-      db.close();
+      await db.close();
     }
   }
   const uploads = canonicalPath(uploadsDirectory);
@@ -88,14 +91,13 @@ export function verifyDemoTarget(databasePath, uploadsDirectory) {
 }
 
 /** Only memory fixtures or explicitly marked demo databases may use this helper. */
-export function seedIncidentsDemo(db, { uploadsDirectory, now = Date.now() }) {
+export async function seedIncidentsDemo(db, { uploadsDirectory, now = Date.now() }) {
   if (process.env.NODE_ENV === "production")
     throw new Error("Demo seed is prohibited in production.");
-  const file = db
-    .prepare("PRAGMA database_list")
-    .all()
-    .find((entry) => entry.name === "main")?.file;
-  if (file && (basename(file).toLowerCase() !== "incidents-demo.sqlite" || !hasDemoMarker(db)))
+  if (
+    db.location !== ":memory:" &&
+    (basename(db.location ?? "").toLowerCase() !== demoDatabaseName || !(await hasDemoMarker(db)))
+  )
     throw new Error("Incident seed is limited to isolated demo/test databases.");
   if (!Number.isSafeInteger(now) || now < 0) throw new Error("Invalid demo time.");
   if (!uploadsDirectory) throw new Error("A private demo/test upload directory is required.");
@@ -107,7 +109,7 @@ export function seedIncidentsDemo(db, { uploadsDirectory, now = Date.now() }) {
     ["officers", "CB-A03"],
     ["officers", "CB-A04"],
   ])
-    if (!db.prepare(`SELECT 1 FROM ${table} WHERE id=?`).get(id))
+    if (!(await db.prepare(`SELECT 1 FROM ${table} WHERE id=?`).get(id)))
       throw new Error("Seed the isolated authentication/organization demo fixture first.");
   const actor = "DEMO-A04";
   const hour = 3600000;
@@ -166,7 +168,7 @@ export function seedIncidentsDemo(db, { uploadsDirectory, now = Date.now() }) {
     throw new Error("Demo uploads cannot be stored in public.");
   mkdirSync(directory, { recursive: true });
   const documentPath = join(directory, demoDocumentName);
-  const existingMetadata = db
+  const existingMetadata = await db
     .prepare("SELECT storage_key,size_bytes FROM incident_documents WHERE id='DEMO-DOC-1'")
     .get();
   if (
@@ -175,7 +177,7 @@ export function seedIncidentsDemo(db, { uploadsDirectory, now = Date.now() }) {
       existingMetadata.size_bytes !== demoDocument.length)
   )
     throw new Error("Refusing to overwrite changed demo document metadata.");
-  const occupiedKey = db
+  const occupiedKey = await db
     .prepare("SELECT id FROM incident_documents WHERE storage_key=?")
     .get(demoDocumentName);
   if (occupiedKey && occupiedKey.id !== "DEMO-DOC-1")
@@ -196,14 +198,14 @@ export function seedIncidentsDemo(db, { uploadsDirectory, now = Date.now() }) {
     }
   }
   try {
-    transaction(db, () => {
-      const insertIncident = db.prepare(`INSERT OR IGNORE INTO incidents
+    await transaction(db, async () => {
+      const insertIncident = db.prepare(`INSERT INTO incidents
         (id,incident_code,incident_type,title,description,occurred_at,reported_at,address,scene_details,
          region_id,unit_id,facility_id,record_status,processing_status,deadline_at,completed_at,
          created_by,updated_by,created_at,updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`);
       for (const item of fixtures) {
-        const result = insertIncident.run(
+        const result = await insertIncident.run(
           item.id,
           item.id,
           item.type,
@@ -226,13 +228,22 @@ export function seedIncidentsDemo(db, { uploadsDirectory, now = Date.now() }) {
           now,
         );
         if (result.changes) {
-          db.prepare(
-            `INSERT INTO incident_status_history
+          await db
+            .prepare(
+              `INSERT INTO incident_status_history
             (incident_id,from_status,to_status,from_record_status,to_record_status,
              old_deadline_at,new_deadline_at,changed_by,changed_at,reason,notes)
             VALUES (?,NULL,?,NULL,?,NULL,?,?,?,'DEMO_SEED','Dữ liệu giả lập')`,
-          ).run(item.id, item.status, item.draft ? "DRAFT" : "OFFICIAL", item.deadline, actor, now);
-          audit(
+            )
+            .run(
+              item.id,
+              item.status,
+              item.draft ? "DRAFT" : "OFFICIAL",
+              item.deadline,
+              actor,
+              now,
+            );
+          await audit(
             db,
             actor,
             "incident.demo_seeded",
@@ -247,9 +258,9 @@ export function seedIncidentsDemo(db, { uploadsDirectory, now = Date.now() }) {
           );
         }
       }
-      const damage = db.prepare(`INSERT OR IGNORE INTO incident_damages
+      const damage = db.prepare(`INSERT INTO incident_damages
         (id,incident_id,damage_group,damage_type,quantity,property_value,description,notes,updated_by,created_at,updated_at)
-        VALUES (?,?,?,?,?,?,'Thiệt hại giả lập','Không chứa danh tính người gặp nạn',?,?,?)`);
+        VALUES (?,?,?,?,?,?,'Thiệt hại giả lập','Không chứa danh tính người gặp nạn',?,?,?) ON CONFLICT DO NOTHING`);
       for (const row of [
         ["DEMO-DAMAGE-1", "DEMO-INC-FIRE", "HUMAN", "INJURED", 2, 0],
         ["DEMO-DAMAGE-2", "DEMO-INC-FIRE", "HUMAN", "RESCUED", 3, 0],
@@ -257,11 +268,11 @@ export function seedIncidentsDemo(db, { uploadsDirectory, now = Date.now() }) {
         ["DEMO-DAMAGE-4", "DEMO-INC-EXPLOSION", "PROPERTY", "LOSS", 1, 5000000],
         ["DEMO-DAMAGE-5", "DEMO-INC-RESCUE", "HUMAN", "RESCUED", 2, 0],
       ])
-        damage.run(...row, actor, now, now);
-      const assignment = db.prepare(`INSERT OR IGNORE INTO incident_assignments
+        await damage.run(...row, actor, now, now);
+      const assignment = db.prepare(`INSERT INTO incident_assignments
         (id,incident_id,officer_id,assigned_by,task_description,deadline_at,status,notes,assigned_at,completed_at,updated_at)
-        VALUES (?,?,?,?,?,?,?,'Phân công giả lập',?,?,?)`);
-      assignment.run(
+        VALUES (?,?,?,?,?,?,?,'Phân công giả lập',?,?,?) ON CONFLICT DO NOTHING`);
+      await assignment.run(
         "DEMO-ASSIGN-1",
         "DEMO-INC-FIRE",
         "CB-A03",
@@ -273,7 +284,7 @@ export function seedIncidentsDemo(db, { uploadsDirectory, now = Date.now() }) {
         null,
         now,
       );
-      assignment.run(
+      await assignment.run(
         "DEMO-ASSIGN-2",
         "DEMO-INC-FIRE",
         "CB-A04",
@@ -285,7 +296,7 @@ export function seedIncidentsDemo(db, { uploadsDirectory, now = Date.now() }) {
         null,
         now,
       );
-      assignment.run(
+      await assignment.run(
         "DEMO-ASSIGN-3",
         "DEMO-INC-RESCUE",
         "CB-A03",
@@ -297,29 +308,37 @@ export function seedIncidentsDemo(db, { uploadsDirectory, now = Date.now() }) {
         now - 7 * day,
         now,
       );
-      db.prepare(
-        `INSERT OR IGNORE INTO incident_documents
+      await db
+        .prepare(
+          `INSERT INTO incident_documents
         (id,incident_id,original_name,stored_name,file_type,mime_type,size_bytes,storage_key,uploaded_by,uploaded_at)
-        VALUES ('DEMO-DOC-1','DEMO-INC-FIRE','tai-lieu-gia-lap.txt',?,'txt','text/plain',?,?,?,?)`,
-      ).run(demoDocumentName, demoDocument.length, demoDocumentName, actor, now);
+        VALUES ('DEMO-DOC-1','DEMO-INC-FIRE','tai-lieu-gia-lap.txt',?,'txt','text/plain',?,?,?,?) ON CONFLICT DO NOTHING`,
+        )
+        .run(demoDocumentName, demoDocument.length, demoDocumentName, actor, now);
     });
   } catch (error) {
     if (createdDocument) rmSync(documentPath);
     throw error;
   }
   return {
-    incidents: db
-      .prepare("SELECT count(*) AS total FROM incidents WHERE id LIKE 'DEMO-INC-%'")
-      .get().total,
-    damages: db
-      .prepare("SELECT count(*) AS total FROM incident_damages WHERE id LIKE 'DEMO-DAMAGE-%'")
-      .get().total,
-    assignments: db
-      .prepare("SELECT count(*) AS total FROM incident_assignments WHERE id LIKE 'DEMO-ASSIGN-%'")
-      .get().total,
-    documents: db
-      .prepare("SELECT count(*) AS total FROM incident_documents WHERE id='DEMO-DOC-1'")
-      .get().total,
+    incidents: (
+      await db.prepare("SELECT count(*) AS total FROM incidents WHERE id LIKE 'DEMO-INC-%'").get()
+    ).total,
+    damages: (
+      await db
+        .prepare("SELECT count(*) AS total FROM incident_damages WHERE id LIKE 'DEMO-DAMAGE-%'")
+        .get()
+    ).total,
+    assignments: (
+      await db
+        .prepare("SELECT count(*) AS total FROM incident_assignments WHERE id LIKE 'DEMO-ASSIGN-%'")
+        .get()
+    ).total,
+    documents: (
+      await db
+        .prepare("SELECT count(*) AS total FROM incident_documents WHERE id='DEMO-DOC-1'")
+        .get()
+    ).total,
   };
 }
 
@@ -338,24 +357,26 @@ export async function runDemoSeed(
   }
   if (!explicitDemo || !databasePath || !uploadsDirectory)
     throw new Error(
-      "Required: --demo --database <incidents-demo.sqlite> --uploads <incidents-demo-uploads>.",
+      `Required: --demo --database <${demoDatabaseName}> --uploads <incidents-demo-uploads>.`,
     );
   if (typeof password !== "string" || password.length < 12 || password.length > 256)
     throw new Error("Set DEMO_PASSWORD to a temporary password with 12–256 characters.");
-  const target = verifyDemoTarget(databasePath, uploadsDirectory);
+  const target = await verifyDemoTarget(databasePath, uploadsDirectory);
   mkdirSync(target.uploads, { recursive: true });
   writeFileSync(join(target.uploads, ".m09-demo-uploads"), `${marker}\n`, { flag: "w" });
-  const db = openDatabase(target.database);
+  const db = await openDatabase(target.database);
   try {
-    db.exec("CREATE TABLE IF NOT EXISTS m09_demo_seed(name TEXT PRIMARY KEY,value TEXT NOT NULL)");
-    db.prepare("INSERT OR IGNORE INTO m09_demo_seed VALUES ('purpose',?)").run(marker);
+    await db.exec(
+      "CREATE TABLE IF NOT EXISTS m09_demo_seed(name TEXT PRIMARY KEY,value TEXT NOT NULL)",
+    );
+    await db
+      .prepare("INSERT INTO m09_demo_seed VALUES ('purpose',?) ON CONFLICT DO NOTHING")
+      .run(marker);
     await seedDemo(db, password);
-    const counts = seedIncidentsDemo(db, { uploadsDirectory: target.uploads });
-    const foreignKeyViolations = db.prepare("PRAGMA foreign_key_check").all();
-    if (foreignKeyViolations.length) throw new Error("Demo database has foreign key violations.");
+    const counts = await seedIncidentsDemo(db, { uploadsDirectory: target.uploads });
     return { ...counts, database: target.database, uploadsDirectory: target.uploads };
   } finally {
-    db.close();
+    await db.close();
   }
 }
 

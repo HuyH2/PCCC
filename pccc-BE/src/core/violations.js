@@ -107,18 +107,18 @@ function parseViolation(payload, creating) {
   return value;
 }
 
-function inScope(db, principal, facilityId) {
+async function inScope(db, principal, facilityId) {
   const scope = facilityScope(principal);
-  const facility = db
+  const facility = await db
     .prepare(`SELECT f.* FROM facilities f WHERE ${scope.sql} AND f.id=?`)
     .get(...scope.params, facilityId);
   assert(facility, 404, "NOT_FOUND", "Không tìm thấy cơ sở trong phạm vi được cấp.");
   return facility;
 }
 
-function violationRow(db, principal, id) {
+async function violationRow(db, principal, id) {
   const scope = facilityScope(principal);
-  const row = db
+  const row = await db
     .prepare(
       `SELECT v.*, f.name AS facility_name, f.address AS facility_address,
     (SELECT id FROM suspensions s WHERE s.violation_id=v.id) AS suspension_id,
@@ -132,10 +132,12 @@ function violationRow(db, principal, id) {
   return row;
 }
 
-function history(db, id, fromStatus, toStatus, reason, actor, now) {
-  db.prepare(
-    "INSERT INTO violation_status_history(violation_id,from_status,to_status,reason,actor_id,occurred_at) VALUES (?,?,?,?,?,?)",
-  ).run(id, fromStatus, toStatus, reason, actor.id, now);
+async function history(db, id, fromStatus, toStatus, reason, actor, now) {
+  await db
+    .prepare(
+      "INSERT INTO violation_status_history(violation_id,from_status,to_status,reason,actor_id,occurred_at) VALUES (?,?,?,?,?,?)",
+    )
+    .run(id, fromStatus, toStatus, reason, actor.id, now);
 }
 
 function publicViolation(row) {
@@ -162,7 +164,7 @@ function publicViolation(row) {
   };
 }
 
-export function listViolations(db, principal, url) {
+export async function listViolations(db, principal, url) {
   requirePermission(principal, "M04.view");
   const scope = facilityScope(principal);
   const pageRaw = url.searchParams.get("page") ?? "1";
@@ -205,7 +207,7 @@ export function listViolations(db, principal, url) {
     params.push(search, search, search, search, search);
   }
   const where = clauses.join(" AND ");
-  const rows = db
+  const rows = await db
     .prepare(
       `SELECT v.*,f.name AS facility_name,f.address AS facility_address,
     (SELECT id FROM suspensions s WHERE s.violation_id=v.id) AS suspension_id,
@@ -216,16 +218,18 @@ export function listViolations(db, principal, url) {
     ORDER BY v.detected_on DESC,v.created_at DESC LIMIT ? OFFSET ?`,
     )
     .all(...params, pageSize, (page - 1) * pageSize);
-  const total = db
-    .prepare(
-      `SELECT count(*) AS total FROM violations v JOIN facilities f ON f.id=v.facility_id WHERE ${where}`,
-    )
-    .get(...params).total;
-  const stats = db
+  const total = (
+    await db
+      .prepare(
+        `SELECT count(*) AS total FROM violations v JOIN facilities f ON f.id=v.facility_id WHERE ${where}`,
+      )
+      .get(...params)
+  ).total;
+  const stats = await db
     .prepare(
       `SELECT count(*) AS total,
     sum(CASE WHEN EXISTS(SELECT 1 FROM suspensions s WHERE s.violation_id=v.id) AND v.status<>'completed' THEN 1 ELSE 0 END) AS suspended,
-    sum(CASE WHEN v.remediation_deadline IS NOT NULL AND v.remediation_deadline<date('now') AND v.status<>'completed' THEN 1 ELSE 0 END) AS overdue,
+    sum(CASE WHEN v.remediation_deadline IS NOT NULL AND v.remediation_deadline<to_char(now() AT TIME ZONE 'UTC','YYYY-MM-DD') AND v.status<>'completed' THEN 1 ELSE 0 END) AS overdue,
     sum(CASE WHEN v.status='pending_approval' THEN 1 ELSE 0 END) AS pending
     FROM violations v JOIN facilities f ON f.id=v.facility_id WHERE ${scope.sql}`,
     )
@@ -236,7 +240,7 @@ export function listViolations(db, principal, url) {
   return { items: rows.map(publicViolation), total, stats, page, pageSize };
 }
 
-export function listViolationFacilities(db, principal, url) {
+export async function listViolationFacilities(db, principal, url) {
   requirePermission(principal, "M04.view");
   const scope = facilityScope(principal);
   const pageRaw = url.searchParams.get("page") ?? "1";
@@ -260,51 +264,54 @@ export function listViolationFacilities(db, principal, url) {
   const page = Number(pageRaw),
     pageSize = Number(sizeRaw);
   return {
-    items: db
+    items: await db
       .prepare(
         `SELECT f.id,f.name,f.address,f.officer_id FROM facilities f WHERE ${where} ORDER BY f.name LIMIT ? OFFSET ?`,
       )
       .all(...params, pageSize, (page - 1) * pageSize),
-    total: db.prepare(`SELECT count(*) AS total FROM facilities f WHERE ${where}`).get(...params)
-      .total,
+    total: (
+      await db.prepare(`SELECT count(*) AS total FROM facilities f WHERE ${where}`).get(...params)
+    ).total,
     page,
     pageSize,
   };
 }
 
-export function createViolation(db, principal, payload, ip) {
+export async function createViolation(db, principal, payload, ip) {
   requirePermission(principal, "M04.create");
   const value = parseViolation(payload, true);
-  inScope(db, principal, value.facilityId);
+  await inScope(db, principal, value.facilityId);
   const now = Date.now(),
     id = `VP-${randomUUID()}`;
-  transaction(db, () => {
-    db.prepare(
-      `INSERT INTO violations(id,facility_id,violation_type,severity,detected_on,description,facility_condition,remediation_deadline,tracked_officer_id,status,created_by,created_at,updated_at)
+  await transaction(db, async () => {
+    await db
+      .prepare(
+        `INSERT INTO violations(id,facility_id,violation_type,severity,detected_on,description,facility_condition,remediation_deadline,tracked_officer_id,status,created_by,created_at,updated_at)
       VALUES (?,?,?,?,?,?,?,?,?,'recorded',?,?,?)`,
-    ).run(
-      id,
-      value.facilityId,
-      value.type,
-      value.severity,
-      value.detectedOn,
-      value.description,
-      value.facilityCondition,
-      value.remediationDeadline,
-      value.trackedOfficerId,
-      principal.id,
-      now,
-      now,
-    );
-    history(db, id, null, "recorded", "Ghi nhận vi phạm", principal, now);
-    audit(db, principal.id, "violation.created", id, null, value, ip);
+      )
+      .run(
+        id,
+        value.facilityId,
+        value.type,
+        value.severity,
+        value.detectedOn,
+        value.description,
+        value.facilityCondition,
+        value.remediationDeadline,
+        value.trackedOfficerId,
+        principal.id,
+        now,
+        now,
+      );
+    await history(db, id, null, "recorded", "Ghi nhận vi phạm", principal, now);
+    await audit(db, principal.id, "violation.created", id, null, value, ip);
   });
-  return publicViolation(violationRow(db, principal, id));
+  return publicViolation(await violationRow(db, principal, id));
 }
 
-export function updateViolation(db, principal, id, payload, ip) {
+export async function updateViolation(db, principal, id, payload, ip) {
   requirePermission(principal, "M04.edit");
-  const row = violationRow(db, principal, id);
+  const row = await violationRow(db, principal, id);
   assert(
     ["recorded", "remediation", "returned"].includes(row.status),
     409,
@@ -312,11 +319,11 @@ export function updateViolation(db, principal, id, payload, ip) {
     "Hồ sơ không còn cho phép chỉnh sửa thông tin vi phạm.",
   );
   const value = parseViolation(payload, false);
-  if (value.facilityId) inScope(db, principal, value.facilityId);
+  if (value.facilityId) await inScope(db, principal, value.facilityId);
   assert(
     !value.facilityId ||
       value.facilityId === row.facility_id ||
-      !db.prepare("SELECT 1 FROM suspensions WHERE violation_id=?").get(id),
+      !(await db.prepare("SELECT 1 FROM suspensions WHERE violation_id=?").get(id)),
     409,
     "SUSPENSION_LOCKS_FACILITY",
     "Không thể chuyển cơ sở sau khi đã lập hồ sơ đình chỉ.",
@@ -339,22 +346,24 @@ export function updateViolation(db, principal, id, payload, ip) {
     "INVALID_INPUT",
     "Hạn khắc phục phải sau ngày phát hiện.",
   );
-  transaction(db, () => {
-    db.prepare(
-      `UPDATE violations SET facility_id=?,violation_type=?,severity=?,detected_on=?,description=?,facility_condition=?,remediation_deadline=?,tracked_officer_id=?,updated_at=? WHERE id=?`,
-    ).run(
-      next.facilityId,
-      next.type,
-      next.severity,
-      next.detectedOn,
-      next.description,
-      next.facilityCondition,
-      next.remediationDeadline,
-      next.trackedOfficerId,
-      Date.now(),
-      id,
-    );
-    audit(
+  await transaction(db, async () => {
+    await db
+      .prepare(
+        `UPDATE violations SET facility_id=?,violation_type=?,severity=?,detected_on=?,description=?,facility_condition=?,remediation_deadline=?,tracked_officer_id=?,updated_at=? WHERE id=?`,
+      )
+      .run(
+        next.facilityId,
+        next.type,
+        next.severity,
+        next.detectedOn,
+        next.description,
+        next.facilityCondition,
+        next.remediationDeadline,
+        next.trackedOfficerId,
+        Date.now(),
+        id,
+      );
+    await audit(
       db,
       principal.id,
       "violation.updated",
@@ -373,29 +382,29 @@ export function updateViolation(db, principal, id, payload, ip) {
       ip,
     );
   });
-  return publicViolation(violationRow(db, principal, id));
+  return publicViolation(await violationRow(db, principal, id));
 }
 
-export function violationDetail(db, principal, id) {
+export async function violationDetail(db, principal, id) {
   requirePermission(principal, "M04.view");
-  const row = violationRow(db, principal, id);
+  const row = await violationRow(db, principal, id);
   const suspension =
-    db
+    (await db
       .prepare(
         "SELECT id,decision_number,reason,issued_on,effective_until,created_by,created_at FROM suspensions WHERE violation_id=?",
       )
-      .get(id) ?? null;
-  const remediation = db
+      .get(id)) ?? null;
+  const remediation = await db
     .prepare(
       "SELECT id,note,progress,created_by,created_at FROM remediation_records WHERE violation_id=? ORDER BY created_at,id",
     )
     .all(id);
-  const evidences = db
+  const evidences = await db
     .prepare(
       "SELECT id,file_name,media_type,file_size,uploaded_by,uploaded_at FROM violation_evidences WHERE violation_id=? ORDER BY uploaded_at",
     )
     .all(id);
-  const statusHistory = db
+  const statusHistory = await db
     .prepare(
       `SELECT h.from_status,h.to_status,h.reason,h.occurred_at,a.full_name AS actor_name FROM violation_status_history h JOIN accounts a ON a.id=h.actor_id WHERE h.violation_id=? ORDER BY h.occurred_at,h.id`,
     )
@@ -412,9 +421,9 @@ export function violationDetail(db, principal, id) {
   };
 }
 
-export function createSuspension(db, principal, id, payload, ip) {
+export async function createSuspension(db, principal, id, payload, ip) {
   requirePermission(principal, "M04.edit");
-  const row = violationRow(db, principal, id);
+  const row = await violationRow(db, principal, id);
   assert(row.status !== "completed", 409, "INVALID_STATE", "Hồ sơ đã hoàn thành.");
   assert(
     payload &&
@@ -444,39 +453,43 @@ export function createSuspension(db, principal, id, payload, ip) {
     "Ngày hết hiệu lực phải sau ngày quyết định.",
   );
   assert(
-    !db.prepare("SELECT 1 FROM suspensions WHERE violation_id=?").get(id),
+    !(await db.prepare("SELECT 1 FROM suspensions WHERE violation_id=?").get(id)),
     409,
     "DUPLICATE_SUSPENSION",
     "Hồ sơ đã có quyết định đình chỉ.",
   );
   const now = Date.now(),
     suspensionId = randomUUID();
-  transaction(db, () => {
-    const earliest = db
+  await transaction(db, async () => {
+    const earliest = await db
       .prepare(
         `SELECT s.previous_facility_status
       FROM suspensions s JOIN violations v ON v.id=s.violation_id
       WHERE v.facility_id=? ORDER BY s.created_at,s.id LIMIT 1`,
       )
       .get(row.facility_id);
-    const facility = db.prepare("SELECT status FROM facilities WHERE id=?").get(row.facility_id);
+    const facility = await db
+      .prepare("SELECT status FROM facilities WHERE id=?")
+      .get(row.facility_id);
     const previousStatus = earliest?.previous_facility_status ?? facility.status;
-    db.prepare(
-      "INSERT INTO suspensions(id,violation_id,decision_number,reason,issued_on,effective_until,previous_facility_status,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-    ).run(
-      suspensionId,
-      id,
-      number,
-      reason,
-      payload.issuedOn,
-      until,
-      previousStatus === "suspended" ? "active" : previousStatus,
-      principal.id,
-      now,
-      now,
-    );
-    db.prepare("UPDATE facilities SET status='suspended' WHERE id=?").run(row.facility_id);
-    audit(
+    await db
+      .prepare(
+        "INSERT INTO suspensions(id,violation_id,decision_number,reason,issued_on,effective_until,previous_facility_status,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+      )
+      .run(
+        suspensionId,
+        id,
+        number,
+        reason,
+        payload.issuedOn,
+        until,
+        previousStatus === "suspended" ? "active" : previousStatus,
+        principal.id,
+        now,
+        now,
+      );
+    await db.prepare("UPDATE facilities SET status='suspended' WHERE id=?").run(row.facility_id);
+    await audit(
       db,
       principal.id,
       "violation.suspension_created",
@@ -495,9 +508,9 @@ export function createSuspension(db, principal, id, payload, ip) {
   };
 }
 
-export function updateSuspension(db, principal, id, payload, ip) {
+export async function updateSuspension(db, principal, id, payload, ip) {
   requirePermission(principal, "M04.edit");
-  violationRow(db, principal, id);
+  await violationRow(db, principal, id);
   assert(
     payload &&
       typeof payload === "object" &&
@@ -508,7 +521,7 @@ export function updateSuspension(db, principal, id, payload, ip) {
     "INVALID_INPUT",
     "Dữ liệu đình chỉ không hợp lệ.",
   );
-  const current = db.prepare("SELECT * FROM suspensions WHERE violation_id=?").get(id);
+  const current = await db.prepare("SELECT * FROM suspensions WHERE violation_id=?").get(id);
   assert(current, 404, "NOT_FOUND", "Không tìm thấy hồ sơ đình chỉ.");
   const next = {
     decisionNumber: Object.hasOwn(payload, "decisionNumber")
@@ -534,25 +547,27 @@ export function updateSuspension(db, principal, id, payload, ip) {
     "INVALID_INPUT",
     "Ngày hết hiệu lực phải sau ngày quyết định.",
   );
-  transaction(db, () => {
-    db.prepare(
-      "UPDATE suspensions SET decision_number=?,reason=?,issued_on=?,effective_until=?,updated_at=? WHERE id=?",
-    ).run(
-      next.decisionNumber,
-      next.reason,
-      next.issuedOn,
-      next.effectiveUntil,
-      Date.now(),
-      current.id,
-    );
-    audit(db, principal.id, "violation.suspension_updated", id, current, next, ip);
+  await transaction(db, async () => {
+    await db
+      .prepare(
+        "UPDATE suspensions SET decision_number=?,reason=?,issued_on=?,effective_until=?,updated_at=? WHERE id=?",
+      )
+      .run(
+        next.decisionNumber,
+        next.reason,
+        next.issuedOn,
+        next.effectiveUntil,
+        Date.now(),
+        current.id,
+      );
+    await audit(db, principal.id, "violation.suspension_updated", id, current, next, ip);
   });
   return next;
 }
 
-export function addRemediation(db, principal, id, payload, ip) {
+export async function addRemediation(db, principal, id, payload, ip) {
   requirePermission(principal, "M04.edit");
-  const row = violationRow(db, principal, id);
+  const row = await violationRow(db, principal, id);
   assert(
     ["recorded", "remediation", "returned"].includes(row.status),
     409,
@@ -576,15 +591,19 @@ export function addRemediation(db, principal, id, payload, ip) {
   );
   const now = Date.now(),
     recordId = randomUUID();
-  transaction(db, () => {
-    db.prepare(
-      "INSERT INTO remediation_records(id,violation_id,note,progress,created_by,created_at) VALUES (?,?,?,?,?,?)",
-    ).run(recordId, id, note, payload.progress, principal.id, now);
+  await transaction(db, async () => {
+    await db
+      .prepare(
+        "INSERT INTO remediation_records(id,violation_id,note,progress,created_by,created_at) VALUES (?,?,?,?,?,?)",
+      )
+      .run(recordId, id, note, payload.progress, principal.id, now);
     if (row.status !== "remediation") {
-      db.prepare("UPDATE violations SET status='remediation',updated_at=? WHERE id=?").run(now, id);
-      history(db, id, row.status, "remediation", "Cập nhật hồ sơ khắc phục", principal, now);
+      await db
+        .prepare("UPDATE violations SET status='remediation',updated_at=? WHERE id=?")
+        .run(now, id);
+      await history(db, id, row.status, "remediation", "Cập nhật hồ sơ khắc phục", principal, now);
     }
-    audit(
+    await audit(
       db,
       principal.id,
       "violation.remediation_added",
@@ -603,9 +622,9 @@ export function addRemediation(db, principal, id, payload, ip) {
   };
 }
 
-export function addEvidence(db, principal, id, payload, ip) {
+export async function addEvidence(db, principal, id, payload, ip) {
   requirePermission(principal, "M04.edit");
-  const row = violationRow(db, principal, id);
+  const row = await violationRow(db, principal, id);
   assert(
     row.status !== "completed",
     409,
@@ -665,11 +684,13 @@ export function addEvidence(db, principal, id, payload, ip) {
   );
   const evidenceId = randomUUID(),
     now = Date.now();
-  transaction(db, () => {
-    db.prepare(
-      "INSERT INTO violation_evidences(id,violation_id,file_name,media_type,file_size,content,uploaded_by,uploaded_at) VALUES (?,?,?,?,?,?,?,?)",
-    ).run(evidenceId, id, fileName, mediaType, content.length, content, principal.id, now);
-    audit(
+  await transaction(db, async () => {
+    await db
+      .prepare(
+        "INSERT INTO violation_evidences(id,violation_id,file_name,media_type,file_size,content,uploaded_by,uploaded_at) VALUES (?,?,?,?,?,?,?,?)",
+      )
+      .run(evidenceId, id, fileName, mediaType, content.length, content, principal.id, now);
+    await audit(
       db,
       principal.id,
       "violation.evidence_added",
@@ -689,10 +710,10 @@ export function addEvidence(db, principal, id, payload, ip) {
   };
 }
 
-export function readEvidence(db, principal, id, evidenceId) {
+export async function readEvidence(db, principal, id, evidenceId) {
   requirePermission(principal, "M04.view");
-  violationRow(db, principal, id);
-  const evidence = db
+  await violationRow(db, principal, id);
+  const evidence = await db
     .prepare(
       "SELECT file_name,media_type,file_size,content FROM violation_evidences WHERE id=? AND violation_id=?",
     )
@@ -701,9 +722,9 @@ export function readEvidence(db, principal, id, evidenceId) {
   return evidence;
 }
 
-export function submitApproval(db, principal, id, ip) {
+export async function submitApproval(db, principal, id, ip) {
   requirePermission(principal, "M04.edit");
-  const row = violationRow(db, principal, id);
+  const row = await violationRow(db, principal, id);
   assert(
     ["remediation", "returned"].includes(row.status),
     409,
@@ -711,25 +732,24 @@ export function submitApproval(db, principal, id, ip) {
     "Chỉ hồ sơ đang khắc phục hoặc được trả lại mới được gửi duyệt.",
   );
   assert(
-    db.prepare("SELECT 1 FROM remediation_records WHERE violation_id=?").get(id),
+    await db.prepare("SELECT 1 FROM remediation_records WHERE violation_id=?").get(id),
     409,
     "MISSING_REMEDIATION",
     "Cần ghi nhận nội dung khắc phục trước khi gửi duyệt.",
   );
   assert(
-    db.prepare("SELECT 1 FROM violation_evidences WHERE violation_id=?").get(id),
+    await db.prepare("SELECT 1 FROM violation_evidences WHERE violation_id=?").get(id),
     409,
     "MISSING_EVIDENCE",
     "Cần có ít nhất một bằng chứng khắc phục trước khi gửi duyệt.",
   );
   const now = Date.now();
-  transaction(db, () => {
-    db.prepare("UPDATE violations SET status='pending_approval',updated_at=? WHERE id=?").run(
-      now,
-      id,
-    );
-    history(db, id, row.status, "pending_approval", "Gửi yêu cầu phê duyệt", principal, now);
-    audit(
+  await transaction(db, async () => {
+    await db
+      .prepare("UPDATE violations SET status='pending_approval',updated_at=? WHERE id=?")
+      .run(now, id);
+    await history(db, id, row.status, "pending_approval", "Gửi yêu cầu phê duyệt", principal, now);
+    await audit(
       db,
       principal.id,
       "violation.approval_submitted",
@@ -739,12 +759,12 @@ export function submitApproval(db, principal, id, ip) {
       ip,
     );
   });
-  return publicViolation(violationRow(db, principal, id));
+  return publicViolation(await violationRow(db, principal, id));
 }
 
-export function decideApproval(db, principal, id, payload, approved, ip) {
+export async function decideApproval(db, principal, id, payload, approved, ip) {
   requirePermission(principal, "M04.approve");
-  const row = violationRow(db, principal, id);
+  const row = await violationRow(db, principal, id);
   assert(
     row.status === "pending_approval",
     409,
@@ -753,13 +773,13 @@ export function decideApproval(db, principal, id, payload, approved, ip) {
   );
   if (approved) {
     assert(
-      db.prepare("SELECT 1 FROM remediation_records WHERE violation_id=?").get(id),
+      await db.prepare("SELECT 1 FROM remediation_records WHERE violation_id=?").get(id),
       409,
       "MISSING_REMEDIATION",
       "Hồ sơ chưa có nội dung khắc phục.",
     );
     assert(
-      db.prepare("SELECT 1 FROM violation_evidences WHERE violation_id=?").get(id),
+      await db.prepare("SELECT 1 FROM violation_evidences WHERE violation_id=?").get(id),
       409,
       "MISSING_EVIDENCE",
       "Hồ sơ chưa có bằng chứng khắc phục.",
@@ -778,29 +798,33 @@ export function decideApproval(db, principal, id, payload, approved, ip) {
     : requiredText(payload.reason, "Lý do từ chối", 5, 1000);
   const to = approved ? "completed" : "returned",
     now = Date.now();
-  transaction(db, () => {
-    db.prepare("UPDATE violations SET status=?,updated_at=? WHERE id=?").run(to, now, id);
+  await transaction(db, async () => {
+    await db.prepare("UPDATE violations SET status=?,updated_at=? WHERE id=?").run(to, now, id);
     const suspension = approved
-      ? db.prepare("SELECT previous_facility_status FROM suspensions WHERE violation_id=?").get(id)
+      ? await db
+          .prepare("SELECT previous_facility_status FROM suspensions WHERE violation_id=?")
+          .get(id)
       : null;
     const otherOpenSuspension =
       approved &&
-      db
+      (await db
         .prepare(
           `SELECT 1 FROM suspensions s
       JOIN violations v ON v.id=s.violation_id
       WHERE v.facility_id=? AND v.id<>? AND v.status<>'completed' LIMIT 1`,
         )
-        .get(row.facility_id, id);
+        .get(row.facility_id, id));
     if (suspension && !otherOpenSuspension)
-      db.prepare("UPDATE facilities SET status=? WHERE id=? AND status='suspended'").run(
-        suspension.previous_facility_status === "suspended"
-          ? "active"
-          : suspension.previous_facility_status,
-        row.facility_id,
-      );
-    history(db, id, row.status, to, reason, principal, now);
-    audit(
+      await db
+        .prepare("UPDATE facilities SET status=? WHERE id=? AND status='suspended'")
+        .run(
+          suspension.previous_facility_status === "suspended"
+            ? "active"
+            : suspension.previous_facility_status,
+          row.facility_id,
+        );
+    await history(db, id, row.status, to, reason, principal, now);
+    await audit(
       db,
       principal.id,
       approved ? "violation.approved" : "violation.rejected",
@@ -810,5 +834,5 @@ export function decideApproval(db, principal, id, payload, approved, ip) {
       ip,
     );
   });
-  return publicViolation(violationRow(db, principal, id));
+  return publicViolation(await violationRow(db, principal, id));
 }

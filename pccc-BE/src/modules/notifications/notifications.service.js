@@ -6,7 +6,7 @@ import { accountScope, requireAdministrator } from "../authorization/authorizati
 import { writeAudit } from "../audit/audit.service.js";
 
 /** Shared notification writer. Call it inside the caller's business transaction. */
-export function notifyUser(
+export async function notifyUser(
   db,
   { userId, feature, kind, title, body, targetPath = null, objectId = null, dedupeKey = null },
 ) {
@@ -22,23 +22,25 @@ export function notifyUser(
     "Đường dẫn thông báo không hợp lệ.",
   );
   const id = randomUUID();
-  db.prepare(
-    `INSERT OR IGNORE INTO notifications
+  await db
+    .prepare(
+      `INSERT INTO notifications
     (id,user_id,feature,kind,title,body,target_path,object_id,dedupe_key,created_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?)`,
-  ).run(id, userId, feature, kind, title, body, targetPath, objectId, dedupeKey, Date.now());
+    VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`,
+    )
+    .run(id, userId, feature, kind, title, body, targetPath, objectId, dedupeKey, Date.now());
   return id;
 }
 
-export function createNotification(db, user, input, ip) {
+export async function createNotification(db, user, input, ip) {
   requireAdministrator(user, "M01.edit");
   object(input, ["userId", "feature", "kind", "title", "body", "targetPath", "objectId"]);
-  const account = db
+  const account = await db
     .prepare("SELECT id FROM accounts WHERE id=? AND status='active'")
     .get(input.userId);
   assert(account, 400, "INVALID_RECIPIENT", "Người nhận không tồn tại hoặc đã bị khóa.");
-  return transaction(db, () => {
-    const id = notifyUser(db, {
+  return await transaction(db, async () => {
+    const id = await notifyUser(db, {
       userId: input.userId,
       feature: input.feature,
       kind: input.kind,
@@ -47,7 +49,7 @@ export function createNotification(db, user, input, ip) {
       targetPath: input.targetPath,
       objectId: input.objectId,
     });
-    writeAudit(db, {
+    await writeAudit(db, {
       actorId: user.id,
       feature: "M10",
       objectType: "notification",
@@ -60,25 +62,29 @@ export function createNotification(db, user, input, ip) {
   });
 }
 
-export function listNotifications(db, user, url) {
+export async function listNotifications(db, user, url) {
   const { page, pageSize } = pagination(url);
   const unread = url.searchParams.get("unread") === "1";
   const visible = notificationVisibility(user);
   const where = `n.user_id=? AND ${visible.sql}${unread ? " AND n.read_at IS NULL" : ""}`;
   const params = [user.id, ...visible.params];
   return {
-    items: db
+    items: await db
       .prepare(
         `SELECT n.id,n.feature,n.kind,n.title,n.body,n.target_path,n.object_id,n.created_at,n.read_at
       FROM notifications n WHERE ${where} ORDER BY n.created_at DESC,n.id DESC LIMIT ? OFFSET ?`,
       )
       .all(...params, pageSize, (page - 1) * pageSize),
-    total: db.prepare(`SELECT count(*) AS n FROM notifications n WHERE ${where}`).get(...params).n,
-    unreadCount: db
-      .prepare(
-        `SELECT count(*) AS n FROM notifications n WHERE n.user_id=? AND n.read_at IS NULL AND ${visible.sql}`,
-      )
-      .get(user.id, ...visible.params).n,
+    total: (
+      await db.prepare(`SELECT count(*) AS n FROM notifications n WHERE ${where}`).get(...params)
+    ).n,
+    unreadCount: (
+      await db
+        .prepare(
+          `SELECT count(*) AS n FROM notifications n WHERE n.user_id=? AND n.read_at IS NULL AND ${visible.sql}`,
+        )
+        .get(user.id, ...visible.params)
+    ).n,
     page,
     pageSize,
   };
@@ -96,23 +102,21 @@ function notificationVisibility(user) {
   };
 }
 
-export function markNotificationRead(db, user, id) {
+export async function markNotificationRead(db, user, id) {
   const visible = notificationVisibility(user);
-  const row = db
+  const row = await db
     .prepare(`SELECT n.id FROM notifications n WHERE n.id=? AND n.user_id=? AND ${visible.sql}`)
     .get(id, user.id, ...visible.params);
   assert(row, 404, "NOT_FOUND", "Không tìm thấy thông báo.");
-  db.prepare("UPDATE notifications SET read_at=coalesce(read_at,?) WHERE id=? AND user_id=?").run(
-    Date.now(),
-    id,
-    user.id,
-  );
+  await db
+    .prepare("UPDATE notifications SET read_at=coalesce(read_at,?) WHERE id=? AND user_id=?")
+    .run(Date.now(), id, user.id);
   return { id, read: true };
 }
 
-export function markAllNotificationsRead(db, user) {
+export async function markAllNotificationsRead(db, user) {
   const visible = notificationVisibility(user);
-  const result = db
+  const result = await db
     .prepare(
       `UPDATE notifications AS n SET read_at=? WHERE n.user_id=? AND n.read_at IS NULL AND ${visible.sql}`,
     )

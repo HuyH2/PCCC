@@ -15,13 +15,13 @@ export const explanationsRoutes = [
   {
     method: "GET",
     path: "/api/explanations",
-    handle: (ctx) => listExplanations(ctx.db, ctx.user, ctx.url),
+    handle: async (ctx) => await listExplanations(ctx.db, ctx.user, ctx.url),
   },
   {
     method: "POST",
     path: "/api/explanations",
     async handle(ctx) {
-      const result = createExplanation(ctx.db, ctx.user, await ctx.readJson(), ctx.ip);
+      const result = await createExplanation(ctx.db, ctx.user, await ctx.readJson(), ctx.ip);
       ctx.status = 201;
       return result;
     },
@@ -29,20 +29,32 @@ export const explanationsRoutes = [
   {
     method: "GET",
     path: detailPath,
-    handle: (ctx, match) => getExplanation(ctx.db, ctx.user, Number(match[1])),
+    handle: async (ctx, match) => await getExplanation(ctx.db, ctx.user, Number(match[1])),
   },
   {
     method: "PUT",
     path: responsePath,
     async handle(ctx, match) {
-      return submitExplanation(ctx.db, ctx.user, Number(match[1]), await ctx.readJson(), ctx.ip);
+      return await submitExplanation(
+        ctx.db,
+        ctx.user,
+        Number(match[1]),
+        await ctx.readJson(),
+        ctx.ip,
+      );
     },
   },
   {
     method: "PUT",
     path: reviewPath,
     async handle(ctx, match) {
-      return reviewExplanation(ctx.db, ctx.user, Number(match[1]), await ctx.readJson(), ctx.ip);
+      return await reviewExplanation(
+        ctx.db,
+        ctx.user,
+        Number(match[1]),
+        await ctx.readJson(),
+        ctx.ip,
+      );
     },
   },
 ];

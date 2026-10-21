@@ -46,7 +46,7 @@ export function validateInspectionFile(name, contentType, data) {
  * While in progress any document kind is accepted; after completion only evidence
  * for the open follow-up (hậu kiểm) may be added.
  */
-export function uploadDocument(db, user, id, upload, ip) {
+export async function uploadDocument(db, user, id, upload, ip) {
   requireInspectionAccess(user, "edit");
   const { kind, fileName, contentType, data } = upload;
   assert(
@@ -59,8 +59,8 @@ export function uploadDocument(db, user, id, upload, ip) {
     kind === "record" ? trimmed(upload.recordNumber, "Số biên bản", 1, 100) : null;
   const description = trimmed(upload.description ?? "", "Mô tả", 0, 500);
   validateInspectionFile(fileName, contentType, data);
-  return transaction(db, () => {
-    const inspection = scopedInspection(db, user, id);
+  return await transaction(db, async () => {
+    const inspection = await scopedInspection(db, user, id);
     let followUpId = null;
     if (inspection.status === "completed") {
       assert(
@@ -69,9 +69,11 @@ export function uploadDocument(db, user, id, upload, ip) {
         "INVALID_STATE",
         "Cuộc kiểm tra đã hoàn thành, không thể thay biên bản.",
       );
-      followUpId = db
-        .prepare("SELECT id FROM follow_up_inspections WHERE inspection_id=? AND status='open'")
-        .get(id)?.id;
+      followUpId = (
+        await db
+          .prepare("SELECT id FROM follow_up_inspections WHERE inspection_id=? AND status='open'")
+          .get(id)
+      )?.id;
       assert(
         followUpId,
         409,
@@ -86,23 +88,25 @@ export function uploadDocument(db, user, id, upload, ip) {
       );
     const documentId = randomUUID();
     const now = Date.now();
-    db.prepare(
-      `INSERT INTO inspection_documents(id,inspection_id,follow_up_id,kind,record_number,description,
+    await db
+      .prepare(
+        `INSERT INTO inspection_documents(id,inspection_id,follow_up_id,kind,record_number,description,
         file_name,content_type,file_size,file_data,uploaded_by,uploaded_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-    ).run(
-      documentId,
-      id,
-      followUpId,
-      kind,
-      recordNumber,
-      description,
-      fileName,
-      contentType,
-      data.length,
-      data,
-      user.id,
-      now,
-    );
+      )
+      .run(
+        documentId,
+        id,
+        followUpId,
+        kind,
+        recordNumber,
+        description,
+        fileName,
+        contentType,
+        data.length,
+        data,
+        user.id,
+        now,
+      );
     const document = {
       id: documentId,
       kind,
@@ -115,7 +119,7 @@ export function uploadDocument(db, user, id, upload, ip) {
       uploaded_by: user.id,
       uploaded_at: now,
     };
-    writeInspectionAudit(db, user, ip, id, "inspection.document_uploaded", null, document);
+    await writeInspectionAudit(db, user, ip, id, "inspection.document_uploaded", null, document);
     return document;
   });
 }
@@ -124,9 +128,9 @@ export function uploadDocument(db, user, id, upload, ip) {
 // UC-INS-07 — serve the binary file of an uploaded document
 // ---------------------------------------------------------------------------
 
-export function documentFile(db, user, id, documentId) {
-  scopedInspection(db, user, id);
-  const file = db
+export async function documentFile(db, user, id, documentId) {
+  await scopedInspection(db, user, id);
+  const file = await db
     .prepare(
       "SELECT file_name,content_type,file_data FROM inspection_documents WHERE id=? AND inspection_id=?",
     )

@@ -45,20 +45,20 @@ export function expectStatus(inspection, statuses, message) {
 // Code generation & checklist lookup
 // ---------------------------------------------------------------------------
 
-export function nextCode(db, now) {
+export async function nextCode(db, now) {
   const year = new Date(now).getFullYear();
   const prefix = `KT-${year}-`;
-  const last = db
+  const last = await db
     .prepare("SELECT code FROM inspections WHERE code LIKE ? ORDER BY code DESC LIMIT 1")
     .get(`${prefix}%`);
   const sequence = last ? Number(last.code.slice(prefix.length)) + 1 : 1;
   return `${prefix}${String(sequence).padStart(4, "0")}`;
 }
 
-export function activeChecklist(db, id) {
+export async function activeChecklist(db, id) {
   trimmed(id, "Checklist", 1, 100);
   assert(
-    db.prepare("SELECT 1 FROM inspection_checklists WHERE id=? AND is_active=1").get(id),
+    await db.prepare("SELECT 1 FROM inspection_checklists WHERE id=? AND is_active=1").get(id),
     400,
     "INVALID_INPUT",
     "Checklist không tồn tại hoặc đã ngưng sử dụng.",
@@ -79,8 +79,8 @@ export function requireInspectionAccess(user, action = "view") {
 // Audit shorthand for M06 inspection objects
 // ---------------------------------------------------------------------------
 
-export function writeInspectionAudit(db, user, ip, objectId, action, before, after) {
-  writeAudit(db, {
+export async function writeInspectionAudit(db, user, ip, objectId, action, before, after) {
+  await writeAudit(db, {
     actorId: user.id,
     feature: "M06",
     objectType: "inspection",

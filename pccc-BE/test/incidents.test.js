@@ -14,21 +14,22 @@ const password = "Incidents-test-password-2026";
 const origin = "http://localhost:3000";
 const m09Permissions = ["M09.view", "M09.create", "M09.edit", "M09.approve", "M09.export"];
 
-/** Every test uses a new, real SQLite file and private files under an isolated temp directory. */
+/** Every test uses a new isolated PostgreSQL database and private files under a temp directory. */
 async function fixture(t, appOptions = {}) {
   const directory = mkdtempSync(join(tmpdir(), "pccc-inc-test-"));
   assert.ok(resolve(directory).startsWith(resolve(tmpdir()) + sep));
-  const databasePath = join(directory, "test.sqlite");
   const uploadDirectory = join(directory, "private-uploads");
-  const db = openDatabase(databasePath);
+  const db = await openDatabase(":memory:");
   await seedDemo(db, password);
   // The M04 demo seed suspends CS002; M09 scope fixtures need three active facilities.
-  db.prepare("UPDATE facilities SET status='active' WHERE id='CS002'").run();
-  db.exec("UPDATE accounts SET must_change_password=0");
+  await db.prepare("UPDATE facilities SET status='active' WHERE id='CS002'").run();
+  await db.exec("UPDATE accounts SET must_change_password=0");
   // These explicit grants belong only to the synthetic test database.
   for (const role of ["A01", "A02", "A03", "A04", "A05", "A06"])
     for (const permission of m09Permissions)
-      db.prepare("INSERT OR IGNORE INTO role_permissions VALUES (?,?)").run(role, permission);
+      await db
+        .prepare("INSERT INTO role_permissions VALUES (?,?) ON CONFLICT DO NOTHING")
+        .run(role, permission);
   const server = createApp(db, {
     appOrigin: origin,
     uploadDirectory,
@@ -42,7 +43,7 @@ async function fixture(t, appOptions = {}) {
     if (closed) return;
     closed = true;
     await new Promise((done) => server.close(done));
-    db.close();
+    await db.close();
   }
   t.after(async () => {
     await close();
@@ -132,7 +133,6 @@ async function fixture(t, appOptions = {}) {
     server,
     base,
     directory,
-    databasePath,
     uploadDirectory,
     request,
     login,
@@ -143,15 +143,15 @@ async function fixture(t, appOptions = {}) {
   };
 }
 
-function audits(db, objectId) {
-  return db.prepare("SELECT * FROM audit_logs WHERE object_id=? ORDER BY id").all(objectId);
+async function audits(db, objectId) {
+  return await db.prepare("SELECT * FROM audit_logs WHERE object_id=? ORDER BY id").all(objectId);
 }
 
 function files(directory) {
   return existsSync(directory) ? readdirSync(directory) : [];
 }
 
-test("INC-01 drafts and official records persist in real SQLite with unique automatic codes", async (t) => {
+test("INC-01 drafts and official records persist in PostgreSQL with unique automatic codes", async (t) => {
   const f = await fixture(t);
   const draft = await f.incident({
     recordStatus: "DRAFT",
@@ -168,19 +168,12 @@ test("INC-01 drafts and official records persist in real SQLite with unique auto
   const detail = await f.request(`/api/incidents/${official.id}`, { cookie: f.cookie });
   assert.equal(detail.status, 200);
   assert.equal(detail.data.incident.incidentCode, official.incidentCode);
-  const stored = f.db.prepare("SELECT * FROM incidents WHERE id=?").get(official.id);
+  const stored = await f.db.prepare("SELECT * FROM incidents WHERE id=?").get(official.id);
   assert.equal(stored.incident_code, official.incidentCode);
   assert.equal(stored.occurred_at, Date.parse("2026-02-15T15:30:00+07:00"));
   assert.equal(stored.facility_id, "CS001");
-  assert.equal(audits(f.db, official.id).at(-1).actor_id, "DEMO-A05");
-  const another = openDatabase(f.databasePath);
-  try {
-    assert.equal(another.prepare("SELECT count(*) AS n FROM incidents").get().n, 2);
-    assert.equal(another.prepare("PRAGMA integrity_check").get().integrity_check, "ok");
-    assert.deepEqual(another.prepare("PRAGMA foreign_key_check").all(), []);
-  } finally {
-    another.close();
-  }
+  assert.equal((await audits(f.db, official.id)).at(-1).actor_id, "DEMO-A05");
+  assert.equal((await f.db.prepare("SELECT count(*) AS n FROM incidents").get()).n, 2);
 });
 
 test("INC-01 official validation rejects missing required fields, impossible dates and invalid references", async (t) => {
@@ -219,7 +212,7 @@ test("INC-01 official validation rejects missing required fields, impossible dat
     assert.ok(result.data.error.message);
     assert.ok(!JSON.stringify(result.data).includes("SQLITE"));
   }
-  assert.equal(f.db.prepare("SELECT count(*) AS n FROM incidents").get().n, 0);
+  assert.equal((await f.db.prepare("SELECT count(*) AS n FROM incidents").get()).n, 0);
   assert.equal(
     (
       await f.request("/api/incidents/missing", {
@@ -238,7 +231,7 @@ test("INC-01/02 editing classification and scene retains omitted values and audi
     description: "Mô tả ban đầu",
     sceneDetails: "Hiện trường ban đầu",
   });
-  f.db.exec(
+  await f.db.exec(
     "INSERT INTO incident_subtypes(type_code,code,name) VALUES ('EXPLOSION','TEST','Nhóm thử nghiệm')",
   );
   const result = await f.request(`/api/incidents/${item.id}`, {
@@ -254,7 +247,7 @@ test("INC-01/02 editing classification and scene retains omitted values and audi
   assert.equal(result.data.incident.incidentType, "EXPLOSION");
   assert.equal(result.data.incident.description, "Mô tả ban đầu");
   assert.equal(result.data.incident.sceneDetails, "Hiện trường đã cập nhật");
-  const audit = audits(f.db, item.id).at(-1);
+  const audit = (await audits(f.db, item.id)).at(-1);
   assert.equal(JSON.parse(audit.before_json).incident_type, "FIRE");
   assert.equal(JSON.parse(audit.after_json).incident_type, "EXPLOSION");
   assert.equal(audit.actor_id, "DEMO-A05");
@@ -294,7 +287,7 @@ test("closed incident details can be corrected with a reason and retain status a
     ).status,
     200,
   );
-  const before = f.db.prepare("SELECT * FROM incidents WHERE id=?").get(item.id);
+  const before = await f.db.prepare("SELECT * FROM incidents WHERE id=?").get(item.id);
   const missingReason = await f.request(path, {
     method: "PATCH",
     cookie: f.cookie,
@@ -302,7 +295,7 @@ test("closed incident details can be corrected with a reason and retain status a
   });
   assert.equal(missingReason.status, 400);
   assert.equal(
-    f.db.prepare("SELECT version FROM incidents WHERE id=?").get(item.id).version,
+    (await f.db.prepare("SELECT version FROM incidents WHERE id=?").get(item.id)).version,
     before.version,
   );
 
@@ -318,7 +311,7 @@ test("closed incident details can be corrected with a reason and retain status a
   assert.equal(corrected.status, 200, JSON.stringify(corrected.data));
   assert.equal(corrected.data.incident.processingStatus, "CLOSED");
   assert.equal(corrected.data.incident.title, "Thông tin đã hiệu chỉnh");
-  const log = audits(f.db, item.id).at(-1);
+  const log = (await audits(f.db, item.id)).at(-1);
   assert.equal(log.action, "M09.incident.update");
   assert.equal(JSON.parse(log.before_json).title, before.title);
   assert.equal(JSON.parse(log.after_json).reason, "Hiệu chỉnh tiêu đề sau khi rà soát");
@@ -370,7 +363,9 @@ test("INC-03 human and property damages update without double counting and valid
       400,
       JSON.stringify(body),
     );
-  const records = f.db.prepare("SELECT * FROM incident_damages WHERE incident_id=?").all(item.id);
+  const records = await f.db
+    .prepare("SELECT * FROM incident_damages WHERE incident_id=?")
+    .all(item.id);
   assert.equal(records.length, 2);
   assert.equal(
     records
@@ -438,7 +433,7 @@ test("INC-04 multiple officers receive independent tasks, reassignment and progr
   assert.equal(changed.status, 200, JSON.stringify(changed.data));
   assert.equal(changed.data.assignment.officerId, "CB-A02");
   assert.equal(changed.data.assignment.taskDescription, assignments[0].taskDescription);
-  const audit = audits(f.db, item.id).at(-1);
+  const audit = (await audits(f.db, item.id)).at(-1);
   assert.equal(JSON.parse(audit.before_json).assignment.officer_id, "CB-A03");
   assert.equal(JSON.parse(audit.after_json).assignment.officer_id, "CB-A02");
   assert.equal(
@@ -451,7 +446,7 @@ test("INC-04 multiple officers receive independent tasks, reassignment and progr
     ).status,
     404,
   );
-  f.db.exec(
+  await f.db.exec(
     "UPDATE officers SET status='INACTIVE',status_reason='Kiểm thử',status_effective_date='2026-01-01' WHERE id='CB-A01'",
   );
   assert.equal(
@@ -495,7 +490,7 @@ test("INC-05 deadline extension requires reason, keeps previous/new deadline and
   assert.equal(extended.status, 200, JSON.stringify(extended.data));
   assert.equal(extended.data.incident.deadlineAt, newDeadline);
   assert.equal(extended.data.incident.deadlineWarning, "DUE_SOON");
-  const audit = audits(f.db, item.id).at(-1);
+  const audit = (await audits(f.db, item.id)).at(-1);
   assert.equal(JSON.parse(audit.before_json).deadline_at, overdue);
   assert.equal(JSON.parse(audit.after_json).deadline_at, newDeadline);
   const inProgress = await f.request(`/api/incidents/${item.id}/status`, {
@@ -512,7 +507,7 @@ test("INC-05 deadline extension requires reason, keeps previous/new deadline and
   assert.equal(complete.status, 200, JSON.stringify(complete.data));
   assert.equal(complete.data.incident.processingStatus, "COMPLETED");
   assert.ok(complete.data.incident.completedAt);
-  f.db.prepare("UPDATE incidents SET deadline_at=? WHERE id=?").run(overdue, item.id);
+  await f.db.prepare("UPDATE incidents SET deadline_at=? WHERE id=?").run(overdue, item.id);
   const detail = await f.request(`/api/incidents/${item.id}`, { cookie: f.cookie });
   assert.equal(detail.data.incident.deadlineWarning, "COMPLETED");
   assert.equal(
@@ -539,7 +534,9 @@ test("INC upload uses real private file, verifies permission and scoped download
   const result = await f.upload(item.id);
   assert.equal(result.status, 201, JSON.stringify(result.data));
   const doc = result.data.document;
-  const records = f.db.prepare("SELECT * FROM incident_documents WHERE incident_id=?").all(item.id);
+  const records = await f.db
+    .prepare("SELECT * FROM incident_documents WHERE incident_id=?")
+    .all(item.id);
   assert.equal(records.length, 1);
   assert.equal(files(f.uploadDirectory).length, 1);
   assert.ok(!JSON.stringify(doc).includes(f.uploadDirectory));
@@ -550,9 +547,11 @@ test("INC upload uses real private file, verifies permission and scoped download
   assert.equal(await response.text(), "Synthetic incident evidence only.");
   assert.equal(response.headers.get("x-content-type-options"), "nosniff");
   const restricted = await f.login("demo.can-bo");
-  f.db.exec("UPDATE account_scopes SET region_id='KP02' WHERE account_id='DEMO-A03'");
+  await f.db.exec("UPDATE account_scopes SET region_id='KP02' WHERE account_id='DEMO-A03'");
   assert.equal((await fetch(f.base + download, { headers: { Cookie: restricted } })).status, 404);
-  f.db.exec("DELETE FROM role_permissions WHERE role_code='A05' AND permission_code='M09.view'");
+  await f.db.exec(
+    "DELETE FROM role_permissions WHERE role_code='A05' AND permission_code='M09.view'",
+  );
   assert.equal((await fetch(f.base + download, { headers: { Cookie: f.cookie } })).status, 403);
 });
 
@@ -575,7 +574,7 @@ test("INC upload rejects unapproved, spoofed, oversized and unsafe-name files wi
       [400, 413, 415].includes(result.status),
       JSON.stringify({ options: { ...options, bytes: undefined }, result }),
     );
-    assert.equal(f.db.prepare("SELECT count(*) AS n FROM incident_documents").get().n, 0);
+    assert.equal((await f.db.prepare("SELECT count(*) AS n FROM incident_documents").get()).n, 0);
     assert.deepEqual(files(f.uploadDirectory), []);
   }
   const result = await f.upload(item.id, {
@@ -589,13 +588,15 @@ test("INC upload rejects unapproved, spoofed, oversized and unsafe-name files wi
 test("INC writes and document storage rollback together when the shared audit insert fails", async (t) => {
   const f = await fixture(t);
   const item = await f.incident();
-  const snapshot = f.db.prepare("SELECT * FROM incidents WHERE id=?").get(item.id);
-  const auditCount = audits(f.db, item.id).length;
-  const historyCount = f.db
-    .prepare("SELECT count(*) AS n FROM incident_status_history WHERE incident_id=?")
-    .get(item.id).n;
-  f.db.exec(
-    "CREATE TRIGGER test_inc_audit_fail BEFORE INSERT ON audit_logs BEGIN SELECT RAISE(ABORT,'Synthetic rollback'); END",
+  const snapshot = await f.db.prepare("SELECT * FROM incidents WHERE id=?").get(item.id);
+  const auditCount = (await audits(f.db, item.id)).length;
+  const historyCount = (
+    await f.db
+      .prepare("SELECT count(*) AS n FROM incident_status_history WHERE incident_id=?")
+      .get(item.id)
+  ).n;
+  await f.db.exec(
+    "CREATE TRIGGER test_inc_audit_fail BEFORE INSERT ON audit_logs FOR EACH ROW EXECUTE FUNCTION raise_abort('Synthetic rollback')",
   );
   const failures = [
     [`/api/incidents/${item.id}`, "PATCH", { sceneDetails: "Không được lưu" }],
@@ -620,16 +621,21 @@ test("INC writes and document storage rollback together when the shared audit in
     const result = await f.request(path, { method, cookie: f.cookie, body });
     assert.equal(result.status, 500, JSON.stringify(result.data));
     assert.ok(!JSON.stringify(result.data).includes("Synthetic rollback"));
-    assert.deepEqual(f.db.prepare("SELECT * FROM incidents WHERE id=?").get(item.id), snapshot);
+    assert.deepEqual(
+      await f.db.prepare("SELECT * FROM incidents WHERE id=?").get(item.id),
+      snapshot,
+    );
   }
   assert.equal((await f.upload(item.id)).status, 500);
   for (const table of ["incident_damages", "incident_assignments", "incident_documents"])
-    assert.equal(f.db.prepare(`SELECT count(*) AS n FROM ${table}`).get().n, 0);
-  assert.equal(audits(f.db, item.id).length, auditCount);
+    assert.equal((await f.db.prepare(`SELECT count(*) AS n FROM ${table}`).get()).n, 0);
+  assert.equal((await audits(f.db, item.id)).length, auditCount);
   assert.equal(
-    f.db
-      .prepare("SELECT count(*) AS n FROM incident_status_history WHERE incident_id=?")
-      .get(item.id).n,
+    (
+      await f.db
+        .prepare("SELECT count(*) AS n FROM incident_status_history WHERE incident_id=?")
+        .get(item.id)
+    ).n,
     historyCount,
   );
   assert.deepEqual(files(f.uploadDirectory), []);
@@ -640,7 +646,9 @@ test("INC authentication, separated permissions, CSRF and forged actor are enfor
   const item = await f.incident();
   assert.equal((await f.request("/api/incidents")).status, 401);
   assert.equal((await f.request("/api/incidents/statistics")).status, 401);
-  f.db.exec("DELETE FROM role_permissions WHERE role_code='A03' AND permission_code LIKE 'M09.%'");
+  await f.db.exec(
+    "DELETE FROM role_permissions WHERE role_code='A03' AND permission_code LIKE 'M09.%'",
+  );
   const restricted = await f.login("demo.can-bo");
   for (const path of [
     "/api/incidents",
@@ -670,7 +678,7 @@ test("INC authentication, separated permissions, CSRF and forged actor are enfor
     ).status,
     403,
   );
-  f.db.exec(
+  await f.db.exec(
     "DELETE FROM role_permissions WHERE role_code='A05' AND permission_code IN ('M09.create','M09.edit','M09.approve')",
   );
   assert.equal((await f.request(`/api/incidents/${item.id}`, { cookie: f.cookie })).status, 200);
@@ -728,18 +736,18 @@ test("INC region, unit, facility and empty scopes constrain lists, writes, child
     ).status,
     404,
   );
-  f.db.exec(
+  await f.db.exec(
     "DELETE FROM account_scopes WHERE account_id='DEMO-A03'; INSERT INTO account_scopes(account_id,kind,unit_id) VALUES ('DEMO-A03','unit','DV-KV10')",
   );
   assert.equal((await f.request("/api/incidents", { cookie: scoped })).data.total, 2);
   assert.equal((await f.request(`/api/incidents/${third.id}`, { cookie: scoped })).status, 404);
-  f.db.exec(
+  await f.db.exec(
     "DELETE FROM account_scopes WHERE account_id='DEMO-A03'; INSERT INTO account_scopes(account_id,kind,facility_id) VALUES ('DEMO-A03','facility','CS002')",
   );
   const facility = await f.request("/api/incidents", { cookie: scoped });
   assert.equal(facility.data.total, 1);
   assert.equal(facility.data.items[0].id, second.id);
-  f.db.exec("DELETE FROM account_scopes WHERE account_id='DEMO-A03'");
+  await f.db.exec("DELETE FROM account_scopes WHERE account_id='DEMO-A03'");
   assert.equal((await f.request("/api/incidents", { cookie: scoped })).data.total, 0);
   assert.equal((await f.request(`/api/incidents/${first.id}`, { cookie: scoped })).status, 404);
 });
@@ -770,10 +778,10 @@ test("INC revoked session while JSON body is streaming cannot commit an incident
   const split = body.indexOf(",");
   streaming.write(body.slice(0, split));
   await new Promise((resolveTimer) => setTimeout(resolveTimer, 30));
-  f.db.exec("DELETE FROM sessions WHERE account_id='DEMO-A05'");
+  await f.db.exec("DELETE FROM sessions WHERE account_id='DEMO-A05'");
   streaming.end(body.slice(split));
   assert.equal(await done, 401);
-  assert.equal(f.db.prepare("SELECT count(*) AS n FROM incidents").get().n, 0);
+  assert.equal((await f.db.prepare("SELECT count(*) AS n FROM incidents").get()).n, 0);
 });
 
 test("INC-06 SQLite statistics reconcile with SQL and avoid multiplication from damages, documents and assignments", async (t) => {
@@ -825,14 +833,16 @@ test("INC-06 SQLite statistics reconcile with SQL and avoid multiplication from 
   const result = await f.request("/api/incidents/statistics", { cookie: f.cookie });
   assert.equal(result.status, 200, JSON.stringify(result.data));
   const stats = result.data;
-  const sqlTotal = f.db
-    .prepare("SELECT count(*) AS n FROM incidents WHERE record_status='OFFICIAL'")
-    .get().n;
-  const sqlProperty = f.db
-    .prepare(
-      "SELECT coalesce(sum(d.property_value),0) AS n FROM incident_damages d JOIN incidents i ON i.id=d.incident_id WHERE i.record_status='OFFICIAL'",
-    )
-    .get().n;
+  const sqlTotal = (
+    await f.db.prepare("SELECT count(*) AS n FROM incidents WHERE record_status='OFFICIAL'").get()
+  ).n;
+  const sqlProperty = (
+    await f.db
+      .prepare(
+        "SELECT coalesce(sum(d.property_value),0) AS n FROM incident_damages d JOIN incidents i ON i.id=d.incident_id WHERE i.record_status='OFFICIAL'",
+      )
+      .get()
+  ).n;
   assert.equal(stats.total, sqlTotal);
   assert.equal(stats.total, 3);
   assert.equal(stats.draftsExcluded, 1);
@@ -878,7 +888,7 @@ test("INC-06 SQLite statistics reconcile with SQL and avoid multiplication from 
   const scopedStats = await f.request("/api/incidents/statistics", { cookie: scoped });
   assert.equal(scopedStats.data.total, 2);
   assert.ok(!JSON.stringify(scopedStats.data).includes(oldYear.incidentCode));
-  f.db.exec("DELETE FROM account_scopes WHERE account_id='DEMO-A03'");
+  await f.db.exec("DELETE FROM account_scopes WHERE account_id='DEMO-A03'");
   const none = await f.request("/api/incidents/statistics", { cookie: scoped });
   assert.equal(none.data.total, 0);
   assert.equal(none.data.damages.propertyValue, 0);
@@ -888,7 +898,7 @@ test("INC statistics permission is separate from record viewing and rejects inva
   const f = await fixture(t);
   await f.incident();
   const reader = await f.login("demo.nguoi-xem");
-  f.db.exec(
+  await f.db.exec(
     "DELETE FROM role_permissions WHERE role_code='A06' AND permission_code LIKE 'M09.%'; INSERT INTO role_permissions VALUES ('A06','M09.export')",
   );
   assert.equal((await f.request("/api/incidents/statistics", { cookie: reader })).status, 200);
@@ -914,7 +924,7 @@ test("INC statistics permission is separate from record viewing and rejects inva
 test("INC-05 warning uses exact epoch boundaries and configured advance hours without changing processing status", async (t) => {
   const now = Date.parse("2026-01-01T00:00:00+07:00");
   const f = await fixture(t, { incidentNow: () => now });
-  f.db.exec("UPDATE incident_policy SET warning_hours=2 WHERE id=1");
+  await f.db.exec("UPDATE incident_policy SET warning_hours=2 WHERE id=1");
   const samples = [
     [null, "NONE"],
     [now - 1, "OVERDUE"],
@@ -937,7 +947,7 @@ test("INC-05 warning uses exact epoch boundaries and configured advance hours wi
   );
   const withoutDeadline = await f.incident();
   assert.equal(withoutDeadline.deadlineAt, null);
-  f.db.exec("UPDATE incident_policy SET warning_hours=0 WHERE id=1");
+  await f.db.exec("UPDATE incident_policy SET warning_hours=0 WHERE id=1");
   assert.equal(
     (await f.request("/api/incidents?deadlineWarning=DUE_SOON", { cookie: f.cookie })).data.total,
     1,
@@ -946,7 +956,7 @@ test("INC-05 warning uses exact epoch boundaries and configured advance hours wi
 
 test("INC completion evidence rule is configurable and drafts or illegal transitions cannot complete", async (t) => {
   const f = await fixture(t);
-  f.db.exec("UPDATE incident_policy SET require_document_completion=1 WHERE id=1");
+  await f.db.exec("UPDATE incident_policy SET require_document_completion=1 WHERE id=1");
   const item = await f.incident();
   const draft = await f.incident({ recordStatus: "DRAFT" });
   assert.equal(
@@ -996,15 +1006,17 @@ test("INC completion evidence rule is configurable and drafts or illegal transit
     body: { reason: "Đủ bằng chứng thử nghiệm" },
   });
   assert.equal(completed.status, 200, JSON.stringify(completed.data));
-  const row = f.db.prepare("SELECT * FROM incidents WHERE id=?").get(item.id);
+  const row = await f.db.prepare("SELECT * FROM incidents WHERE id=?").get(item.id);
   assert.equal(row.processing_status, "COMPLETED");
   assert.ok(row.completed_at);
   assert.equal(
-    f.db
-      .prepare(
-        "SELECT to_status FROM incident_status_history WHERE incident_id=? ORDER BY id DESC LIMIT 1",
-      )
-      .get(item.id).to_status,
+    (
+      await f.db
+        .prepare(
+          "SELECT to_status FROM incident_status_history WHERE incident_id=? ORDER BY id DESC LIMIT 1",
+        )
+        .get(item.id)
+    ).to_status,
     "COMPLETED",
   );
 });
@@ -1041,10 +1053,12 @@ test("INC revoked permission while multipart upload is streaming leaves no file 
   const split = body.indexOf("Synthetic streaming proof.");
   streaming.write(body.slice(0, split));
   await new Promise((resolveTimer) => setTimeout(resolveTimer, 30));
-  f.db.exec("DELETE FROM role_permissions WHERE role_code='A05' AND permission_code='M09.edit'");
+  await f.db.exec(
+    "DELETE FROM role_permissions WHERE role_code='A05' AND permission_code='M09.edit'",
+  );
   streaming.end(body.slice(split));
   assert.equal(await done, 403);
-  assert.equal(f.db.prepare("SELECT count(*) AS n FROM incident_documents").get().n, 0);
+  assert.equal((await f.db.prepare("SELECT count(*) AS n FROM incident_documents").get()).n, 0);
   assert.deepEqual(files(f.uploadDirectory), []);
 });
 
@@ -1052,7 +1066,7 @@ test("INC create, edit and assignment/completion permissions remain distinct", a
   const f = await fixture(t);
   const item = await f.incident();
   const editor = await f.login("demo.can-bo");
-  f.db.exec(
+  await f.db.exec(
     "DELETE FROM role_permissions WHERE role_code='A03' AND permission_code LIKE 'M09.%'; INSERT INTO role_permissions VALUES ('A03','M09.view'),('A03','M09.edit')",
   );
   assert.equal(
@@ -1106,7 +1120,7 @@ test("INC create, edit and assignment/completion permissions remain distinct", a
     403,
   );
   const commander = await f.login("demo.chi-huy");
-  f.db.exec(
+  await f.db.exec(
     "DELETE FROM role_permissions WHERE role_code='A01' AND permission_code LIKE 'M09.%'; INSERT INTO role_permissions VALUES ('A01','M09.approve')",
   );
   assert.equal(
@@ -1149,7 +1163,7 @@ test("INC create, edit and assignment/completion permissions remain distinct", a
     ).status,
     200,
   );
-  const stored = f.db.prepare("SELECT * FROM incidents WHERE id=?").get(item.id);
+  const stored = await f.db.prepare("SELECT * FROM incidents WHERE id=?").get(item.id);
   assert.equal(stored.processing_status, "CLOSED");
   assert.equal(stored.updated_by, "DEMO-A01");
 });
@@ -1166,7 +1180,7 @@ test("INC assigned officer can update own task progress with edit permission but
   const path = `/api/incidents/${item.id}/assignments/${created.data.assignment.id}`;
   const officer = await f.login("demo.can-bo");
   const other = await f.login("demo.tong-hop");
-  f.db.exec(
+  await f.db.exec(
     "DELETE FROM role_permissions WHERE role_code IN ('A03','A04') AND permission_code='M09.approve'",
   );
   const progress = await f.request(path, {
@@ -1187,9 +1201,11 @@ test("INC assigned officer can update own task progress with edit permission but
     400,
   );
   assert.equal(
-    f.db
-      .prepare("SELECT officer_id FROM incident_assignments WHERE id=?")
-      .get(created.data.assignment.id).officer_id,
+    (
+      await f.db
+        .prepare("SELECT officer_id FROM incident_assignments WHERE id=?")
+        .get(created.data.assignment.id)
+    ).officer_id,
     "CB-A03",
   );
   const complete = await f.request(path, {
@@ -1199,7 +1215,7 @@ test("INC assigned officer can update own task progress with edit permission but
   });
   assert.equal(complete.status, 200, JSON.stringify(complete.data));
   assert.ok(complete.data.assignment.completedAt);
-  const audit = audits(f.db, item.id).at(-1);
+  const audit = (await audits(f.db, item.id)).at(-1);
   assert.equal(audit.actor_id, "DEMO-A03");
   assert.equal(JSON.parse(audit.before_json).assignment.status, "IN_PROGRESS");
   assert.equal(JSON.parse(audit.after_json).assignment.status, "COMPLETED");
@@ -1222,7 +1238,7 @@ test("INC optimistic version rejects stale metadata without losing another user'
   assert.equal(stale.status, 409, JSON.stringify(stale.data));
   assert.equal(stale.data.error.code, "VERSION_CONFLICT");
   assert.equal(
-    f.db.prepare("SELECT description FROM incidents WHERE id=?").get(item.id).description,
+    (await f.db.prepare("SELECT description FROM incidents WHERE id=?").get(item.id)).description,
     "Thay đổi đã lưu",
   );
 });
@@ -1250,7 +1266,7 @@ test("INC statistics rejects unsafe aggregate totals without rounded monetary va
   const result = await f.request("/api/incidents/statistics", { cookie: f.cookie });
   assert.equal(result.status, 422, JSON.stringify(result.data));
   assert.equal(result.data.error.code, "AGGREGATE_TOO_LARGE");
-  assert.equal(f.db.prepare("SELECT count(*) AS n FROM incident_damages").get().n, 2);
+  assert.equal((await f.db.prepare("SELECT count(*) AS n FROM incident_damages").get()).n, 2);
 });
 
 test("INC refuses upload storage in repository public without writing file or metadata", async (t) => {
@@ -1261,17 +1277,17 @@ test("INC refuses upload storage in repository public without writing file or me
   const result = await f.upload(item.id);
   assert.equal(result.status, 500, JSON.stringify(result.data));
   assert.equal(result.data.error.code, "STORAGE_ERROR");
-  assert.equal(f.db.prepare("SELECT count(*) AS n FROM incident_documents").get().n, 0);
+  assert.equal((await f.db.prepare("SELECT count(*) AS n FROM incident_documents").get()).n, 0);
   assert.deepEqual(files(publicDirectory), before);
 });
 
 test("INC administrator configures demo policy/catalog with audit, validation and no implicit role grants", async (t) => {
   const now = Date.parse("2026-03-01T00:00:00+07:00");
   const f = await fixture(t, { incidentNow: () => now });
-  const permissionsBefore = f.db
+  const permissionsBefore = await f.db
     .prepare("SELECT * FROM role_permissions ORDER BY role_code,permission_code")
     .all();
-  const policyBefore = f.db.prepare("SELECT * FROM incident_policy").get();
+  const policyBefore = await f.db.prepare("SELECT * FROM incident_policy").get();
   assert.equal((await f.request("/api/incidents/configuration")).status, 401);
   const ordinary = await f.login("demo.tong-hop");
   assert.equal((await f.request("/api/incidents/configuration", { cookie: ordinary })).status, 403);
@@ -1312,7 +1328,7 @@ test("INC administrator configures demo policy/catalog with audit, validation an
       400,
       JSON.stringify(body),
     );
-    assert.deepEqual(f.db.prepare("SELECT * FROM incident_policy").get(), policyBefore);
+    assert.deepEqual(await f.db.prepare("SELECT * FROM incident_policy").get(), policyBefore);
   }
   const configured = await f.request("/api/incidents/configuration", {
     method: "PATCH",
@@ -1329,11 +1345,11 @@ test("INC administrator configures demo policy/catalog with audit, validation an
   assert.equal(configured.data.policy.warningHours, 3);
   assert.equal(configured.data.policy.maxUploadBytes, 128);
   assert.deepEqual(configured.data.policy.allowedExtensions, ["txt"]);
-  const policyAudit = audits(f.db, "M09.policy").at(-1);
+  const policyAudit = (await audits(f.db, "M09.policy")).at(-1);
   assert.equal(policyAudit.actor_id, "DEMO-A05");
   assert.equal(JSON.parse(policyAudit.before_json).warning_hours, 48);
   assert.equal(JSON.parse(policyAudit.after_json).warning_hours, 3);
-  const persistedPolicy = f.db.prepare("SELECT * FROM incident_policy").get();
+  const persistedPolicy = await f.db.prepare("SELECT * FROM incident_policy").get();
   assert.equal(JSON.parse(policyAudit.after_json).updated_by, persistedPolicy.updated_by);
   assert.equal(JSON.parse(policyAudit.after_json).updated_at, persistedPolicy.updated_at);
   const typePath = "/api/incidents/configuration/types/TEST_CATALOG";
@@ -1378,13 +1394,16 @@ test("INC administrator configures demo policy/catalog with audit, validation an
       .data.total,
     0,
   );
-  assert.equal(JSON.parse(audits(f.db, item.id).at(-1).before_json).incident_type, "TEST_CATALOG");
   assert.equal(
-    JSON.parse(audits(f.db, "M09.type:TEST_CATALOG").at(-1).after_json).type.code,
+    JSON.parse((await audits(f.db, item.id)).at(-1).before_json).incident_type,
+    "TEST_CATALOG",
+  );
+  assert.equal(
+    JSON.parse((await audits(f.db, "M09.type:TEST_CATALOG")).at(-1).after_json).type.code,
     "TEST_CATALOG",
   );
   assert.deepEqual(
-    f.db.prepare("SELECT * FROM role_permissions ORDER BY role_code,permission_code").all(),
+    await f.db.prepare("SELECT * FROM role_permissions ORDER BY role_code,permission_code").all(),
     permissionsBefore,
   );
 });
@@ -1445,16 +1464,16 @@ test("INC-02 empty and configured subtype options enforce type ownership and per
 
   const item = await f.incident();
   const path = `/api/incidents/${item.id}`;
-  const before = f.db.prepare("SELECT * FROM incidents WHERE id=?").get(item.id);
-  const auditBefore = audits(f.db, item.id).length;
+  const before = await f.db.prepare("SELECT * FROM incidents WHERE id=?").get(item.id);
+  const auditBefore = (await audits(f.db, item.id)).length;
   const crossType = await f.request(path, {
     method: "PATCH",
     cookie: f.cookie,
     body: { incidentSubtype: explosionGroup.code },
   });
   assert.equal(crossType.status, 400);
-  assert.deepEqual(f.db.prepare("SELECT * FROM incidents WHERE id=?").get(item.id), before);
-  assert.equal(audits(f.db, item.id).length, auditBefore);
+  assert.deepEqual(await f.db.prepare("SELECT * FROM incidents WHERE id=?").get(item.id), before);
+  assert.equal((await audits(f.db, item.id)).length, auditBefore);
 
   const saved = await f.request(path, {
     method: "PATCH",
@@ -1467,7 +1486,7 @@ test("INC-02 empty and configured subtype options enforce type ownership and per
     (await f.request(path, { cookie: f.cookie })).data.incident.incidentSubtype,
     fireGroup.code,
   );
-  const classified = audits(f.db, item.id).at(-1);
+  const classified = (await audits(f.db, item.id)).at(-1);
   assert.equal(classified.action, "M09.classification.update");
   assert.equal(JSON.parse(classified.before_json).incident_subtype, null);
   assert.equal(JSON.parse(classified.after_json).incident_subtype, fireGroup.code);
@@ -1502,7 +1521,7 @@ test("INC-02 empty and configured subtype options enforce type ownership and per
   });
   assert.equal(reclassified.status, 200);
   assert.equal(reclassified.data.incident.incidentSubtype, null);
-  const cleared = audits(f.db, item.id).at(-1);
+  const cleared = (await audits(f.db, item.id)).at(-1);
   assert.equal(JSON.parse(cleared.before_json).incident_subtype, fireGroup.code);
   assert.equal(JSON.parse(cleared.after_json).incident_type, "EXPLOSION");
   assert.equal(JSON.parse(cleared.after_json).incident_subtype, null);
@@ -1517,18 +1536,11 @@ test("INC-02 empty and configured subtype options enforce type ownership and per
     explosionGroup.code,
   );
 
-  await f.close();
-  const reopened = openDatabase(f.databasePath);
-  try {
-    const row = reopened.prepare("SELECT * FROM incidents WHERE id=?").get(item.id);
-    assert.equal(row.incident_type, "EXPLOSION");
-    assert.equal(row.incident_subtype, explosionGroup.code);
-    assert.equal(
-      JSON.parse(audits(reopened, item.id).at(-1).after_json).incident_subtype,
-      explosionGroup.code,
-    );
-    assert.deepEqual(reopened.prepare("PRAGMA foreign_key_check").all(), []);
-  } finally {
-    reopened.close();
-  }
+  const row = await f.db.prepare("SELECT * FROM incidents WHERE id=?").get(item.id);
+  assert.equal(row.incident_type, "EXPLOSION");
+  assert.equal(row.incident_subtype, explosionGroup.code);
+  assert.equal(
+    JSON.parse((await audits(f.db, item.id)).at(-1).after_json).incident_subtype,
+    explosionGroup.code,
+  );
 });

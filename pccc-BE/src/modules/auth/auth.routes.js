@@ -16,7 +16,7 @@ export const authRoutes = [
       const password = text(body.password, "Mật khẩu", 1, 256);
       const result = await ctx.auth.login(username, password, ctx.ip);
       // Rotate any previous session; its token must no longer work.
-      ctx.auth.logout(ctx.token, ctx.ip);
+      await ctx.auth.logout(ctx.token, ctx.ip);
       ctx.setSessionCookie(result.token);
       return {
         user: result.user,
@@ -28,8 +28,8 @@ export const authRoutes = [
     method: "POST",
     path: "/api/auth/logout",
     public: true,
-    handle(ctx) {
-      ctx.auth.logout(ctx.token, ctx.ip);
+    async handle(ctx) {
+      await ctx.auth.logout(ctx.token, ctx.ip);
       ctx.clearSessionCookie();
       return { message: "Đã đăng xuất." };
     },
@@ -42,8 +42,8 @@ export const authRoutes = [
   {
     method: "POST",
     path: "/api/auth/skip-password-change",
-    handle(ctx) {
-      ctx.auth.skipPasswordChange(ctx.user, ctx.ip);
+    async handle(ctx) {
+      await ctx.auth.skipPasswordChange(ctx.user, ctx.ip);
       return { message: "Đã bỏ qua đổi mật khẩu.", redirectTo: homeFor(ctx.user) };
     },
   },

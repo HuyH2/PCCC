@@ -66,8 +66,8 @@ export function deadlineWarning(row, policy, now = Date.now()) {
   return "ON_TIME";
 }
 
-function policyFor(db) {
-  return db.prepare("SELECT * FROM incident_policy WHERE id=1").get();
+async function policyFor(db) {
+  return await db.prepare("SELECT * FROM incident_policy WHERE id=1").get();
 }
 function policyDto(row) {
   return {
@@ -118,9 +118,9 @@ export function incidentTimestamp(value, label, nullable = true) {
   return result;
 }
 
-function findIncident(db, user, id) {
+async function findIncident(db, user, id) {
   const s = incidentScope(user);
-  const row = db
+  const row = await db
     .prepare(`SELECT i.* FROM incidents i WHERE ${s.sql} AND i.id=?`)
     .get(...s.params, id);
   assert(row, 404, "NOT_FOUND", "Không tìm thấy sự cố trong phạm vi được cấp.");
@@ -143,26 +143,28 @@ function versionCheck(body, row) {
 function allowedAny(user, permissions) {
   requirePermission(user, permissions.find((p) => user.permissions.includes(p)) || permissions[0]);
 }
-function history(db, user, before, after, reason, notes, now) {
-  db.prepare(
-    `INSERT INTO incident_status_history(incident_id,from_status,to_status,from_record_status,to_record_status,
+async function history(db, user, before, after, reason, notes, now) {
+  await db
+    .prepare(
+      `INSERT INTO incident_status_history(incident_id,from_status,to_status,from_record_status,to_record_status,
     old_deadline_at,new_deadline_at,changed_by,changed_at,reason,notes) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-  ).run(
-    after.id,
-    before?.processing_status ?? null,
-    after.processing_status,
-    before?.record_status ?? null,
-    after.record_status,
-    before?.deadline_at ?? null,
-    after.deadline_at,
-    user.id,
-    now,
-    reason,
-    notes,
-  );
+    )
+    .run(
+      after.id,
+      before?.processing_status ?? null,
+      after.processing_status,
+      before?.record_status ?? null,
+      after.record_status,
+      before?.deadline_at ?? null,
+      after.deadline_at,
+      user.id,
+      now,
+      reason,
+      notes,
+    );
 }
-function incidentAudit(db, user, action, id, before, after, body, ip) {
-  audit(
+async function incidentAudit(db, user, action, id, before, after, body, ip) {
+  await audit(
     db,
     user.id,
     action,
@@ -172,12 +174,12 @@ function incidentAudit(db, user, action, id, before, after, body, ip) {
     ip,
   );
 }
-function relations(db, user, row, previous = null) {
+async function relations(db, user, row, previous = null) {
   let facility = null,
     region = null;
   if (row.facility_id) {
     const s = facilityScope(user);
-    facility = db
+    facility = await db
       .prepare(`SELECT f.* FROM facilities f WHERE ${s.sql} AND f.id=?`)
       .get(...s.params, row.facility_id);
     assert(facility, 404, "NOT_FOUND", "Không tìm thấy cơ sở trong phạm vi được cấp.");
@@ -188,7 +190,7 @@ function relations(db, user, row, previous = null) {
   }
   if (row.region_id) {
     const s = regionScope(user);
-    region = db
+    region = await db
       .prepare(`SELECT r.* FROM regions r WHERE ${s.sql} AND r.id=?`)
       .get(...s.params, row.region_id);
     assert(region, 404, "NOT_FOUND", "Không tìm thấy khu vực trong phạm vi được cấp.");
@@ -199,7 +201,7 @@ function relations(db, user, row, previous = null) {
   }
   if (row.unit_id) {
     const s = unitReadScope(user);
-    const unit = db
+    const unit = await db
       .prepare(`SELECT u.* FROM units u WHERE ${s.sql} AND u.id=?`)
       .get(...s.params, row.unit_id);
     assert(unit, 404, "NOT_FOUND", "Không tìm thấy đơn vị trong phạm vi được cấp.");
@@ -208,7 +210,7 @@ function relations(db, user, row, previous = null) {
   }
   // The candidate itself must fit a grant; parent-context lookups never confer write rights.
   const s = incidentScope(user);
-  const visible = db
+  const visible = await db
     .prepare(`SELECT 1 FROM (SELECT ? unit_id,? region_id,? facility_id) i WHERE ${s.sql}`)
     .get(row.unit_id, row.region_id, row.facility_id, ...s.params);
   assert(visible, 403, "OUT_OF_SCOPE", "Sự cố phải thuộc phạm vi dữ liệu được cấp.");
@@ -232,7 +234,7 @@ const incidentFields = [
   "reason",
   "notes",
 ];
-function incidentInput(db, user, payload, previous, now) {
+async function incidentInput(db, user, payload, previous, now) {
   const body = object(payload, incidentFields);
   const row = previous
     ? { ...previous }
@@ -298,14 +300,16 @@ function incidentInput(db, user, payload, previous, now) {
       row.unit_id = null;
   }
   if (row.incident_type) {
-    const type = db.prepare("SELECT * FROM incident_types WHERE code=?").get(row.incident_type);
+    const type = await db
+      .prepare("SELECT * FROM incident_types WHERE code=?")
+      .get(row.incident_type);
     invalid(
       type && (type.enabled || previous?.incident_type === row.incident_type),
       "Loại sự cố không có trong danh mục đang sử dụng.",
     );
   }
   if (row.incident_subtype) {
-    const subtype = db
+    const subtype = await db
       .prepare("SELECT * FROM incident_subtypes WHERE type_code=? AND code=?")
       .get(row.incident_type, row.incident_subtype);
     invalid(
@@ -323,13 +327,13 @@ function incidentInput(db, user, payload, previous, now) {
     );
   if (row.deadline_at != null && row.occurred_at != null)
     invalid(row.deadline_at >= row.occurred_at, "Hạn xử lý không được trước thời điểm xảy ra.");
-  relations(db, user, row, previous);
+  await relations(db, user, row, previous);
   return { body, row };
 }
 
-function assignmentDto(db, user, row) {
+async function assignmentDto(db, user, row) {
   const scope = officerScope(user);
-  const officer = db
+  const officer = await db
     .prepare(`SELECT o.full_name FROM officers o WHERE ${scope.sql} AND o.id=?`)
     .get(...scope.params, row.officer_id);
   return {
@@ -347,11 +351,11 @@ function assignmentDto(db, user, row) {
     updatedAt: row.updated_at,
   };
 }
-function assignmentsFor(db, user, id) {
-  return db
+async function assignmentsFor(db, user, id) {
+  const rows = await db
     .prepare("SELECT * FROM incident_assignments WHERE incident_id=? ORDER BY assigned_at,id")
-    .all(id)
-    .map((r) => assignmentDto(db, user, r));
+    .all(id);
+  return await Promise.all(rows.map(async (r) => await assignmentDto(db, user, r)));
 }
 function damageDto(r) {
   return {
@@ -368,11 +372,12 @@ function damageDto(r) {
     updatedAt: r.updated_at,
   };
 }
-function documentsFor(db, id) {
-  return db
-    .prepare("SELECT * FROM incident_documents WHERE incident_id=? ORDER BY uploaded_at,id")
-    .all(id)
-    .map(documentDto);
+async function documentsFor(db, id) {
+  return (
+    await db
+      .prepare("SELECT * FROM incident_documents WHERE incident_id=? ORDER BY uploaded_at,id")
+      .all(id)
+  ).map(documentDto);
 }
 function documentDto(r) {
   return {
@@ -386,7 +391,7 @@ function documentDto(r) {
     uploadedAt: r.uploaded_at,
   };
 }
-function incidentDto(db, user, r, policy, now) {
+async function incidentDto(db, user, r, policy, now) {
   return {
     id: r.id,
     incidentCode: r.incident_code,
@@ -401,10 +406,11 @@ function incidentDto(db, user, r, policy, now) {
     regionId: r.region_id,
     unitId: r.unit_id,
     facilityId: r.facility_id,
-    regionName: db.prepare("SELECT name FROM regions WHERE id=?").get(r.region_id)?.name || null,
-    unitName: db.prepare("SELECT name FROM units WHERE id=?").get(r.unit_id)?.name || null,
+    regionName:
+      (await db.prepare("SELECT name FROM regions WHERE id=?").get(r.region_id))?.name || null,
+    unitName: (await db.prepare("SELECT name FROM units WHERE id=?").get(r.unit_id))?.name || null,
     facilityName:
-      db.prepare("SELECT name FROM facilities WHERE id=?").get(r.facility_id)?.name || null,
+      (await db.prepare("SELECT name FROM facilities WHERE id=?").get(r.facility_id))?.name || null,
     recordStatus: r.record_status,
     processingStatus: r.processing_status,
     deadlineAt: r.deadline_at,
@@ -415,7 +421,7 @@ function incidentDto(db, user, r, policy, now) {
     updatedAt: r.updated_at,
     version: r.version,
     deadlineWarning: deadlineWarning(r, policy, now),
-    assignments: assignmentsFor(db, user, r.id),
+    assignments: await assignmentsFor(db, user, r.id),
   };
 }
 function period(raw, end = false) {
@@ -498,18 +504,21 @@ function filterFor(user, url, policy, now, statistics = false) {
   return { sql: clauses.join(" AND "), params };
 }
 
-function statisticsFor(db, user, url, policy, now) {
+async function statisticsFor(db, user, url, policy, now) {
   const f = filterFor(user, url, policy, now, true);
-  const all = db.prepare(`SELECT i.* FROM incidents i WHERE ${f.sql}`).all(...f.params);
-  const groups = (expression, extra = "", joins = "") =>
-    db
+  const all = await db.prepare(`SELECT i.* FROM incidents i WHERE ${f.sql}`).all(...f.params);
+  const groups = async (expression, extra = "", joins = "") =>
+    await db
       .prepare(
-        `SELECT ${expression} key,${extra} count(*) count FROM incidents i ${joins} WHERE ${f.sql} GROUP BY ${expression} ORDER BY key`,
+        `SELECT ${expression} AS key,${extra} count(*) AS count FROM incidents i ${joins} WHERE ${f.sql} GROUP BY ${expression} ORDER BY key`,
       )
       .all(...f.params);
-  const dateGroups = (format) =>
-    groups(`strftime('${format}',i.occurred_at/1000,'unixepoch','+7 hours')`);
-  const damageRows = db
+  // Calendar buckets in Vietnam time (UTC+7), matching the stored epoch-millisecond timestamps.
+  const dateGroups = async (format) =>
+    await groups(
+      `to_char(to_timestamp(i.occurred_at/1000.0) AT TIME ZONE 'UTC' + interval '7 hours','${format}')`,
+    );
+  const damageRows = await db
     .prepare(
       `SELECT d.damage_group,d.damage_type,d.quantity,d.property_value
     FROM incident_damages d JOIN incidents i ON i.id=d.incident_id WHERE ${f.sql}`,
@@ -554,17 +563,17 @@ function statisticsFor(db, user, url, policy, now) {
   );
   return {
     total: all.length,
-    byType: groups(
+    byType: await groups(
       "i.incident_type",
-      "t.name name,",
+      "min(t.name) AS name,",
       "LEFT JOIN incident_types t ON t.code=i.incident_type",
     ),
-    byDay: dateGroups("%Y-%m-%d"),
-    byMonth: dateGroups("%Y-%m"),
-    byYear: dateGroups("%Y"),
-    byRegion: groups(
+    byDay: await dateGroups("YYYY-MM-DD"),
+    byMonth: await dateGroups("YYYY-MM"),
+    byYear: await dateGroups("YYYY"),
+    byRegion: await groups(
       "i.region_id",
-      "coalesce(r.name,'Chưa xác định') name,",
+      "coalesce(min(r.name),'Chưa xác định') AS name,",
       "LEFT JOIN regions r ON r.id=i.region_id",
     ),
     damages: {
@@ -575,55 +584,58 @@ function statisticsFor(db, user, url, policy, now) {
     },
     processing,
     deadlines,
-    draftsExcluded: db
-      .prepare(
-        `SELECT count(*) total FROM incidents i WHERE ${draftScope.sql} AND i.record_status='DRAFT'`,
-      )
-      .get(...draftScope.params).total,
+    draftsExcluded: (
+      await db
+        .prepare(
+          `SELECT count(*) total FROM incidents i WHERE ${draftScope.sql} AND i.record_status='DRAFT'`,
+        )
+        .get(...draftScope.params)
+    ).total,
     filters: Object.fromEntries(url.searchParams),
     timezone: "Asia/Ho_Chi_Minh",
   };
 }
 
-function optionsFor(db, user, policy) {
+async function optionsFor(db, user, policy) {
   const u = unitReadScope(user),
     r = regionScope(user),
     f = facilityScope(user),
     o = officerScope(user);
   return {
-    units: db
+    units: await db
       .prepare(
         `SELECT u.id,u.name FROM units u WHERE ${u.sql} AND u.status='ACTIVE' ORDER BY u.name`,
       )
       .all(...u.params),
-    regions: db
+    regions: await db
       .prepare(
         `SELECT r.id,r.name,r.unit_id unitId FROM regions r WHERE ${r.sql} AND r.status='ACTIVE' ORDER BY r.name`,
       )
       .all(...r.params),
-    facilities: db
+    facilities: await db
       .prepare(
         `SELECT f.id,f.name,f.region_id regionId FROM facilities f JOIN regions r ON r.id=f.region_id JOIN units u ON u.id=r.unit_id WHERE ${f.sql} AND f.status='active' AND r.status='ACTIVE' AND u.status='ACTIVE' ORDER BY f.name`,
       )
       .all(...f.params),
     officers: user.permissions.includes("M09.approve")
-      ? db
+      ? await db
           .prepare(
             `SELECT o.id,o.full_name fullName,o.unit_id unitId FROM officers o JOIN units ou ON ou.id=o.unit_id WHERE ${o.sql} AND o.status='ACTIVE' AND ou.status='ACTIVE' ORDER BY o.full_name`,
           )
           .all(...o.params)
       : [],
-    incidentTypes: db
-      .prepare("SELECT code,name FROM incident_types WHERE enabled=1 ORDER BY code")
-      .all()
-      .map((type) => ({
+    incidentTypes: await Promise.all(
+      (
+        await db.prepare("SELECT code,name FROM incident_types WHERE enabled=1 ORDER BY code").all()
+      ).map(async (type) => ({
         ...type,
-        subtypes: db
+        subtypes: await db
           .prepare(
             "SELECT code,name FROM incident_subtypes WHERE type_code=? AND enabled=1 ORDER BY code",
           )
           .all(type.code),
       })),
+    ),
     policy: policyDto(policy),
   };
 }
@@ -766,14 +778,14 @@ export async function handleIncidents(ctx) {
   } = ctx;
   if (path !== "/api/incidents" && !path.startsWith("/api/incidents/")) return false;
   let user = ctx.user;
-  const policy = policyFor(db),
+  const policy = await policyFor(db),
     time = now();
-  const dto = (row) => incidentDto(db, user, row, policyFor(db), now());
-  const mutation = (body, permissions, work) =>
-    transaction(db, () => {
-      user = authenticateAgain();
+  const dto = async (row) => await incidentDto(db, user, row, await policyFor(db), now());
+  const mutation = async (body, permissions, work) =>
+    await transaction(db, async () => {
+      user = await authenticateAgain();
       allowedAny(user, permissions);
-      return work(body);
+      return await work(body);
     });
 
   if (path === "/api/incidents/configuration") {
@@ -781,8 +793,8 @@ export async function handleIncidents(ctx) {
     if (method === "GET") {
       send(200, {
         policy: policyDto(policy),
-        incidentTypes: db.prepare("SELECT * FROM incident_types ORDER BY code").all(),
-        subtypes: db.prepare("SELECT * FROM incident_subtypes ORDER BY type_code,code").all(),
+        incidentTypes: await db.prepare("SELECT * FROM incident_types ORDER BY code").all(),
+        subtypes: await db.prepare("SELECT * FROM incident_subtypes ORDER BY type_code,code").all(),
       });
       return true;
     }
@@ -794,10 +806,10 @@ export async function handleIncidents(ctx) {
         "allowedExtensions",
         "reason",
       ]);
-      transaction(db, () => {
-        user = authenticateAgain();
+      await transaction(db, async () => {
+        user = await authenticateAgain();
         requireAdministrator(user);
-        const before = policyFor(db),
+        const before = await policyFor(db),
           after = { ...before };
         if (own(body, "warningHours")) {
           invalid(
@@ -839,19 +851,21 @@ export async function handleIncidents(ctx) {
         }
         after.updated_by = user.id;
         after.updated_at = now();
-        db.prepare(
-          "UPDATE incident_policy SET warning_hours=?,require_document_completion=?,max_upload_bytes=?,allowed_extensions=?,updated_by=?,updated_at=? WHERE id=1",
-        ).run(
-          after.warning_hours,
-          after.require_document_completion,
-          after.max_upload_bytes,
-          after.allowed_extensions,
-          after.updated_by,
-          after.updated_at,
-        );
-        incidentAudit(db, user, "M09.policy.update", "M09.policy", before, after, body, ip);
+        await db
+          .prepare(
+            "UPDATE incident_policy SET warning_hours=?,require_document_completion=?,max_upload_bytes=?,allowed_extensions=?,updated_by=?,updated_at=? WHERE id=1",
+          )
+          .run(
+            after.warning_hours,
+            after.require_document_completion,
+            after.max_upload_bytes,
+            after.allowed_extensions,
+            after.updated_by,
+            after.updated_at,
+          );
+        await incidentAudit(db, user, "M09.policy.update", "M09.policy", before, after, body, ip);
       });
-      send(200, { policy: policyDto(policyFor(db)) });
+      send(200, { policy: policyDto(await policyFor(db)) });
       return true;
     }
   }
@@ -859,19 +873,21 @@ export async function handleIncidents(ctx) {
   if (typeMatch && method === "PUT") {
     requireAdministrator(user);
     const body = object(await readBody(), ["name", "enabled", "subtypes", "reason"]);
-    transaction(db, () => {
-      user = authenticateAgain();
+    await transaction(db, async () => {
+      user = await authenticateAgain();
       requireAdministrator(user);
       const code = typeMatch[1],
         name = trim(body.name, "Tên loại sự cố", 150, 1);
       invalid(typeof body.enabled === "boolean", "Trạng thái danh mục không hợp lệ.");
       const before = {
-        type: db.prepare("SELECT * FROM incident_types WHERE code=?").get(code) || null,
-        subtypes: db.prepare("SELECT * FROM incident_subtypes WHERE type_code=?").all(code),
+        type: (await db.prepare("SELECT * FROM incident_types WHERE code=?").get(code)) || null,
+        subtypes: await db.prepare("SELECT * FROM incident_subtypes WHERE type_code=?").all(code),
       };
-      db.prepare(
-        "INSERT INTO incident_types(code,name,enabled,configuration_label) VALUES (?,?,?,?) ON CONFLICT(code) DO UPDATE SET name=excluded.name,enabled=excluded.enabled",
-      ).run(code, name, Number(body.enabled), policy.configuration_label);
+      await db
+        .prepare(
+          "INSERT INTO incident_types(code,name,enabled,configuration_label) VALUES (?,?,?,?) ON CONFLICT(code) DO UPDATE SET name=excluded.name,enabled=excluded.enabled",
+        )
+        .run(code, name, Number(body.enabled), policy.configuration_label);
       if (own(body, "subtypes")) {
         invalid(
           Array.isArray(body.subtypes) && body.subtypes.length <= 100,
@@ -888,20 +904,22 @@ export async function handleIncidents(ctx) {
           );
           seen.add(item.code);
           invalid(typeof item.enabled === "boolean", "Trạng thái phân nhóm không hợp lệ.");
-          db.prepare(
-            "INSERT INTO incident_subtypes(type_code,code,name,enabled) VALUES (?,?,?,?) ON CONFLICT(type_code,code) DO UPDATE SET name=excluded.name,enabled=excluded.enabled",
-          ).run(code, item.code, trim(item.name, "Tên phân nhóm", 150, 1), Number(item.enabled));
+          await db
+            .prepare(
+              "INSERT INTO incident_subtypes(type_code,code,name,enabled) VALUES (?,?,?,?) ON CONFLICT(type_code,code) DO UPDATE SET name=excluded.name,enabled=excluded.enabled",
+            )
+            .run(code, item.code, trim(item.name, "Tên phân nhóm", 150, 1), Number(item.enabled));
         }
       }
-      incidentAudit(
+      await incidentAudit(
         db,
         user,
         "M09.catalog.update",
         `M09.type:${code}`,
         before,
         {
-          type: db.prepare("SELECT * FROM incident_types WHERE code=?").get(code),
-          subtypes: db.prepare("SELECT * FROM incident_subtypes WHERE type_code=?").all(code),
+          type: await db.prepare("SELECT * FROM incident_types WHERE code=?").get(code),
+          subtypes: await db.prepare("SELECT * FROM incident_subtypes WHERE type_code=?").all(code),
         },
         body,
         ip,
@@ -912,12 +930,12 @@ export async function handleIncidents(ctx) {
   }
   if (method === "GET" && path === "/api/incidents/options") {
     allowedAny(user, ["M09.view", "M09.export"]);
-    send(200, optionsFor(db, user, policy));
+    send(200, await optionsFor(db, user, policy));
     return true;
   }
   if (method === "GET" && path === "/api/incidents/statistics") {
     requirePermission(user, "M09.export");
-    send(200, statisticsFor(db, user, url, policy, time));
+    send(200, await statisticsFor(db, user, url, policy, time));
     return true;
   }
   if (path === "/api/incidents") {
@@ -926,14 +944,18 @@ export async function handleIncidents(ctx) {
       const f = filterFor(user, url, policy, time),
         { page, pageSize } = pagination(url);
       send(200, {
-        items: db
-          .prepare(
-            `SELECT i.* FROM incidents i WHERE ${f.sql} ORDER BY i.created_at DESC,i.id LIMIT ? OFFSET ?`,
-          )
-          .all(...f.params, pageSize, (page - 1) * pageSize)
-          .map(dto),
-        total: db.prepare(`SELECT count(*) total FROM incidents i WHERE ${f.sql}`).get(...f.params)
-          .total,
+        items: await Promise.all(
+          (
+            await db
+              .prepare(
+                `SELECT i.* FROM incidents i WHERE ${f.sql} ORDER BY i.created_at DESC,i.id LIMIT ? OFFSET ?`,
+              )
+              .all(...f.params, pageSize, (page - 1) * pageSize)
+          ).map(dto),
+        ),
+        total: (
+          await db.prepare(`SELECT count(*) total FROM incidents i WHERE ${f.sql}`).get(...f.params)
+        ).total,
         page,
         pageSize,
       });
@@ -942,44 +964,46 @@ export async function handleIncidents(ctx) {
     if (method === "POST") {
       requirePermission(user, "M09.create");
       const payload = await readBody();
-      const created = mutation(payload, ["M09.create"], (input) => {
+      const created = await mutation(payload, ["M09.create"], async (input) => {
         const current = now(),
-          { row, body } = incidentInput(db, user, input, null, current);
+          { row, body } = await incidentInput(db, user, input, null, current);
         row.id = randomUUID();
         row.incident_code = `SC-${new Date(current + 7 * 3600000).getUTCFullYear()}-${row.id.toUpperCase()}`;
         row.created_by = row.updated_by = user.id;
         row.created_at = row.updated_at = current;
         row.version = 1;
-        db.prepare(
-          `INSERT INTO incidents(id,incident_code,incident_type,incident_subtype,title,description,occurred_at,reported_at,address,scene_details,region_id,unit_id,facility_id,record_status,processing_status,deadline_at,completed_at,created_by,updated_by,created_at,updated_at,version)
+        await db
+          .prepare(
+            `INSERT INTO incidents(id,incident_code,incident_type,incident_subtype,title,description,occurred_at,reported_at,address,scene_details,region_id,unit_id,facility_id,record_status,processing_status,deadline_at,completed_at,created_by,updated_by,created_at,updated_at,version)
           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        ).run(
-          ...[
-            "id",
-            "incident_code",
-            "incident_type",
-            "incident_subtype",
-            "title",
-            "description",
-            "occurred_at",
-            "reported_at",
-            "address",
-            "scene_details",
-            "region_id",
-            "unit_id",
-            "facility_id",
-            "record_status",
-            "processing_status",
-            "deadline_at",
-            "completed_at",
-            "created_by",
-            "updated_by",
-            "created_at",
-            "updated_at",
-            "version",
-          ].map((k) => row[k]),
-        );
-        history(
+          )
+          .run(
+            ...[
+              "id",
+              "incident_code",
+              "incident_type",
+              "incident_subtype",
+              "title",
+              "description",
+              "occurred_at",
+              "reported_at",
+              "address",
+              "scene_details",
+              "region_id",
+              "unit_id",
+              "facility_id",
+              "record_status",
+              "processing_status",
+              "deadline_at",
+              "completed_at",
+              "created_by",
+              "updated_by",
+              "created_at",
+              "updated_at",
+              "version",
+            ].map((k) => row[k]),
+          );
+        await history(
           db,
           user,
           null,
@@ -988,10 +1012,10 @@ export async function handleIncidents(ctx) {
           body.notes ? trim(body.notes, "Ghi chú") : "",
           current,
         );
-        incidentAudit(db, user, "M09.incident.create", row.id, null, row, body, ip);
+        await incidentAudit(db, user, "M09.incident.create", row.id, null, row, body, ip);
         return row;
       });
-      send(201, { incident: dto(created) });
+      send(201, { incident: await dto(created) });
       return true;
     }
   }
@@ -1007,75 +1031,79 @@ export async function handleIncidents(ctx) {
   const suffix = match[2] || "";
   if (method === "GET") {
     requirePermission(user, "M09.view");
-    const row = findIncident(db, user, id);
+    const row = await findIncident(db, user, id);
     if (!suffix) {
       send(200, {
-        incident: dto(row),
-        damages: db
-          .prepare("SELECT * FROM incident_damages WHERE incident_id=? ORDER BY created_at,id")
-          .all(id)
-          .map(damageDto),
-        documents: documentsFor(db, id),
-        assignments: assignmentsFor(db, user, id),
+        incident: await dto(row),
+        damages: (
+          await db
+            .prepare("SELECT * FROM incident_damages WHERE incident_id=? ORDER BY created_at,id")
+            .all(id)
+        ).map(damageDto),
+        documents: await documentsFor(db, id),
+        assignments: await assignmentsFor(db, user, id),
       });
       return true;
     }
     if (suffix === "damages") {
       send(200, {
-        damages: db
-          .prepare("SELECT * FROM incident_damages WHERE incident_id=? ORDER BY created_at,id")
-          .all(id)
-          .map(damageDto),
+        damages: (
+          await db
+            .prepare("SELECT * FROM incident_damages WHERE incident_id=? ORDER BY created_at,id")
+            .all(id)
+        ).map(damageDto),
       });
       return true;
     }
     if (suffix === "assignments") {
-      send(200, { assignments: assignmentsFor(db, user, id) });
+      send(200, { assignments: await assignmentsFor(db, user, id) });
       return true;
     }
     if (suffix === "documents") {
-      send(200, { documents: documentsFor(db, id) });
+      send(200, { documents: await documentsFor(db, id) });
       return true;
     }
     if (suffix === "history") {
       send(200, {
-        history: db
-          .prepare(
-            "SELECT * FROM incident_status_history WHERE incident_id=? ORDER BY changed_at DESC,id DESC",
-          )
-          .all(id)
-          .map((r) => ({
-            id: r.id,
-            fromStatus: r.from_status,
-            toStatus: r.to_status,
-            fromRecordStatus: r.from_record_status,
-            toRecordStatus: r.to_record_status,
-            oldDeadlineAt: r.old_deadline_at,
-            newDeadlineAt: r.new_deadline_at,
-            changedBy: r.changed_by,
-            changedAt: r.changed_at,
-            reason: r.reason,
-            notes: r.notes,
-          })),
-        auditLogs: db
-          .prepare(
-            "SELECT * FROM audit_logs WHERE object_id=? AND action LIKE 'M09.%' ORDER BY id DESC",
-          )
-          .all(id)
-          .map((r) => ({
-            id: r.id,
-            action: r.action,
-            actorId: r.actor_id,
-            occurredAt: r.occurred_at,
-            before: r.before_json ? JSON.parse(r.before_json) : null,
-            after: r.after_json ? JSON.parse(r.after_json) : null,
-          })),
+        history: (
+          await db
+            .prepare(
+              "SELECT * FROM incident_status_history WHERE incident_id=? ORDER BY changed_at DESC,id DESC",
+            )
+            .all(id)
+        ).map((r) => ({
+          id: r.id,
+          fromStatus: r.from_status,
+          toStatus: r.to_status,
+          fromRecordStatus: r.from_record_status,
+          toRecordStatus: r.to_record_status,
+          oldDeadlineAt: r.old_deadline_at,
+          newDeadlineAt: r.new_deadline_at,
+          changedBy: r.changed_by,
+          changedAt: r.changed_at,
+          reason: r.reason,
+          notes: r.notes,
+        })),
+        auditLogs: (
+          await db
+            .prepare(
+              "SELECT * FROM audit_logs WHERE object_id=? AND action LIKE 'M09.%' ORDER BY id DESC",
+            )
+            .all(id)
+        ).map((r) => ({
+          id: r.id,
+          action: r.action,
+          actorId: r.actor_id,
+          occurredAt: r.occurred_at,
+          before: r.before_json ? JSON.parse(r.before_json) : null,
+          after: r.after_json ? JSON.parse(r.after_json) : null,
+        })),
       });
       return true;
     }
     const download = suffix.match(/^documents\/([^/]+)\/download$/);
     if (download) {
-      const doc = db
+      const doc = await db
         .prepare("SELECT * FROM incident_documents WHERE incident_id=? AND id=?")
         .get(id, download[1]);
       assert(doc, 404, "NOT_FOUND", "Không tìm thấy tài liệu trong hồ sơ.");
@@ -1123,37 +1151,39 @@ export async function handleIncidents(ctx) {
   if (method === "PATCH" && !suffix) {
     requirePermission(user, "M09.edit");
     const payload = await readBody();
-    const result = mutation(payload, ["M09.edit"], (input) => {
-      const previous = findIncident(db, user, id),
+    const result = await mutation(payload, ["M09.edit"], async (input) => {
+      const previous = await findIncident(db, user, id),
         current = now(),
-        { body, row } = incidentInput(db, user, input, previous, current);
+        { body, row } = await incidentInput(db, user, input, previous, current);
       row.updated_at = current;
       row.updated_by = user.id;
       row.version++;
-      db.prepare(
-        `UPDATE incidents SET incident_type=?,incident_subtype=?,title=?,description=?,occurred_at=?,reported_at=?,address=?,scene_details=?,region_id=?,unit_id=?,facility_id=?,record_status=?,updated_by=?,updated_at=?,version=? WHERE id=?`,
-      ).run(
-        ...[
-          "incident_type",
-          "incident_subtype",
-          "title",
-          "description",
-          "occurred_at",
-          "reported_at",
-          "address",
-          "scene_details",
-          "region_id",
-          "unit_id",
-          "facility_id",
-          "record_status",
-          "updated_by",
-          "updated_at",
-          "version",
-        ].map((k) => row[k]),
-        id,
-      );
+      await db
+        .prepare(
+          `UPDATE incidents SET incident_type=?,incident_subtype=?,title=?,description=?,occurred_at=?,reported_at=?,address=?,scene_details=?,region_id=?,unit_id=?,facility_id=?,record_status=?,updated_by=?,updated_at=?,version=? WHERE id=?`,
+        )
+        .run(
+          ...[
+            "incident_type",
+            "incident_subtype",
+            "title",
+            "description",
+            "occurred_at",
+            "reported_at",
+            "address",
+            "scene_details",
+            "region_id",
+            "unit_id",
+            "facility_id",
+            "record_status",
+            "updated_by",
+            "updated_at",
+            "version",
+          ].map((k) => row[k]),
+          id,
+        );
       if (previous.record_status !== row.record_status)
-        history(
+        await history(
           db,
           user,
           previous,
@@ -1169,10 +1199,10 @@ export async function handleIncidents(ctx) {
           : previous.scene_details !== row.scene_details
             ? "M09.scene.update"
             : "M09.incident.update";
-      incidentAudit(db, user, action, id, previous, row, body, ip);
+      await incidentAudit(db, user, action, id, previous, row, body, ip);
       return row;
     });
-    send(200, { incident: dto(result) });
+    send(200, { incident: await dto(result) });
     return true;
   }
   const damageMatch = suffix.match(/^damages(?:\/([^/]+))?$/);
@@ -1182,8 +1212,8 @@ export async function handleIncidents(ctx) {
   ) {
     requirePermission(user, "M09.edit");
     const payload = await readBody();
-    const result = mutation(payload, ["M09.edit"], (input) => {
-      findIncident(db, user, id);
+    const result = await mutation(payload, ["M09.edit"], async (input) => {
+      await findIncident(db, user, id);
       const body = object(input, [
         "damageGroup",
         "damageType",
@@ -1194,7 +1224,7 @@ export async function handleIncidents(ctx) {
         "reason",
       ]);
       const before = damageMatch[1]
-        ? db
+        ? await db
             .prepare("SELECT * FROM incident_damages WHERE incident_id=? AND id=?")
             .get(id, damageMatch[1])
         : null;
@@ -1238,36 +1268,40 @@ export async function handleIncidents(ctx) {
       row.updated_by = user.id;
       row.updated_at = now();
       if (before)
-        db.prepare(
-          "UPDATE incident_damages SET damage_group=?,damage_type=?,quantity=?,property_value=?,description=?,notes=?,updated_by=?,updated_at=? WHERE id=?",
-        ).run(
-          row.damage_group,
-          row.damage_type,
-          row.quantity,
-          row.property_value,
-          row.description,
-          row.notes,
-          row.updated_by,
-          row.updated_at,
-          row.id,
-        );
+        await db
+          .prepare(
+            "UPDATE incident_damages SET damage_group=?,damage_type=?,quantity=?,property_value=?,description=?,notes=?,updated_by=?,updated_at=? WHERE id=?",
+          )
+          .run(
+            row.damage_group,
+            row.damage_type,
+            row.quantity,
+            row.property_value,
+            row.description,
+            row.notes,
+            row.updated_by,
+            row.updated_at,
+            row.id,
+          );
       else
-        db.prepare(
-          "INSERT INTO incident_damages(id,incident_id,damage_group,damage_type,quantity,property_value,description,notes,updated_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-        ).run(
-          row.id,
-          id,
-          row.damage_group,
-          row.damage_type,
-          row.quantity,
-          row.property_value,
-          row.description,
-          row.notes,
-          row.updated_by,
-          row.created_at,
-          row.updated_at,
-        );
-      incidentAudit(
+        await db
+          .prepare(
+            "INSERT INTO incident_damages(id,incident_id,damage_group,damage_type,quantity,property_value,description,notes,updated_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+          )
+          .run(
+            row.id,
+            id,
+            row.damage_group,
+            row.damage_type,
+            row.quantity,
+            row.property_value,
+            row.description,
+            row.notes,
+            row.updated_by,
+            row.created_at,
+            row.updated_at,
+          );
+      await incidentAudit(
         db,
         user,
         before ? "M09.damage.update" : "M09.damage.create",
@@ -1290,14 +1324,14 @@ export async function handleIncidents(ctx) {
     const required = method === "POST" ? ["M09.approve"] : ["M09.approve", "M09.edit"];
     allowedAny(user, required);
     const payload = await readBody();
-    const result = mutation(payload, required, (input) => {
-      const incident = findIncident(db, user, id);
+    const result = await mutation(payload, required, async (input) => {
+      const incident = await findIncident(db, user, id);
       invalid(
         !terminal(incident) && incident.record_status === "OFFICIAL",
         "Chỉ phân công hồ sơ chính thức còn xử lý.",
       );
       const before = assignmentMatch[1]
-        ? db
+        ? await db
             .prepare("SELECT * FROM incident_assignments WHERE incident_id=? AND id=?")
             .get(id, assignmentMatch[1])
         : null;
@@ -1355,7 +1389,7 @@ export async function handleIncidents(ctx) {
       if (own(body, "notes")) row.notes = trim(body.notes, "Ghi chú");
       invalid(row.officer_id && row.task_description, "Phải chọn cán bộ và nhập nhiệm vụ.");
       const scope = officerScope(user);
-      const officer = db
+      const officer = await db
         .prepare(
           `SELECT o.* FROM officers o JOIN units ou ON ou.id=o.unit_id WHERE ${scope.sql} AND o.id=? AND o.status='ACTIVE' AND ou.status='ACTIVE'`,
         )
@@ -1385,7 +1419,7 @@ export async function handleIncidents(ctx) {
           before.status === row.status && before.officer_id === row.officer_id,
           "Nhiệm vụ đã kết thúc không thể mở lại hoặc đổi cán bộ.",
         );
-      const duplicate = db
+      const duplicate = await db
         .prepare(
           "SELECT 1 FROM incident_assignments WHERE incident_id=? AND officer_id=? AND task_description=? AND status NOT IN ('COMPLETED','CANCELLED') AND id<>?",
         )
@@ -1400,36 +1434,40 @@ export async function handleIncidents(ctx) {
       row.updated_at = now();
       if (before && manage) row.assigned_by = user.id;
       if (before)
-        db.prepare(
-          "UPDATE incident_assignments SET officer_id=?,assigned_by=?,task_description=?,deadline_at=?,status=?,notes=?,completed_at=?,updated_at=? WHERE id=?",
-        ).run(
-          row.officer_id,
-          row.assigned_by,
-          row.task_description,
-          row.deadline_at,
-          row.status,
-          row.notes,
-          row.completed_at,
-          row.updated_at,
-          row.id,
-        );
+        await db
+          .prepare(
+            "UPDATE incident_assignments SET officer_id=?,assigned_by=?,task_description=?,deadline_at=?,status=?,notes=?,completed_at=?,updated_at=? WHERE id=?",
+          )
+          .run(
+            row.officer_id,
+            row.assigned_by,
+            row.task_description,
+            row.deadline_at,
+            row.status,
+            row.notes,
+            row.completed_at,
+            row.updated_at,
+            row.id,
+          );
       else
-        db.prepare(
-          "INSERT INTO incident_assignments(id,incident_id,officer_id,assigned_by,task_description,deadline_at,status,notes,assigned_at,completed_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-        ).run(
-          row.id,
-          id,
-          row.officer_id,
-          row.assigned_by,
-          row.task_description,
-          row.deadline_at,
-          row.status,
-          row.notes,
-          row.assigned_at,
-          row.completed_at,
-          row.updated_at,
-        );
-      incidentAudit(
+        await db
+          .prepare(
+            "INSERT INTO incident_assignments(id,incident_id,officer_id,assigned_by,task_description,deadline_at,status,notes,assigned_at,completed_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+          )
+          .run(
+            row.id,
+            id,
+            row.officer_id,
+            row.assigned_by,
+            row.task_description,
+            row.deadline_at,
+            row.status,
+            row.notes,
+            row.assigned_at,
+            row.completed_at,
+            row.updated_at,
+          );
+      await incidentAudit(
         db,
         user,
         before ? "M09.assignment.update" : "M09.assignment.create",
@@ -1441,7 +1479,7 @@ export async function handleIncidents(ctx) {
       );
       return row;
     });
-    send(method === "POST" ? 201 : 200, { assignment: assignmentDto(db, user, result) });
+    send(method === "POST" ? 201 : 200, { assignment: await assignmentDto(db, user, result) });
     return true;
   }
   if (
@@ -1450,17 +1488,17 @@ export async function handleIncidents(ctx) {
   ) {
     allowedAny(user, suffix === "complete" ? ["M09.approve"] : ["M09.edit", "M09.approve"]);
     const payload = await readBody();
-    const result = mutation(
+    const result = await mutation(
       payload,
       suffix === "complete" ? ["M09.approve"] : ["M09.edit", "M09.approve"],
-      (input) => {
+      async (input) => {
         const body = object(
           input,
           suffix === "deadline"
             ? ["deadlineAt", "reason", "notes", "version"]
             : ["processingStatus", "reason", "notes", "version"],
         );
-        const previous = findIncident(db, user, id),
+        const previous = await findIncident(db, user, id),
           row = { ...previous },
           current = now();
         versionCheck(body, previous);
@@ -1499,9 +1537,9 @@ export async function handleIncidents(ctx) {
             "Hồ sơ nháp phải được lưu chính thức trước khi xử lý.",
           );
           if (next === "COMPLETED") {
-            const p = policyFor(db);
+            const p = await policyFor(db);
             if (p.require_document_completion) {
-              const docs = db
+              const docs = await db
                 .prepare("SELECT * FROM incident_documents WHERE incident_id=?")
                 .all(id);
               const root = storageRoot(uploadDirectory);
@@ -1528,19 +1566,21 @@ export async function handleIncidents(ctx) {
         row.updated_by = user.id;
         row.updated_at = current;
         row.version++;
-        db.prepare(
-          "UPDATE incidents SET deadline_at=?,processing_status=?,completed_at=?,updated_by=?,updated_at=?,version=? WHERE id=?",
-        ).run(
-          row.deadline_at,
-          row.processing_status,
-          row.completed_at,
-          user.id,
-          current,
-          row.version,
-          id,
-        );
-        history(db, user, previous, row, reason, notes, current);
-        incidentAudit(
+        await db
+          .prepare(
+            "UPDATE incidents SET deadline_at=?,processing_status=?,completed_at=?,updated_by=?,updated_at=?,version=? WHERE id=?",
+          )
+          .run(
+            row.deadline_at,
+            row.processing_status,
+            row.completed_at,
+            user.id,
+            current,
+            row.version,
+            id,
+          );
+        await history(db, user, previous, row, reason, notes, current);
+        await incidentAudit(
           db,
           user,
           suffix === "deadline"
@@ -1557,12 +1597,12 @@ export async function handleIncidents(ctx) {
         return row;
       },
     );
-    send(200, { incident: dto(result) });
+    send(200, { incident: await dto(result) });
     return true;
   }
   if (suffix === "documents" && method === "POST") {
     requirePermission(user, "M09.edit");
-    findIncident(db, user, id);
+    await findIncident(db, user, id);
     assert(
       process.env.NODE_ENV !== "production",
       503,
@@ -1572,9 +1612,9 @@ export async function handleIncidents(ctx) {
     const upload = await readUpload(request, policy.max_upload_bytes);
     let createdPath = null;
     try {
-      const doc = mutation({}, ["M09.edit"], () => {
-        findIncident(db, user, id);
-        const currentPolicy = policyFor(db);
+      const doc = await mutation({}, ["M09.edit"], async () => {
+        await findIncident(db, user, id);
+        const currentPolicy = await policyFor(db);
         assert(
           upload.bytes.length <= currentPolicy.max_upload_bytes,
           413,
@@ -1606,23 +1646,25 @@ export async function handleIncidents(ctx) {
           uploaded_by: user.id,
           uploaded_at: now(),
         };
-        db.prepare(
-          "INSERT INTO incident_documents(id,incident_id,original_name,stored_name,file_type,mime_type,size_bytes,storage_key,uploaded_by,uploaded_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-        ).run(
-          ...[
-            "id",
-            "incident_id",
-            "original_name",
-            "stored_name",
-            "file_type",
-            "mime_type",
-            "size_bytes",
-            "storage_key",
-            "uploaded_by",
-            "uploaded_at",
-          ].map((k) => row[k]),
-        );
-        incidentAudit(
+        await db
+          .prepare(
+            "INSERT INTO incident_documents(id,incident_id,original_name,stored_name,file_type,mime_type,size_bytes,storage_key,uploaded_by,uploaded_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+          )
+          .run(
+            ...[
+              "id",
+              "incident_id",
+              "original_name",
+              "stored_name",
+              "file_type",
+              "mime_type",
+              "size_bytes",
+              "storage_key",
+              "uploaded_by",
+              "uploaded_at",
+            ].map((k) => row[k]),
+          );
+        await incidentAudit(
           db,
           user,
           "M09.document.upload",

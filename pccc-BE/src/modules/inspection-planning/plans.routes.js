@@ -15,31 +15,31 @@ export const planRoutes = [
   {
     method: "GET",
     path: "/api/inspection-plans",
-    handle: (ctx) => listPlans(ctx.db, ctx.user, ctx.url),
+    handle: async (ctx) => await listPlans(ctx.db, ctx.user, ctx.url),
   },
   {
     method: "POST",
     path: "/api/inspection-plans",
     async handle(ctx) {
       ctx.status = 201;
-      return { plan: createPlan(ctx.db, ctx.user, await ctx.readJson(), ctx.ip) };
+      return { plan: await createPlan(ctx.db, ctx.user, await ctx.readJson(), ctx.ip) };
     },
   },
   {
     method: "GET",
     path: "/api/inspection-planning/options",
-    handle: (ctx) => planningOptions(ctx.db, ctx.user, ctx.url),
+    handle: async (ctx) => await planningOptions(ctx.db, ctx.user, ctx.url),
   },
   {
     method: "GET",
     path: new RegExp(`^/api/inspection-plans/${ID}$`),
-    handle: (ctx, match) => planDetail(ctx.db, ctx.user, match[1]),
+    handle: async (ctx, match) => await planDetail(ctx.db, ctx.user, match[1]),
   },
   {
     method: "PUT",
     path: new RegExp(`^/api/inspection-plans/${ID}$`),
     async handle(ctx, match) {
-      return { plan: updatePlan(ctx.db, ctx.user, match[1], await ctx.readJson(), ctx.ip) };
+      return { plan: await updatePlan(ctx.db, ctx.user, match[1], await ctx.readJson(), ctx.ip) };
     },
   },
   {
@@ -47,13 +47,15 @@ export const planRoutes = [
     path: new RegExp(`^/api/inspection-plans/${ID}/targets$`),
     async handle(ctx, match) {
       ctx.status = 201;
-      return { target: createTarget(ctx.db, ctx.user, match[1], await ctx.readJson(), ctx.ip) };
+      return {
+        target: await createTarget(ctx.db, ctx.user, match[1], await ctx.readJson(), ctx.ip),
+      };
     },
   },
   {
     method: "GET",
     path: new RegExp(`^/api/inspection-plans/${ID}/facilities$`),
-    handle: (ctx, match) => listPlanFacilities(ctx.db, ctx.user, match[1], ctx.url),
+    handle: async (ctx, match) => await listPlanFacilities(ctx.db, ctx.user, match[1], ctx.url),
   },
   {
     method: "POST",
@@ -61,7 +63,7 @@ export const planRoutes = [
     async handle(ctx, match) {
       ctx.status = 201;
       return {
-        inspection: createPeriodicInspection(
+        inspection: await createPeriodicInspection(
           ctx.db,
           ctx.user,
           match[1],
