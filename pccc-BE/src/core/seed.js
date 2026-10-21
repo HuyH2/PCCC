@@ -7,6 +7,7 @@ import { seedFacilityViolations } from "./seed-facility-violations.js";
 import { seedTasks } from "./seed-tasks.js";
 import { seedKpi } from "./seed-kpi.js";
 import { seedOrganizationDemo } from "./seed-organization-demo.js";
+import { seedReports } from "./seed-reports.js";
 
 export const roleNames = {
   A01: "Chỉ huy/Đội trưởng",
@@ -249,5 +250,24 @@ export async function seedDemo(db, password) {
     seedFacilityViolations(db);
     seedTasks(db);
     seedKpi(db);
+    // Q02 remains a demo matrix; add M08 only before an administrator configures it.
+    if (
+      !db.prepare("SELECT 1 FROM role_permissions WHERE permission_code LIKE 'M08.%' LIMIT 1").get()
+    ) {
+      for (const [role, actions] of Object.entries({
+        A01: ["view", "create", "edit", "approve"],
+        A02: ["view", "create", "edit", "approve"],
+        A03: ["view", "edit"],
+        A04: ["view", "create", "edit"],
+        A05: ["view", "create", "edit", "approve"],
+        A06: ["view"],
+      }))
+        for (const action of actions)
+          db.prepare("INSERT OR IGNORE INTO role_permissions VALUES (?,?)").run(
+            role,
+            `M08.${action}`,
+          );
+    }
+    seedReports(db);
   });
 }
