@@ -126,10 +126,6 @@ test("data exports enforce grants and scope, write audit history, and provide st
     4,
   );
 
-  db.prepare("UPDATE region_assignments SET account_id='DEMO-A03' WHERE region_id='KP02'").run();
-  db.prepare(
-    "INSERT INTO account_scopes(account_id,kind,region_id) VALUES ('DEMO-A03','region','KP02')",
-  ).run();
   const filteredOfficerResponse = await download({
     dataset: "officers",
     format: "csv",
@@ -137,8 +133,8 @@ test("data exports enforce grants and scope, write audit history, and provide st
   });
   assert.equal(filteredOfficerResponse.status, 200);
   const filteredOfficerCsv = await filteredOfficerResponse.text();
-  for (const { name } of db.prepare("SELECT name FROM regions WHERE id IN ('KP01','KP02')").all())
-    assert.ok(filteredOfficerCsv.includes(name));
+  assert.match(filteredOfficerCsv, /Khu phố 01/);
+  assert.doesNotMatch(filteredOfficerCsv, /Khu phố 02/);
 
   assert.equal(
     (await download({ dataset: "facilities", format: "xlsx", filters: {} })).status,
@@ -155,6 +151,38 @@ test("data exports enforce grants and scope, write audit history, and provide st
     body: JSON.stringify({ dataset: "facilities", format: "csv", filters: {} }),
   });
   assert.equal(denied.status, 403);
+});
+
+test("officer export uses scoped personnel profiles, including staff without accounts", async (t) => {
+  const { db, login, base } = await fixture(t);
+  const cookie = await login();
+  const unlinked = db
+    .prepare(
+      "SELECT o.officer_code FROM officers o LEFT JOIN accounts a ON a.officer_id=o.id WHERE a.id IS NULL LIMIT 1",
+    )
+    .get();
+  assert.ok(unlinked);
+  const exportOfficers = (filters) =>
+    fetch(`${base}/api/data-transfers/export`, {
+      method: "POST",
+      headers: { Origin: origin, Cookie: cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ dataset: "officers", format: "csv", filters }),
+    });
+  const response = await exportOfficers({});
+  assert.equal(response.status, 200);
+  const csv = await response.text();
+  assert.match(csv, /"Chức vụ","Đơn vị","Vai trò","Trạng thái"/);
+  assert.ok(csv.includes(unlinked.officer_code));
+  assert.equal(
+    csv.split("\r\n").length - 2,
+    db.prepare("SELECT count(*) AS n FROM officers").get().n,
+  );
+
+  const filtered = await exportOfficers({ search: unlinked.officer_code });
+  assert.equal(filtered.status, 200);
+  assert.equal((await filtered.text()).split("\r\n").length - 2, 1);
+  const invalidStatus = await exportOfficers({ status: "locked" });
+  assert.equal(invalidStatus.status, 400);
 });
 
 test("data transfer job history is owner-limited unless system admin has global scope", async (t) => {

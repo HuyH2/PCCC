@@ -93,6 +93,17 @@ seed không chèn tin mẫu vào công việc đã có trao đổi và không t�
 Màn hình lịch, KPI và giải trình đọc dữ liệu thật từ các bảng M07; dữ liệu chỉ tiêu/giải trình mẫu
 chỉ được tạo khi chưa có cấu hình. Chi tiết API và quyền: [pccc-BE/WORK_KPI.md](pccc-BE/WORK_KPI.md).
 
+## Báo cáo, deadline và chuông thông báo — UC-RPT-01..05, UC-SYS-03
+
+`/bao-cao`, chi tiết báo cáo và `/canh-bao` đã nối SQLite/API thật. `pnpm seed` trên database
+demo local tạo 5 loại báo cáo, 48 yêu cầu đủ nhóm sắp hạn/quá hạn/đã nộp/hoàn thành,
+4 lịch định kỳ, 10 file mẫu và thông báo hạn. Seed lại giữ các hồ sơ đã chỉnh sửa.
+Đăng nhập `demo.admin`, tạo yêu cầu giao `demo.tong-hop`, đặt deadline; đăng nhập
+`demo.tong-hop` để nộp PDF/DOCX/XLSX hoặc ảnh; quay lại `demo.admin` xác nhận hoàn thành.
+Chuông và `/canh-bao` đọc thông báo riêng của tài khoản, tự làm mới và đánh dấu đã đọc.
+Mục **Lịch định kỳ** có nút **Sinh kỳ mới**. Quyền và API chi tiết ở
+[pccc-BE/REPORTS.md](pccc-BE/REPORTS.md); ma trận Q02 và chế độ báo cáo Q10 vẫn là cấu hình mẫu.
+
 ## Khóa tài khoản và chuyển giao phạm vi — UC-ADM-04
 
 `/quan-tri/tai-khoan` đã nối API để khóa/mở khóa tài khoản; `/to-chuc/phan-cong` đã nối API
@@ -419,7 +430,8 @@ pccc-FE/src/
 | `/cong-viec/giao-viec`     | M07     | UC-WRK-02, UC-WRK-03 — Giao việc & tiến độ              |
 | `/cong-viec/kpi`           | M07     | UC-WRK-04 — KPI & nợ chỉ tiêu                           |
 | `/cong-viec/giai-trinh`    | M07     | UC-WRK-05 — Yêu cầu/phản hồi giải trình                 |
-| `/bao-cao`                 | M08     | UC-RPT-01..04 — Báo cáo & deadline                      |
+| `/bao-cao`                 | M08     | UC-RPT-01..05 — Báo cáo & deadline                      |
+| `/canh-bao`                | M10     | UC-SYS-03 — Chuông và danh sách thông báo               |
 | `/su-co`                   | M09     | UC-INC-01..06 — Sự cố và thiệt hại                      |
 | `/tien-ich/import`         | M11     | UC-FAC-07, UC-SYS-04 — Import Excel có preview lỗi      |
 | `/tien-ich/export`         | M11     | UC-RPT-06 — Kết xuất R01–R12                            |
@@ -441,18 +453,17 @@ pccc-FE/src/
 Ràng buộc dữ liệu tập trung ở [`src/data/schemas.ts`](pccc-FE/src/data/schemas.ts) — khi đơn vị chốt bộ trường
 chuẩn (Q04), chỉ cần sửa file này là toàn bộ biểu mẫu có hiệu lực theo.
 
-| Biểu mẫu      | Dạng                           | Ràng buộc đáng chú ý                                                                                   |
-| ------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| Cơ sở         | Trang riêng, nhiều nhóm trường | Cảnh báo trùng tên + địa chỉ; khu phố lọc theo phường; tách **Lưu nháp** và **Lưu chính thức** (BR-02) |
-| Cán bộ        | Hộp thoại                      | Email và điện thoại đúng định dạng; nghỉ/chuyển công tác chỉ đổi trạng thái                            |
-| Vi phạm       | Hộp thoại                      | Đánh dấu đình chỉ thì **bắt buộc có số quyết định**; hạn khắc phục phải sau ngày phát hiện             |
-| Cuộc kiểm tra | Hộp thoại                      | Có/không lập thông báo gửi cơ sở quyết định trạng thái khởi tạo                                        |
-| Công việc     | Hộp thoại                      | Hạn hoàn thành không được trước ngày giao                                                              |
-| Báo cáo       | Hộp thoại                      | Số ngày cảnh báo 1–30; báo cáo đột xuất cần số văn bản yêu cầu                                         |
-| Sự cố         | Hộp thoại                      | Diện tích cháy chỉ áp dụng cho loại Cháy; cơ sở liên quan lọc theo phường                              |
+| Biểu mẫu      | Dạng                            | Ràng buộc đáng chú ý                                                                                   |
+| ------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Cơ sở         | Trang riêng, nhiều nhóm trường  | Cảnh báo trùng tên + địa chỉ; khu phố lọc theo phường; tách **Lưu nháp** và **Lưu chính thức** (BR-02) |
+| Cán bộ        | Hộp thoại                       | Email và điện thoại đúng định dạng; nghỉ/chuyển công tác chỉ đổi trạng thái                            |
+| Vi phạm       | Hộp thoại                       | Đánh dấu đình chỉ thì **bắt buộc có số quyết định**; hạn khắc phục phải sau ngày phát hiện             |
+| Cuộc kiểm tra | Hộp thoại                       | Có/không lập thông báo gửi cơ sở quyết định trạng thái khởi tạo                                        |
+| Công việc     | Hộp thoại                       | Hạn hoàn thành không được trước ngày giao                                                              |
+| Báo cáo       | Form tại trang báo cáo/chi tiết | Nhắc trước 0–90 ngày theo loại, giao người thực hiện, deadline và nộp file                             |
+| Sự cố         | Hộp thoại                       | Diện tích cháy chỉ áp dụng cho loại Cháy; cơ sở liên quan lọc theo phường                              |
 
-Các biểu mẫu hiện **ghi log ra console và hiện toast**, chưa gọi API. Điểm nối API nằm ở hàm
-`onSubmit` của từng form.
+Một số biểu mẫu demo khác vẫn ghi log ra console và hiện toast; luồng báo cáo ở trên đã gọi API.
 
 ## Quy tắc nghiệp vụ đã thể hiện trên giao diện
 

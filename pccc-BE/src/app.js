@@ -19,6 +19,8 @@ import { incidentRoutes } from "./modules/incidents/incidents.routes.js";
 import { organizationRoutes } from "./modules/organization/organization.routes.js";
 import { dataTransferRoutes } from "./modules/data-transfer/data-transfer.routes.js";
 import { violationsRoutes } from "./modules/violations/violations.routes.js";
+import { reportsRoutes } from "./modules/reports/reports.routes.js";
+import { notificationRoutes } from "./modules/notifications/notifications.routes.js";
 
 // Modular monolith: each business module registers its routes here; all share one process and DB.
 const routes = [
@@ -40,6 +42,8 @@ const routes = [
   ...kpiRoutes,
   ...explanationsRoutes,
   ...dataTransferRoutes,
+  ...reportsRoutes,
+  ...notificationRoutes,
 ];
 
 export function createApp(
@@ -97,7 +101,7 @@ export function createApp(
         );
         response.setHeader(
           "Access-Control-Allow-Headers",
-          "Content-Type, X-File-Name, X-Document-Version, X-Document-Kind, X-Record-Number, X-Document-Description",
+          "Content-Type, X-File-Name, X-Document-Version, X-Document-Kind, X-Record-Number, X-Document-Description, X-Report-Note",
         );
         response.statusCode = 204;
         response.end();

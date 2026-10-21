@@ -1,5 +1,7 @@
 # pccc-BE — Backend PCCC/CNCH
 
+Phân hệ báo cáo M08 và notification dùng chung: xem [REPORTS.md](REPORTS.md).
+
 ## Tổ chức và cán bộ — UC-ORG-01, UC-ORG-02
 
 `src/core/organization.js` và `src/modules/organization/organization.routes.js` dùng lại

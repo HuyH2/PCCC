@@ -46,6 +46,8 @@ export function canManageDocuments(user: AuthUser, action: "create" | "edit") {
 
 /** Preserve existing demo screens. Backend enforces permissions on its APIs. */
 export function canVisit(user: AuthUser, path: string) {
+  if (path === "/bao-cao" || path.startsWith("/bao-cao/"))
+    return user.permissions.includes("M08.view") && user.scopes.length > 0;
   if (path === "/tien-ich/export") {
     return (
       user.scopes.length > 0 &&
