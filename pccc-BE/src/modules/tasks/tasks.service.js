@@ -8,9 +8,10 @@ import {
   scopesFor,
 } from "../authorization/authorization.service.js";
 import { writeAudit } from "../audit/audit.service.js";
+import { businessDate } from "../../core/time.js";
 
-const taskColumns = `t.id,t.code,t.title,t.description,t.status,t.kind,t.due_at,t.progress,t.updated_at,t.created_at,
-  t.assigned_by,t.assigned_to,
+const taskColumns = `t.id,t.code,t.title,t.description,t.status,t.kind,t.due_at,t.progress,
+  t.completed_at,t.updated_at,t.created_at,t.assigned_by,t.assigned_to,
   sender.full_name AS assigner_name,receiver.full_name AS assignee_name`;
 const taskJoins = `tasks t JOIN accounts sender ON sender.id=t.assigned_by
   JOIN accounts receiver ON receiver.id=t.assigned_to`;
@@ -125,6 +126,10 @@ export function createTask(db, user, input, ip) {
       (id,code,title,description,assigned_by,assigned_to,status,kind,due_at,progress,created_at,updated_at)
       VALUES (?,?,?,?,?,?,'open',?,?,0,?,?)`,
     ).run(id, code, title, description, user.id, assigneeId, input.kind, dueAt, now, now);
+    db.prepare(
+      `INSERT INTO task_assignments(task_id,assignee_id,assigned_by,assigned_at,note)
+      VALUES (?,?,?,?,?)`,
+    ).run(id, assigneeId, user.id, now, "Giao việc");
     writeAudit(db, {
       actorId: user.id,
       feature: "M07",
@@ -173,6 +178,10 @@ export function updateTaskProgress(db, user, id, input, ip) {
       )
       .run(input.progress, now, id, task.progress);
     assert(changed.changes === 1, 409, "TASK_CHANGED", "Công việc đã thay đổi. Hãy tải lại.");
+    db.prepare(
+      `INSERT INTO task_progress(task_id,account_id,progress,status,note,created_at)
+      VALUES (?,?,?,'open',?,?)`,
+    ).run(id, user.id, input.progress, note || null, now);
     writeAudit(db, {
       actorId: user.id,
       feature: "M07",
@@ -187,26 +196,98 @@ export function updateTaskProgress(db, user, id, input, ip) {
   });
 }
 
+export function updateTaskStatus(db, user, id, input, ip) {
+  requireTaskPermission(user, "edit");
+  const { task } = taskDetail(db, user, id);
+  object(input, ["status", "note"]);
+  const status = input.status;
+  assert(
+    ["open", "completed", "cancelled"].includes(status),
+    400,
+    "INVALID_INPUT",
+    "Trạng thái công việc không hợp lệ.",
+  );
+  assert(task.status !== status, 409, "NO_CHANGE", "Trạng thái công việc không thay đổi.");
+  const isAssignee = task.assigned_to === user.id;
+  const isAssigner = task.assigned_by === user.id;
+  if (status === "completed") {
+    assert(
+      isAssignee || isAssigner,
+      403,
+      "FORBIDDEN",
+      "Chỉ người thực hiện hoặc người giao được hoàn thành công việc.",
+    );
+    assert(task.status === "open", 409, "TASK_CLOSED", "Công việc đã đóng.");
+  } else {
+    assert(isAssigner, 403, "FORBIDDEN", "Chỉ người giao được hủy hoặc mở lại công việc.");
+    if (status === "cancelled")
+      assert(task.status === "open", 409, "TASK_CLOSED", "Chỉ hủy được công việc đang mở.");
+  }
+  const note =
+    input.note === undefined
+      ? ""
+      : text(typeof input.note === "string" ? input.note.trim() : input.note, "Ghi chú", 0, 1000);
+  return transaction(db, () => {
+    const now = Date.now();
+    const nextProgress = status === "completed" ? 100 : task.progress;
+    const completedAt = status === "completed" ? now : null;
+    const changed = db
+      .prepare(
+        `UPDATE tasks SET status=?,progress=?,completed_at=?,updated_at=?
+        WHERE id=? AND status=?`,
+      )
+      .run(status, nextProgress, completedAt, now, id, task.status);
+    assert(changed.changes === 1, 409, "TASK_CHANGED", "Công việc đã thay đổi. Hãy tải lại.");
+    const defaultNote =
+      status === "completed"
+        ? "Hoàn thành công việc"
+        : status === "cancelled"
+          ? "Hủy công việc"
+          : "Mở lại công việc";
+    db.prepare(
+      `INSERT INTO task_progress(task_id,account_id,progress,status,note,created_at)
+      VALUES (?,?,?,?,?,?)`,
+    ).run(id, user.id, nextProgress, status, note || defaultNote, now);
+    writeAudit(db, {
+      actorId: user.id,
+      feature: "M07",
+      objectType: "task",
+      objectId: id,
+      action: "task.status_changed",
+      before: { status: task.status, progress: task.progress },
+      after: { status, progress: nextProgress, note },
+      ip,
+    });
+    return taskDetail(db, user, id);
+  });
+}
+
 export function listTaskProgressHistory(db, user, id, url) {
   taskDetail(db, user, id);
   const { page, pageSize } = pagination(url);
-  const where = "l.object_type='task' AND l.object_id=? AND l.action='task.progress_updated'";
+  const where = "tp.task_id=?";
+  const rows = db
+    .prepare(
+      `SELECT tp.id,tp.account_id,a.full_name AS actor_name,tp.progress,tp.status,tp.note,
+        tp.created_at AS occurred_at,
+        LAG(tp.progress,1,0) OVER (ORDER BY tp.created_at,tp.id) AS before_progress
+      FROM task_progress tp JOIN accounts a ON a.id=tp.account_id
+      WHERE ${where}
+      ORDER BY tp.created_at DESC,tp.id DESC LIMIT ? OFFSET ?`,
+    )
+    .all(id, pageSize, (page - 1) * pageSize)
+    .map((row) => ({
+      id: row.id,
+      account_id: row.account_id,
+      actor_name: row.actor_name,
+      occurred_at: row.occurred_at,
+      status: row.status,
+      before: { progress: row.before_progress },
+      after: { progress: row.progress, note: row.note ?? "" },
+    }));
   return {
-    items: db
-      .prepare(
-        `SELECT l.id,l.actor_id,a.full_name AS actor_name,l.before_json,l.after_json,l.occurred_at
-      FROM audit_logs l LEFT JOIN accounts a ON a.id=l.actor_id WHERE ${where}
-      ORDER BY l.occurred_at DESC,l.id DESC LIMIT ? OFFSET ?`,
-      )
-      .all(id, pageSize, (page - 1) * pageSize)
-      .map((row) => ({
-        ...row,
-        before: JSON.parse(row.before_json),
-        after: JSON.parse(row.after_json),
-        before_json: undefined,
-        after_json: undefined,
-      })),
-    total: db.prepare(`SELECT count(*) AS n FROM audit_logs l WHERE ${where}`).get(id).n,
+    items: rows,
+    total: db.prepare("SELECT count(*) AS n FROM task_progress tp WHERE tp.task_id=?").get(id).n,
     page,
     pageSize,
   };
@@ -224,21 +305,94 @@ export function taskDetail(db, user, id) {
   return { task };
 }
 
-export function listTasks(db, user, url) {
+function dateBoundary(value, field) {
+  assert(
+    typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value),
+    400,
+    "INVALID_INPUT",
+    `${field} không hợp lệ.`,
+  );
+  const epoch = Date.parse(`${value}T00:00:00+07:00`);
+  const calendar = Date.parse(`${value}T00:00:00Z`);
+  assert(
+    Number.isFinite(epoch) &&
+      Number.isFinite(calendar) &&
+      new Date(calendar).toISOString().slice(0, 10) === value,
+    400,
+    "INVALID_INPUT",
+    `${field} không hợp lệ.`,
+  );
+  return epoch;
+}
+
+export function listTasks(db, user, url, forcedView = "") {
   requireTaskPermission(user);
   const { page, pageSize } = pagination(url);
-  const params = [user.id, user.id];
-  const where = "t.assigned_by=? OR t.assigned_to=?";
+  const view = forcedView || url.searchParams.get("view") || "all";
+  assert(
+    ["all", "mine", "assigned"].includes(view),
+    400,
+    "INVALID_INPUT",
+    "Bộ lọc công việc không hợp lệ.",
+  );
+  const conditions = [
+    view === "mine"
+      ? "t.assigned_to=?"
+      : view === "assigned"
+        ? "t.assigned_by=?"
+        : "(t.assigned_by=? OR t.assigned_to=?)",
+  ];
+  const params = view === "all" ? [user.id, user.id] : [user.id];
+  const status = url.searchParams.get("status");
+  if (status) {
+    assert(
+      ["open", "completed", "cancelled"].includes(status),
+      400,
+      "INVALID_INPUT",
+      "Trạng thái lọc không hợp lệ.",
+    );
+    conditions.push("t.status=?");
+    params.push(status);
+  }
+  const assigneeId = url.searchParams.get("assigneeId");
+  if (assigneeId) {
+    conditions.push("t.assigned_to=?");
+    params.push(assigneeId);
+  }
+  const from = url.searchParams.get("from");
+  if (from) {
+    conditions.push("t.due_at>=?");
+    params.push(dateBoundary(from, "Từ ngày"));
+  }
+  const to = url.searchParams.get("to");
+  if (to) {
+    conditions.push("t.due_at<?");
+    params.push(dateBoundary(to, "Đến ngày") + 86400000);
+  }
+  const deadline = url.searchParams.get("deadline");
+  if (deadline) {
+    assert(["overdue", "week"].includes(deadline), 400, "INVALID_INPUT", "Hạn lọc không hợp lệ.");
+    const todayStart = Date.parse(`${businessDate()}T00:00:00+07:00`);
+    conditions.push("t.status='open' AND t.due_at IS NOT NULL");
+    if (deadline === "overdue") conditions.push("t.due_at<?");
+    else conditions.push("t.due_at>=? AND t.due_at<?");
+    params.push(todayStart);
+    if (deadline === "week") params.push(todayStart + 7 * 86400000);
+  }
+  const where = conditions.join(" AND ");
+  const order =
+    url.searchParams.get("sort") === "due" ? "t.due_at ASC,t.id" : "t.created_at DESC,t.id DESC";
   return {
     items: db
       .prepare(
         `SELECT ${taskColumns} FROM ${taskJoins} WHERE ${where}
-      ORDER BY t.created_at DESC,t.id DESC LIMIT ? OFFSET ?`,
+      ORDER BY ${order} LIMIT ? OFFSET ?`,
       )
       .all(...params, pageSize, (page - 1) * pageSize),
     total: db.prepare(`SELECT count(*) AS n FROM tasks t WHERE ${where}`).get(...params).n,
     page,
     pageSize,
+    view,
   };
 }
 

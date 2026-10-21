@@ -4,6 +4,7 @@ import { seedLegalDocuments } from "./seed-legal-documents.js";
 import { seedInspections } from "./seed-inspections.js";
 import { seedFacilityViolations } from "./seed-facility-violations.js";
 import { seedTasks } from "./seed-tasks.js";
+import { seedKpi } from "./seed-kpi.js";
 
 export const roleNames = {
   A01: "Chỉ huy/Đội trưởng",
@@ -190,5 +191,6 @@ export async function seedDemo(db, password) {
     seedInspections(db);
     seedFacilityViolations(db);
     seedTasks(db);
+    seedKpi(db);
   });
 }

@@ -21,14 +21,20 @@ Chi tiết schema, quyền và API: [pccc-BE/AREA_ASSIGNMENT.md](pccc-BE/AREA_AS
 `/cong-viec/giao-viec` đọc công việc từ database. Chỉ huy A01/A02 hoặc quản trị A05 có
 `M07.create` và phạm vi đơn vị/toàn hệ thống có thể giao việc cho tài khoản đang hoạt động,
 có `M07.view` và phạm vi giao nhau. Form lưu tên, loại việc, nội dung, người thực hiện và hạn.
-Người được giao có `M07.edit` cập nhật tiến độ 0–100%; các lần đổi được lưu trong audit và hiện
-ở lịch sử trên trang chi tiết. Mức 100% hiện là tiến độ báo cáo, không tự phê duyệt hoàn thành.
-Người giao chỉ xem tiến độ và lịch sử; form **Ghi nhận tiến độ** xuất hiện khi đăng nhập bằng tài
-khoản người thực hiện. Với `CV-DEMO-02`, dùng `demo.tong-hop` để nhập phần trăm/ghi chú, sau đó
-đăng nhập `demo.admin` để xem kết quả. Tiến độ ban đầu của dữ liệu mẫu không phải một lần cập nhật
-nên không có dòng lịch sử cho đến khi người thực hiện lưu thay đổi.
+Người được giao có `M07.edit` cập nhật tiến độ 0–100%; các lần đổi được lưu trong `task_progress`
+và audit, hiện ở lịch sử trên trang chi tiết. Mức 100% chỉ là tiến độ báo cáo; hoàn thành công việc
+là thao tác riêng, đặt tiến độ 100%, ghi `completed_at` và được tính vào KPI. Người giao có thể hoàn
+thành thay hoặc hủy/mở lại công việc; người thực hiện có thể tự hoàn thành việc của mình.
 Migration `015-task-assignment-progress.sql` bổ sung các cột vào bảng `tasks` mà không thay
-đổi công việc đã có.
+đổi công việc đã có. Migration `016-work-kpi.sql` thêm `task_assignments`, `task_progress`,
+`kpi_targets`, `kpi_results`, `explanations` và `tasks.completed_at`; lịch sử phân công/tiến độ
+được backfill một lần từ dữ liệu hiện có.
+
+KPI đang dùng công thức đã chốt cho bản demo: mỗi cán bộ có chỉ tiêu số việc hoàn thành theo tháng;
+`KPI = việc hoàn thành / (chỉ tiêu kỳ + nợ kỳ trước)`, tối đa 100%; phần thiếu cộng dồn thành nợ
+kỳ sau. Chỉ huy A01/A02 và quản trị A05 cấu hình chỉ tiêu trong phạm vi được cấp. Giải trình được
+chấp nhận xóa nợ của đúng kỳ được giải trình; từ chối thì giữ nguyên nợ. Chỉ tiêu hiện đếm công việc
+hoàn thành, chưa gồm kết quả kiểm tra của M06 — đây là điểm mở rộng cần URD chốt.
 
 Mở một công việc để xem và gửi tin nhắn; hai
 người tham gia (người giao và người được giao) nhìn thấy cùng cuộc trao đổi. Tin mới tự cập nhật
@@ -41,12 +47,14 @@ có danh sách công việc mock và dùng bảng tài khoản `accounts` thay c
 **Thử trên UI với database demo:** chạy `pnpm migrate` rồi `pnpm seed`, khởi động lại backend/frontend,
 đăng nhập `demo.chi-huy` và mở **Lịch – Công việc – KPI → Giao việc & tiến độ**. Nhấn **Giao công việc**,
 nhập thông tin, chọn `demo.can-bo` và lưu. Mở công việc vừa tạo; đăng nhập `demo.can-bo` trong cửa sổ
-khác để xem cùng công việc, nhập tiến độ và ghi chú, rồi nhấn **Lưu tiến độ**. Quay lại tài khoản
-chỉ huy, tải lại trang để thấy tiến độ và lịch sử. Gửi một tin trong công việc; tài khoản còn lại
-thấy tin trong tối đa 5 giây. Thử sửa/xóa tin do chính tài khoản
-gửi; tài khoản kia không có nút sửa/xóa tin đó. `demo.admin` thấy các công việc mẫu CV-DEMO-02–05
-do chính tài khoản này giao; `demo.nguoi-xem`
-không có quyền M07. Dùng database thử nghiệm vì các thao tác này ghi dữ liệu.
+khác để xem cùng công việc, nhập tiến độ và ghi chú, rồi nhấn **Lưu tiến độ** hoặc **Hoàn thành công
+việc**. Quay lại tài khoản chỉ huy, tải lại trang để thấy tiến độ và lịch sử. Mở **KPI & nợ chỉ tiêu**
+để xem chỉ tiêu, nợ cộng dồn và cấu hình chỉ tiêu; mở **Yêu cầu giải trình** để gửi yêu cầu, sau đó
+đăng nhập `demo.can-bo` để phản hồi và quay lại chỉ huy để chấp nhận/từ chối. Gửi một tin trong công
+việc; tài khoản còn lại thấy tin trong tối đa 5 giây. Thử sửa/xóa tin do chính tài khoản gửi; tài
+khoản kia không có nút sửa/xóa tin đó. `demo.admin` thấy các công việc mẫu CV-DEMO-02–05 do chính tài
+khoản này giao; `demo.nguoi-xem` không có quyền M07. Dùng database thử nghiệm vì các thao tác này ghi
+dữ liệu.
 
 Các công việc `CV-DEMO-*` là dữ liệu mẫu. Seed hiện tạo bảy công việc mẫu, mỗi tài khoản chỉ thấy
 những công việc mình giao hoặc được giao. Với database đã seed trước migration tiến độ, chạy lại
@@ -54,7 +62,8 @@ những công việc mình giao hoặc được giao. Với database đã seed t
 qua form được lưu thật trong database.
 Các công việc mẫu CV-DEMO-02–07 có hai tin nhắn trao đổi mẫu giữa người giao và người thực hiện;
 seed không chèn tin mẫu vào công việc đã có trao đổi và không tạo trùng khi chạy lại.
-Màn hình lịch và KPI vẫn là dữ liệu demo, chưa tổng hợp từ công việc thật.
+Màn hình lịch, KPI và giải trình đọc dữ liệu thật từ các bảng M07; dữ liệu chỉ tiêu/giải trình mẫu
+chỉ được tạo khi chưa có cấu hình. Chi tiết API và quyền: [pccc-BE/WORK_KPI.md](pccc-BE/WORK_KPI.md).
 
 ## Khóa tài khoản và chuyển giao phạm vi — UC-ADM-04
 

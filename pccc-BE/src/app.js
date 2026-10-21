@@ -12,6 +12,8 @@ import { legalDocumentsRoutes } from "./modules/legal-documents/legal-documents.
 import { inspectionsRoutes } from "./modules/inspections/inspections.routes.js";
 import { regionsRoutes } from "./modules/regions/regions.routes.js";
 import { tasksRoutes } from "./modules/tasks/tasks.routes.js";
+import { kpiRoutes } from "./modules/kpi/kpi.routes.js";
+import { explanationsRoutes } from "./modules/explanations/explanations.routes.js";
 
 // Modular monolith: each business module registers its routes here; all share one process and DB.
 const routes = [
@@ -26,6 +28,8 @@ const routes = [
   ...inspectionsRoutes,
   ...regionsRoutes,
   ...tasksRoutes,
+  ...kpiRoutes,
+  ...explanationsRoutes,
 ];
 
 export function createApp(
