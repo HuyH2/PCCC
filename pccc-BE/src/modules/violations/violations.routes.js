@@ -45,8 +45,15 @@ export const violationsRoutes = [
   {
     method: "PUT",
     path: /^\/api\/violations\/([^/]+)$/,
-    handle: async (ctx, match) =>
-      ({ violation: updateViolation(ctx.db, ctx.user, decodeURIComponent(match[1]), await ctx.readJson(), ctx.ip) }),
+    handle: async (ctx, match) => ({
+      violation: updateViolation(
+        ctx.db,
+        ctx.user,
+        decodeURIComponent(match[1]),
+        await ctx.readJson(),
+        ctx.ip,
+      ),
+    }),
   },
   {
     method: "POST",
@@ -67,8 +74,15 @@ export const violationsRoutes = [
   {
     method: "PUT",
     path: /^\/api\/violations\/([^/]+)\/suspension$/,
-    handle: async (ctx, match) =>
-      ({ suspension: updateSuspension(ctx.db, ctx.user, decodeURIComponent(match[1]), await ctx.readJson(), ctx.ip) }),
+    handle: async (ctx, match) => ({
+      suspension: updateSuspension(
+        ctx.db,
+        ctx.user,
+        decodeURIComponent(match[1]),
+        await ctx.readJson(),
+        ctx.ip,
+      ),
+    }),
   },
   {
     method: "POST",
@@ -121,19 +135,36 @@ export const violationsRoutes = [
   {
     method: "POST",
     path: /^\/api\/violations\/([^/]+)\/submit-approval$/,
-    handle: (ctx, match) =>
-      ({ violation: submitApproval(ctx.db, ctx.user, decodeURIComponent(match[1]), ctx.ip) }),
+    handle: (ctx, match) => ({
+      violation: submitApproval(ctx.db, ctx.user, decodeURIComponent(match[1]), ctx.ip),
+    }),
   },
   {
     method: "POST",
     path: /^\/api\/violations\/([^/]+)\/approve$/,
-    handle: async (ctx, match) =>
-      ({ violation: decideApproval(ctx.db, ctx.user, decodeURIComponent(match[1]), await ctx.readJson(), true, ctx.ip) }),
+    handle: async (ctx, match) => ({
+      violation: decideApproval(
+        ctx.db,
+        ctx.user,
+        decodeURIComponent(match[1]),
+        await ctx.readJson(),
+        true,
+        ctx.ip,
+      ),
+    }),
   },
   {
     method: "POST",
     path: /^\/api\/violations\/([^/]+)\/reject$/,
-    handle: async (ctx, match) =>
-      ({ violation: decideApproval(ctx.db, ctx.user, decodeURIComponent(match[1]), await ctx.readJson(), false, ctx.ip) }),
+    handle: async (ctx, match) => ({
+      violation: decideApproval(
+        ctx.db,
+        ctx.user,
+        decodeURIComponent(match[1]),
+        await ctx.readJson(),
+        false,
+        ctx.ip,
+      ),
+    }),
   },
 ];
