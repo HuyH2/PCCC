@@ -34,23 +34,30 @@ export function TransferHistory({ direction }: { direction?: "import" | "export"
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
-  const loadHistory = useCallback(async () => {
+  const loadHistory = useCallback(async (signal: AbortSignal) => {
     setLoading(true);
     try {
       const query = direction ? `?direction=${direction}&pageSize=20` : "?pageSize=20";
-      const response = await fetch(`/api/data-transfers${query}`, { cache: "no-store" });
-      const body = await response.json();
+      const response = await fetch(`/api/data-transfers${query}`, { cache: "no-store", signal });
+      const parsed = await response.json().catch(() => ({}));
+      const body = parsed && typeof parsed === "object" ? parsed : {};
       if (!response.ok) throw new Error(body.message ?? "Không tải được lịch sử.");
-      setJobs(body.items);
+      if (signal.aborted) return;
+      setJobs(Array.isArray(body.items) ? body.items : []);
       setError("");
     } catch (cause) {
+      if (signal.aborted) return;
       setError(cause instanceof Error ? cause.message : "Không tải được lịch sử.");
     } finally {
-      setLoading(false);
+      if (!signal.aborted) setLoading(false);
     }
   }, [direction]);
 
-  useEffect(() => { void loadHistory(); }, [loadHistory]);
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadHistory(controller.signal);
+    return () => controller.abort();
+  }, [loadHistory]);
 
   return (
     <SectionCard title={direction === "import" ? "Lịch sử import" : direction === "export" ? "Lịch sử export" : "Lịch sử truyền dữ liệu"}

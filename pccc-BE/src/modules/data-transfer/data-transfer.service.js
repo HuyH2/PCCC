@@ -27,8 +27,25 @@ const TRANSFER_STATUSES = new Set([
 const FACILITY_STATUSES = new Set(["active", "paused", "suspended", "unlicensed"]);
 const ACCOUNT_STATUSES = new Set(["active", "locked", "inactive"]);
 const CSV_COLUMNS = {
-  facilities: ["Mã cơ sở", "Tên cơ sở", "Địa chỉ", "Trạng thái", "Mã khu phố", "Khu phố", "Đơn vị", "Mã cán bộ", "Cán bộ phụ trách"],
-  officers: ["Mã cán bộ", "Họ và tên", "Vai trò", "Trạng thái", "Khu vực phụ trách", "Số cơ sở trong phạm vi"],
+  facilities: [
+    "Mã cơ sở",
+    "Tên cơ sở",
+    "Địa chỉ",
+    "Trạng thái",
+    "Mã khu phố",
+    "Khu phố",
+    "Đơn vị",
+    "Mã cán bộ",
+    "Cán bộ phụ trách",
+  ],
+  officers: [
+    "Mã cán bộ",
+    "Họ và tên",
+    "Vai trò",
+    "Trạng thái",
+    "Khu vực phụ trách",
+    "Số cơ sở trong phạm vi",
+  ],
   regions: ["Mã khu phố", "Khu phố", "Mã đơn vị", "Đơn vị", "Số cơ sở"],
 };
 
@@ -86,7 +103,10 @@ function filterMetadata(db, user, datasetId) {
     return { regions: regionOptions(db, user), statuses };
   }
   if (datasetId === "officers")
-    return { regions: regionOptions(db, user), statuses: [...ACCOUNT_STATUSES].map((value) => ({ value, label: value })) };
+    return {
+      regions: regionOptions(db, user),
+      statuses: [...ACCOUNT_STATUSES].map((value) => ({ value, label: value })),
+    };
   return { units: unitOptions(db, user) };
 }
 
@@ -145,7 +165,9 @@ function facilityRows(db, user, filters) {
   const clauses = [scope.sql];
   const params = [...scope.params];
   if (filters.search) {
-    clauses.push("(instr(fold(f.name),?)>0 OR instr(fold(f.address),?)>0 OR instr(fold(f.id),?)>0)");
+    clauses.push(
+      "(instr(fold(f.name),?)>0 OR instr(fold(f.address),?)>0 OR instr(fold(f.id),?)>0)",
+    );
     const q = foldSearchText(filters.search);
     params.push(q, q, q);
   }
@@ -182,7 +204,9 @@ function officerRows(db, user, filters) {
     params.push(q, q);
   }
   if (filters.regionId) {
-    clauses.push("r.id=?");
+    clauses.push(
+      "EXISTS (SELECT 1 FROM region_assignments rx WHERE rx.account_id=a.id AND rx.region_id=?)",
+    );
     params.push(filters.regionId);
   }
   if (filters.status) {
@@ -268,17 +292,43 @@ export function recordTransferJob(db, actorId, input, ip) {
     "startedAt",
     "completedAt",
   ]);
-  assert(["import", "export"].includes(input.direction), 400, "INVALID_INPUT", "Chiều truyền dữ liệu không hợp lệ.");
+  assert(
+    ["import", "export"].includes(input.direction),
+    400,
+    "INVALID_INPUT",
+    "Chiều truyền dữ liệu không hợp lệ.",
+  );
   text(input.datasetId, "Loại dữ liệu", 1, 80);
   text(input.fileName, "Tên file", 1, 180);
-  assert(["csv", "xlsx"].includes(input.format), 400, "INVALID_INPUT", "Định dạng file không hợp lệ.");
-  assert(TRANSFER_STATUSES.has(input.status), 400, "INVALID_INPUT", "Trạng thái truyền dữ liệu không hợp lệ.");
+  assert(
+    ["csv", "xlsx"].includes(input.format),
+    400,
+    "INVALID_INPUT",
+    "Định dạng file không hợp lệ.",
+  );
+  assert(
+    TRANSFER_STATUSES.has(input.status),
+    400,
+    "INVALID_INPUT",
+    "Trạng thái truyền dữ liệu không hợp lệ.",
+  );
   const counts = [input.totalRecords, input.successfulRecords, input.errorCount];
-  assert(counts.every((n) => Number.isSafeInteger(n) && n >= 0), 400, "INVALID_INPUT", "Số lượng bản ghi không hợp lệ.");
-  assert(input.successfulRecords + input.errorCount <= input.totalRecords, 400, "INVALID_INPUT", "Tổng số bản ghi không khớp.");
+  assert(
+    counts.every((n) => Number.isSafeInteger(n) && n >= 0),
+    400,
+    "INVALID_INPUT",
+    "Số lượng bản ghi không hợp lệ.",
+  );
+  assert(
+    input.successfulRecords + input.errorCount <= input.totalRecords,
+    400,
+    "INVALID_INPUT",
+    "Tổng số bản ghi không khớp.",
+  );
   const filters = input.filters ?? {};
   object(filters, ["search", "regionId", "unitId", "status"]);
-  const errorSummary = input.errorSummary == null ? null : text(input.errorSummary, "Mô tả lỗi", 1, 1000);
+  const errorSummary =
+    input.errorSummary == null ? null : text(input.errorSummary, "Mô tả lỗi", 1, 1000);
   const id = randomUUID();
   const createdAt = Number.isSafeInteger(input.startedAt) ? input.startedAt : Date.now();
   const completedAt = Number.isSafeInteger(input.completedAt) ? input.completedAt : Date.now();
@@ -331,48 +381,65 @@ export function exportDataset(db, user, payload, ip) {
   assert(format === "csv", 400, "INVALID_INPUT", "Hiện chỉ hỗ trợ xuất CSV.");
   const filters = validateFilters(dataset.id, payload.filters ?? {});
   const startedAt = Date.now();
-  const query = dataset.id === "facilities"
-    ? facilityRows
-    : dataset.id === "officers"
-      ? officerRows
-      : regionRows;
+  const query =
+    dataset.id === "facilities"
+      ? facilityRows
+      : dataset.id === "officers"
+        ? officerRows
+        : regionRows;
   let rows;
   let csv;
   try {
     rows = query(db, user, filters);
-    assert(rows.length <= MAX_EXPORT_RECORDS, 413, "EXPORT_TOO_LARGE", "Kết quả vượt giới hạn 100.000 dòng; hãy thu hẹp bộ lọc.");
+    assert(
+      rows.length <= MAX_EXPORT_RECORDS,
+      413,
+      "EXPORT_TOO_LARGE",
+      "Kết quả vượt giới hạn 100.000 dòng; hãy thu hẹp bộ lọc.",
+    );
     csv = toCsv(rows, dataset.id);
   } catch (error) {
-    recordTransferJob(db, user.id, {
-      direction: "export",
-      datasetId: dataset.id,
-      fileName: `${dataset.id}-failed.csv`,
-      format,
-      status: "failed",
-      filters,
-      totalRecords: rows?.length ?? 0,
-      successfulRecords: 0,
-      errorCount: 0,
-      errorSummary: error.code === "EXPORT_TOO_LARGE" ? error.message : "Không thể tạo file xuất.",
-      startedAt,
-      completedAt: Date.now(),
-    }, ip);
+    recordTransferJob(
+      db,
+      user.id,
+      {
+        direction: "export",
+        datasetId: dataset.id,
+        fileName: `${dataset.id}-failed.csv`,
+        format,
+        status: "failed",
+        filters,
+        totalRecords: rows?.length ?? 0,
+        successfulRecords: 0,
+        errorCount: 0,
+        errorSummary:
+          error.code === "EXPORT_TOO_LARGE" ? error.message : "Không thể tạo file xuất.",
+        startedAt,
+        completedAt: Date.now(),
+      },
+      ip,
+    );
     throw error;
   }
   const fileName = `${dataset.id}-${new Date(startedAt).toISOString().replaceAll(/[:.]/g, "-")}.csv`;
-  const job = recordTransferJob(db, user.id, {
-    direction: "export",
-    datasetId: dataset.id,
-    fileName,
-    format,
-    status: "succeeded",
-    filters,
-    totalRecords: rows.length,
-    successfulRecords: rows.length,
-    errorCount: 0,
-    startedAt,
-    completedAt: Date.now(),
-  }, ip);
+  const job = recordTransferJob(
+    db,
+    user.id,
+    {
+      direction: "export",
+      datasetId: dataset.id,
+      fileName,
+      format,
+      status: "succeeded",
+      filters,
+      totalRecords: rows.length,
+      successfulRecords: rows.length,
+      errorCount: 0,
+      startedAt,
+      completedAt: Date.now(),
+    },
+    ip,
+  );
   return { fileName, csv, job };
 }
 
@@ -381,7 +448,12 @@ function canViewAllJobs(user) {
 }
 
 function requireTransferHistoryAccess(user) {
-  assert(!user.mustChangePassword, 403, "PASSWORD_CHANGE_REQUIRED", "Bạn cần đổi mật khẩu trước khi tiếp tục.");
+  assert(
+    !user.mustChangePassword,
+    403,
+    "PASSWORD_CHANGE_REQUIRED",
+    "Bạn cần đổi mật khẩu trước khi tiếp tục.",
+  );
   if (canViewAllJobs(user)) return true;
   const dataset = DATASETS.find((item) => canExport(user, item));
   assert(dataset, 403, "FORBIDDEN", "Bạn không có quyền xem lịch sử truyền dữ liệu.");
@@ -408,11 +480,26 @@ export function listTransferJobs(db, user, url) {
     if (!value) continue;
     text(value, key, 1, 80);
     if (key === "direction")
-      assert(["import", "export"].includes(value), 400, "INVALID_INPUT", "Chiều truyền dữ liệu không hợp lệ.");
+      assert(
+        ["import", "export"].includes(value),
+        400,
+        "INVALID_INPUT",
+        "Chiều truyền dữ liệu không hợp lệ.",
+      );
     if (key === "status")
-      assert(TRANSFER_STATUSES.has(value), 400, "INVALID_INPUT", "Trạng thái truyền dữ liệu không hợp lệ.");
+      assert(
+        TRANSFER_STATUSES.has(value),
+        400,
+        "INVALID_INPUT",
+        "Trạng thái truyền dữ liệu không hợp lệ.",
+      );
     if (key === "dataset")
-      assert(DATASETS.some((dataset) => dataset.id === value), 400, "INVALID_INPUT", "Loại dữ liệu không hợp lệ.");
+      assert(
+        DATASETS.some((dataset) => dataset.id === value),
+        400,
+        "INVALID_INPUT",
+        "Loại dữ liệu không hợp lệ.",
+      );
     clauses.push(`${column}=?`);
     params.push(value);
   }
@@ -427,7 +514,9 @@ export function listTransferJobs(db, user, url) {
         ORDER BY j.created_at DESC,j.id DESC LIMIT ? OFFSET ?`,
       )
       .all(...params, pageSize, (page - 1) * pageSize),
-    total: db.prepare(`SELECT count(*) AS total FROM data_transfer_jobs j WHERE ${where}`).get(...params).total,
+    total: db
+      .prepare(`SELECT count(*) AS total FROM data_transfer_jobs j WHERE ${where}`)
+      .get(...params).total,
     page,
     pageSize,
   };
@@ -447,7 +536,9 @@ export function transferJobDetail(db, user, id) {
   return {
     job,
     errors: db
-      .prepare("SELECT row_number,field_name,error_code,message,created_at FROM data_transfer_errors WHERE job_id=? ORDER BY row_number,id")
+      .prepare(
+        "SELECT row_number,field_name,error_code,message,created_at FROM data_transfer_errors WHERE job_id=? ORDER BY row_number,id",
+      )
       .all(id),
   };
 }

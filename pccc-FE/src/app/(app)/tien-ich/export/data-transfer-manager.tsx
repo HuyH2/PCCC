@@ -11,6 +11,17 @@ import { TransferHistory } from "../transfer-history";
 type Option = { value: string; label: string };
 type Dataset = { id: string; label: string; formats: string[]; filters: { regions?: Option[]; units?: Option[]; statuses?: Option[] } };
 
+async function responseBody(response: Response): Promise<{ message?: string; items?: unknown }> {
+  try {
+    const body: unknown = await response.json();
+    if (body && typeof body === "object" && !Array.isArray(body))
+      return body as { message?: string; items?: unknown };
+  } catch {
+    // Non-JSON responses use the existing generic error message.
+  }
+  return {};
+}
+
 export function DataTransferManager() {
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [datasetId, setDatasetId] = useState("");
@@ -28,11 +39,12 @@ export function DataTransferManager() {
     let active = true;
     fetch("/api/data-transfers/datasets", { cache: "no-store" })
       .then(async (response) => {
-        const body = await response.json();
+        const body = await responseBody(response);
         if (!response.ok) throw new Error(body.message ?? "Không tải được danh mục dữ liệu.");
+        const items = Array.isArray(body.items) ? (body.items as Dataset[]) : [];
         if (active) {
-          setDatasets(body.items);
-          setDatasetId((current) => current || body.items[0]?.id || "");
+          setDatasets(items);
+          setDatasetId((current) => current || items[0]?.id || "");
         }
       })
       .catch((cause: unknown) => { if (active) setError(cause instanceof Error ? cause.message : "Không tải được danh mục dữ liệu."); });
@@ -49,7 +61,7 @@ export function DataTransferManager() {
         body: JSON.stringify({ dataset: datasetId, format, filters: { search, regionId, unitId, status } }),
       });
       if (!response.ok) {
-        const body = await response.json();
+        const body = await responseBody(response);
         throw new Error(body.message ?? "Không thể xuất dữ liệu.");
       }
       const blob = await response.blob();
