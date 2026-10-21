@@ -1,0 +1,19 @@
+{
+  "name": "pccc-be",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "node --watch --env-file-if-exists=.env src/server.js",
+    "start": "node --env-file-if-exists=.env src/server.js",
+    "migrate": "node --env-file-if-exists=.env scripts/migrate.js",
+    "seed": "node --env-file-if-exists=.env scripts/seed.js",
+    "seed:incidents-demo": "node scripts/seed-incidents-demo.js",
+    "seed:incidents:local": "node --env-file-if-exists=.env scripts/seed-incidents-bulk.js --demo",
+    "test": "node --test test/*.test.js",
+    "check": "node scripts/check.js"
+  }
+}

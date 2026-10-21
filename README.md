@@ -1,71 +1,262 @@
 # Hệ thống Quản lý công tác PCCC & CNCH
 
+## Tổ chức, cán bộ và sự cố sau khi hợp nhất nhánh SCRUM-25
+
+`/to-chuc/don-vi`, `/to-chuc/can-bo` và `/su-co` dùng SQLite/API thật. M09 có hồ sơ,
+thiệt hại, phân công, tiến độ, tài liệu riêng tư và thống kê; `/su-co/thong-ke` đọc số liệu
+từ database. Cần cấp quyền M09 phù hợp ở `/quan-tri/vai-tro` trước khi sử dụng; seed không
+tự cấp quyền M09. Hai API địa bàn có mục đích riêng: `/api/regions` phục vụ phân công
+phụ trách, còn `/api/organization/regions` phục vụ danh mục khu phố của M02. Các API
+Tổ chức và cán bộ khác xem [tài liệu backend](pccc-BE/README.md#tổ-chức-và-cán-bộ--uc-org-01-uc-org-02).
+
+Với database demo local mới, `pnpm seed` tạo 15 đơn vị và 79 hồ sơ cán bộ để thử
+`/to-chuc/don-vi` và `/to-chuc/can-bo`. Dữ liệu được lưu trong SQLite, tên có nhãn
+`(mẫu)` và thông tin liên hệ giả lập; xem thêm hướng dẫn seed M02 trong tài liệu backend.
+
+Để tạo dữ liệu M09 mẫu, dùng script riêng `pccc-BE/scripts/seed-incidents-demo.js` với
+database tên `incidents-demo.sqlite` và thư mục upload riêng; script từ chối database đang
+chạy. Không chạy script này trên `pccc-BE/data/pccc.sqlite`.
+
+Nếu đang dùng database demo local mặc định và trang `/su-co` trống, chạy
+`pnpm seed:incidents:local` tại root rồi bấm **Tải lại** trên trang. Lệnh thêm 80 hồ sơ giả lập
+vào `pccc-BE/data/pccc.sqlite` (3 khu phố, 4 loại sự cố, hồ sơ nháp/chính thức, đủ trạng thái,
+deadline, thiệt hại, phân công, lịch sử và 4 tệp `.txt` mẫu). Chạy lại không tạo trùng hoặc
+ghi đè hồ sơ đã sửa. Lệnh chỉ chạy ngoài production khi database có các tài khoản `demo.*`;
+không cấp thêm quyền M09. Đăng nhập `demo.admin` hoặc cấp quyền/phạm vi thích hợp tại
+`/quan-tri/vai-tro` để xem và thao tác. Đây là dữ liệu hoàn toàn giả lập, không phải hồ sơ thực.
+Trong chi tiết sự cố đã hoàn thành hoặc đóng, người có `M09.edit` vẫn có thể chọn **Sửa hồ sơ**
+để hiệu chỉnh thông tin; phải nhập lý do và thay đổi được lưu vào nhật ký trước/sau. Trạng thái
+xử lý và deadline không đổi qua form này.
+
+## Phân công địa bàn và quản lý tài khoản — UC-ORG-03, UC-ADM-02
+
+`/to-chuc/khu-vuc` đã nối API thật: danh sách khu vực theo phạm vi, tạo/sửa khu vực (A05), phân công
+cán bộ kèm ngày hiệu lực/ghi chú và xem lịch sử. `/to-chuc/phan-cong` có thêm tab **Phân công** cho
+A01/A02; tab **Chuyển giao** giữ nguyên cho A05. `/quan-tri/tai-khoan` cho tạo tài khoản, gán vai trò +
+đơn vị, khóa/ngưng và đặt lại mật khẩu.
+
+Thử nhanh sau khi chạy dự án:
+
+1. Đăng nhập `demo.chi-huy` (A01) → `/to-chuc/phan-cong` → tab **Phân công** → chọn khu phố.
+2. Chọn cán bộ, nhập ngày hiệu lực và ghi chú → xác nhận; kiểm tra **Lịch sử phân công** bên dưới.
+3. Đăng nhập `demo.admin` (A05) → `/to-chuc/khu-vuc` tạo khu phố mới; `/quan-tri/tai-khoan` tạo tài
+   khoản với mật khẩu tạm, sau đó đăng nhập bằng tài khoản mới để kiểm tra bước đổi mật khẩu bắt buộc.
+
+Chi tiết schema, quyền và API: [pccc-BE/AREA_ASSIGNMENT.md](pccc-BE/AREA_ASSIGNMENT.md).
+
+## Giao việc, tiến độ và trao đổi — M07
+
+`/cong-viec/giao-viec` đọc công việc từ database. Chỉ huy A01/A02 hoặc quản trị A05 có
+`M07.create` và phạm vi đơn vị/toàn hệ thống có thể giao việc cho tài khoản đang hoạt động,
+có `M07.view` và phạm vi giao nhau. Form lưu tên, loại việc, nội dung, người thực hiện và hạn.
+Người được giao có `M07.edit` cập nhật tiến độ 0–100%; các lần đổi được lưu trong `task_progress`
+và audit, hiện ở lịch sử trên trang chi tiết. Mức 100% chỉ là tiến độ báo cáo; hoàn thành công việc
+là thao tác riêng, đặt tiến độ 100%, ghi `completed_at` và được tính vào KPI. Người giao có thể hoàn
+thành thay hoặc hủy/mở lại công việc; người thực hiện có thể tự hoàn thành việc của mình.
+Migration `015-task-assignment-progress.sql` bổ sung các cột vào bảng `tasks` mà không thay
+đổi công việc đã có. Migration `016-work-kpi.sql` thêm `task_assignments`, `task_progress`,
+`kpi_targets`, `kpi_results`, `explanations` và `tasks.completed_at`; lịch sử phân công/tiến độ
+được backfill một lần từ dữ liệu hiện có.
+
+KPI đang dùng công thức đã chốt cho bản demo: mỗi cán bộ có chỉ tiêu số việc hoàn thành theo tháng;
+`KPI = việc hoàn thành / (chỉ tiêu kỳ + nợ kỳ trước)`, tối đa 100%; phần thiếu cộng dồn thành nợ
+kỳ sau. Chỉ huy A01/A02 và quản trị A05 cấu hình chỉ tiêu trong phạm vi được cấp. Giải trình được
+chấp nhận xóa nợ của đúng kỳ được giải trình; từ chối thì giữ nguyên nợ. Chỉ tiêu hiện đếm công việc
+hoàn thành, chưa gồm kết quả kiểm tra của M06 — đây là điểm mở rộng cần URD chốt.
+
+Mở một công việc để xem và gửi tin nhắn; hai
+người tham gia (người giao và người được giao) nhìn thấy cùng cuộc trao đổi. Tin mới tự cập nhật
+trên trang gần nhất mỗi 5 giây. Người gửi được sửa hoặc xóa mềm tin của mình khi công việc còn mở.
+Backend kiểm tra quyền `M07.view/create/edit` và tư cách tham gia từng công việc; người ngoài không
+thấy công việc/tin nhắn. API có phân trang, audit thao tác và giữ nội dung đã xóa trong database để
+truy vết. Migration `014-task-messages.sql` tạo `tasks` và `task_messages` vì repository trước đó chỉ
+có danh sách công việc mock và dùng bảng tài khoản `accounts` thay cho `users`.
+
+**Thử trên UI với database demo:** chạy `pnpm migrate` rồi `pnpm seed`, khởi động lại backend/frontend,
+đăng nhập `demo.chi-huy` và mở **Lịch – Công việc – KPI → Giao việc & tiến độ**. Nhấn **Giao công việc**,
+nhập thông tin, chọn `demo.can-bo` và lưu. Mở công việc vừa tạo; đăng nhập `demo.can-bo` trong cửa sổ
+khác để xem cùng công việc, nhập tiến độ và ghi chú, rồi nhấn **Lưu tiến độ** hoặc **Hoàn thành công
+việc**. Quay lại tài khoản chỉ huy, tải lại trang để thấy tiến độ và lịch sử. Mở **KPI & nợ chỉ tiêu**
+để xem chỉ tiêu, nợ cộng dồn và cấu hình chỉ tiêu; mở **Yêu cầu giải trình** để gửi yêu cầu, sau đó
+đăng nhập `demo.can-bo` để phản hồi và quay lại chỉ huy để chấp nhận/từ chối. Gửi một tin trong công
+việc; tài khoản còn lại thấy tin trong tối đa 5 giây. Thử sửa/xóa tin do chính tài khoản gửi; tài
+khoản kia không có nút sửa/xóa tin đó. `demo.admin` thấy các công việc mẫu CV-DEMO-02–05 do chính tài
+khoản này giao; `demo.nguoi-xem` không có quyền M07. Dùng database thử nghiệm vì các thao tác này ghi
+dữ liệu.
+
+Các công việc `CV-DEMO-*` là dữ liệu mẫu. Seed hiện tạo bảy công việc mẫu, mỗi tài khoản chỉ thấy
+những công việc mình giao hoặc được giao. Với database đã seed trước migration tiến độ, chạy lại
+`pnpm seed` để bổ sung hạn và tiến độ cho hai công việc mẫu cũ chưa được chỉnh sửa. Công việc tạo
+qua form được lưu thật trong database.
+Các công việc mẫu CV-DEMO-02–07 có hai tin nhắn trao đổi mẫu giữa người giao và người thực hiện;
+seed không chèn tin mẫu vào công việc đã có trao đổi và không tạo trùng khi chạy lại.
+Màn hình lịch, KPI và giải trình đọc dữ liệu thật từ các bảng M07; dữ liệu chỉ tiêu/giải trình mẫu
+chỉ được tạo khi chưa có cấu hình. Chi tiết API và quyền: [pccc-BE/WORK_KPI.md](pccc-BE/WORK_KPI.md).
+
+## Khóa tài khoản và chuyển giao phạm vi — UC-ADM-04
+
+`/quan-tri/tai-khoan` đã nối API để khóa/mở khóa tài khoản; `/to-chuc/phan-cong` đã nối API
+để chuyển giao một phần hoặc toàn bộ khu vực/cơ sở và xem lịch sử. Chỉ quản trị A05 có
+`M01.view` và scope `all` được xem; thao tác cần thêm `M01.edit`. Xem
+[schema, quyền và API chuyển giao](pccc-BE/ACCOUNT_TRANSFERS.md).
+
+**Thử trên UI sau khi chạy dự án (mục “Chạy dự án”):**
+
+1. Đăng nhập `demo.admin` (A05) bằng mật khẩu demo ở mục 5. Lần đầu có thể chọn **Bỏ qua, đổi sau**.
+   Nếu vừa cập nhật mã nguồn khi hai server đang chạy, khởi động lại backend và frontend.
+2. Mở **Tổ chức – Cán bộ → Phân công phụ trách** (`/to-chuc/phan-cong`). Chọn
+   `demo.can-bo` (CB-A03); seed mới gán khu phố KP01 và cơ sở CS001 cho tài khoản này.
+3. Chọn riêng CS001 để thử chuyển giao một phần, hoặc bấm **Chọn toàn bộ** để chuyển cả KP01 và
+   CS001. Chọn `demo.tong-hop` (CB-A04), nhập lý do, bấm **Xác nhận chuyển giao** và xác nhận
+   hộp thoại. Thao tác có hiệu lực ngay và sẽ thu hồi phiên của hai tài khoản liên quan.
+4. Kiểm tra mục đã chuyển không còn trong danh sách của CB-A03; chọn CB-A04 làm cán bộ chuyển
+   giao để thấy mục đó đang thuộc CB-A04. Bên dưới form có **Lịch sử chuyển giao** với cán bộ
+   cũ/mới, phạm vi, lý do, thời gian, người thực hiện và mã audit. Có thể mở
+   `/quan-tri/nhat-ky` để đối chiếu log.
+5. Mở **Quản trị → Tài khoản** (`/quan-tri/tai-khoan`), khóa một tài khoản demo khác tài khoản
+   đang đăng nhập và kiểm tra trạng thái **Đã khóa**; bấm **Mở khóa** để khôi phục.
+
+Tài khoản `demo.chi-huy` trong ảnh minh họa là A01, không có quyền vào hai màn hình này.
+`/co-so` hiện đọc database và có thể dùng để kiểm tra người phụ trách sau chuyển giao. Seed không ghi đè mật khẩu hoặc phân công đã thay đổi; trên database demo đã dùng
+lâu, danh sách CB-A03 có thể khác ví dụ. Migration tự chạy khi backend khởi động. Nếu chưa seed
+database demo, kiểm tra đúng `DATABASE_PATH` trong `pccc-BE/.env` rồi chạy `pnpm seed` tại root;
+seed không khôi phục phân công hoặc mật khẩu đã thay đổi.
+Chuyển giao cập nhật người phụ trách; quyền xem rộng theo khu vực/đơn vị/toàn hệ thống cần quản trị
+rà soát riêng ở `/quan-tri/vai-tro` nếu cán bộ cũ không còn được xem dữ liệu đó.
+
+## Trạng thái và lịch sử cơ sở — UC-FAC-08
+
+`/co-so` và chi tiết cơ sở đọc database thật. Trang chi tiết hiển thị trạng thái hiện tại, người thao tác,
+lý do, số quyết định và timeline thay đổi trạng thái/thông tin; có bộ lọc loại thay đổi và thời gian.
+`/vi-pham` hiển thị hồ sơ đình chỉ và phê duyệt hoạt động lại từ database. Mọi thay đổi trạng thái
+ghi lịch sử và audit trong cùng transaction. Migration `011`–`013` tự chạy khi backend khởi động;
+`013` bổ sung cột số quyết định cho database đã áp dụng phiên bản cũ của `011`.
+
+**Thử luồng UI trên database demo:**
+
+1. Khởi động lại backend sau khi cập nhật mã nguồn; chạy `pnpm seed` nếu database chưa có dữ liệu mẫu.
+   Seed chỉ tạo hồ sơ đình chỉ mẫu cho CS002 khi đó vẫn là cơ sở demo gốc, đang hoạt động và chưa có hồ sơ.
+2. Đăng nhập `demo.admin` → `/vi-pham` → chọn hồ sơ CS002 → mở chi tiết cơ sở. Kiểm tra trạng thái
+   **Đình chỉ**, lý do, số quyết định và người thực hiện trong timeline.
+3. Trong form trạng thái, chọn **Đang hoạt động**, nhập lý do, bằng chứng khắc phục và **số quyết định
+   cho phép hoạt động lại**; đánh dấu **Admin xác nhận phê duyệt** rồi lưu. Thiếu bất kỳ mục bắt buộc nào
+   sẽ bị từ chối. Xem timeline và `/vi-pham?status=restored` để đối chiếu hồ sơ phê duyệt.
+4. Với `demo.can-bo`, mở CS001 từ `/co-so`, cập nhật tên/địa chỉ hoặc chuyển **Tạm ngừng** kèm lý do;
+   timeline ghi dữ liệu trước/sau. `demo.chi-huy` có thể đình chỉ với số quyết định; chỉ Admin được
+   phê duyệt hoạt động lại sau đình chỉ. `demo.nguoi-xem` chỉ được xem.
+
+Chỉ thao tác trên database thử nghiệm khi kiểm tra các bước ghi dữ liệu. Các màn hình nghiệp vụ khác
+vẫn có phần dùng dữ liệu mẫu; hồ sơ M04 hiện tập trung vào vòng đời đình chỉ/hoạt động lại.
+
+## Kho văn bản và nhật ký — UC-DOC-01, UC-DOC-02, UC-SYS-05
+
+`/van-ban` đã kết nối API: tìm kiếm/lọc, thêm/sửa/phân loại, xem chi tiết, tải PDF hoặc mở link,
+và xem lịch sử thay đổi. `/quan-tri/nhat-ky` đọc audit thật, lọc người dùng/thời gian/feature/thao tác.
+Xem [hướng dẫn migration, seed, quyền M05 và hợp đồng API](pccc-BE/LEGAL_DOCUMENTS.md).
+Database có sẵn giữ nguyên quyền: quản trị cần cấp M05 qua màn hình vai trò nếu chưa được cấp.
+
+## Thực hiện kiểm tra — UC-INS-06..09 (SCRUM-22)
+
+Luồng **Cuộc kiểm tra → Checklist → Biên bản → Kết quả → Kết luận → Hậu kiểm** đã nối API thật:
+`/kiem-tra/thuc-hien` (danh sách, tạo kiểm tra đột xuất/chuyên đề, màn hình thực hiện 4 tab) và
+`/kiem-tra/checklist` (checklist và hướng dẫn kiểm tra). API, trạng thái, quyền M06 và các giả định
+xem [pccc-BE/INSPECTIONS.md](pccc-BE/INSPECTIONS.md). Database đã có tài khoản giữ nguyên quyền:
+quản trị cần cấp `M06.view/create/edit` qua `/quan-tri/vai-tro`, hoặc tạo lại DB demo (mục 7).
+
+Thử nhanh sau khi chạy dự án (mục **Chạy dự án**), đăng nhập `demo.can-bo`:
+
+1. `/kiem-tra/checklist` — xem checklist và hướng dẫn. Tạo checklist mới bằng `demo.chi-huy` hoặc
+   `demo.to-truong` (nút **Tạo checklist**, trang `/kiem-tra/checklist/tao`); các vai trò khác không
+   thấy nút và API trả 403.
+2. `/kiem-tra/thuc-hien` → **Tạo kiểm tra đột xuất / chuyên đề** → chọn cơ sở, nhập lý do.
+3. Mở cuộc kiểm tra: tab **Checklist** chọn checklist → Bắt đầu → tick từng nội dung, ghi chú → **Lưu nháp** (vẫn sửa được) → **Chốt kết quả** (trạng thái "Đã đánh giá", checklist bị khóa);
+   tab **Biên bản & tài liệu** tải biên bản PDF (kèm số biên bản) và ảnh PNG/JPEG; tab **Kết luận**
+   chọn kết quả, nhập kết luận → Lưu → Hoàn thành (bị chặn nếu chưa chốt kết quả, thiếu kết luận
+   hoặc biên bản); tab **Hậu kiểm** tạo yêu cầu, tải bằng chứng khắc phục, cập nhật kết quả.
+4. Đăng nhập `demo.admin` → `/quan-tri/nhat-ky`, lọc feature `M06` để xem audit.
+
+Phạm vi mẫu: `demo.can-bo` (A03, khu phố KP01) chỉ thấy cơ sở CS001; `demo.to-truong` (A02) thấy
+CS001–CS002; `demo.chi-huy` (A01) tạo được cuộc kiểm tra/checklist nhưng không thực hiện; `demo.nguoi-xem` (A06) chỉ xem;
+`demo.admin` (A05) không có quyền M06. Ma trận này chỉ là mẫu (Q02).
+
 ## Authentication & Authorization — UC-ADM-01, UC-ADM-03
 
-Backend được triển khai riêng trong [`Backend`](Backend/README.md): Node.js >= 22.13, SQLite,
+Repo là monorepo pnpm gồm hai ứng dụng: frontend [`pccc-FE`](pccc-FE) (Next.js) và backend
+[`pccc-BE`](pccc-BE/README.md) (modular monolith, xem [PROJECT.md](PROJECT.md)). Backend: Node.js >= 22.13, SQLite,
 session cookie HttpOnly, RBAC và phạm vi đơn vị/khu phố/cơ sở. Có migration, seed vai trò,
 audit đăng nhập/thay đổi quyền và kiểm thử HTTP.
 
 Hướng dẫn khởi chạy cả hai phần nằm ở mục **Chạy dự án** bên dưới. Hợp đồng bảng `accounts` cho
-người 3 và API chi tiết được mô tả trong [`Backend/README.md`](Backend/README.md).
+người 3 và API chi tiết được mô tả trong [`pccc-BE/README.md`](pccc-BE/README.md).
 Không còn đăng nhập nhanh bỏ qua mật khẩu hoặc session localStorage.
 
 Các trang đăng nhập, đổi mật khẩu và cấu hình vai trò/phạm vi đã nối API thật.
-Sidebar, dashboard `/`, trang `/co-so` và các màn hình nghiệp vụ giữ nguyên UI và dữ liệu
-mẫu của dự án. Chủ module cần nối các màn hình này với API kiểm soát quyền/phạm vi;
+Dashboard `/`, tra cứu và `/co-so` đã nối API; nhiều màn hình nghiệp vụ khác vẫn dùng dữ liệu
+mẫu của dự án. Chủ module cần nối các màn hình còn lại với API kiểm soát quyền/phạm vi;
 backend kiểm tra quyền độc lập trên các API hiện có. Quyền seed là cấu hình mẫu,
 chưa thay thế phê duyệt Q02.
 
-Kiểm tra: `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, sau đó
-`npm run test:integration`. Backend có thêm `npm --prefix Backend run check`.
+Kiểm tra: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, sau đó
+`pnpm test:integration`. Backend có thêm `pnpm check`.
 
 Giao diện web (Next.js) cho **Hệ thống quản lý công tác phòng cháy, chữa cháy và cứu nạn, cứu hộ**
 của PC07 — Đội Khu vực 10, xây dựng theo `URD_He_thong_Quan_ly_PCCC_CNCH_PC07_v1.0.docx`.
 
 > ⚠️ **Bản demo dùng dữ liệu mẫu.** Theo NFR-02 và BR-12 của URD, môi trường demo chỉ được dùng dữ
-> liệu mẫu hoặc dữ liệu đã xử lý. Toàn bộ số liệu trong `src/data/mock.ts` là hư cấu.
+> liệu mẫu hoặc dữ liệu đã xử lý. Toàn bộ số liệu trong `pccc-FE/src/data/mock.ts` là hư cấu.
 
 ## Chạy dự án
 
 ### 1. Yêu cầu môi trường
 
-- Node.js **>= 22.13.0** và npm. Kiểm tra bằng `node --version` và `npm --version`.
-- Mở terminal PowerShell tại **thư mục gốc repo**, nơi có `package.json` và thư mục `Backend`.
+- Node.js **>= 22.13.0** và **pnpm 10.34.7** (phiên bản ghim trong `packageManager` của
+  `package.json`). Cài pnpm một lần bằng `npm install -g pnpm@10.34.7` (hoặc `corepack enable pnpm`),
+  kiểm tra bằng `node --version` và `pnpm --version`. Nếu báo `pnpm: command not found`, xem mục 7.
+- Mở terminal (PowerShell trên Windows, Terminal/zsh trên macOS) tại **thư mục gốc repo**, nơi có
+  `package.json`, `pccc-FE` và `pccc-BE`. Mọi lệnh bên dưới đều chạy tại đây.
 - Giữ hai terminal chạy đồng thời: frontend ở cổng **3000**, backend ở cổng **4000**.
 - Database là SQLite, không cần cài MySQL/PostgreSQL hoặc chạy Docker. Backend dùng thư viện có sẵn
-  trong Node.js, không cần chạy `npm install` riêng trong `Backend`.
+  trong Node.js, `pnpm install` ở root cài cho cả hai ứng dụng (pnpm workspace).
 
 ### 2. Chuẩn bị lần đầu
 
 Chạy tại thư mục gốc repo:
 
 ```powershell
-npm ci
+pnpm install --frozen-lockfile
 
 # Chỉ tạo file cấu hình nếu chưa có, tránh ghi đè cấu hình đang sử dụng.
-if (!(Test-Path .env.local)) { Copy-Item .env.example .env.local }
-if (!(Test-Path Backend/.env)) { Copy-Item Backend/.env.example Backend/.env }
+if (!(Test-Path pccc-FE/.env.local)) { Copy-Item pccc-FE/.env.example pccc-FE/.env.local }
+if (!(Test-Path pccc-BE/.env)) { Copy-Item pccc-BE/.env.example pccc-BE/.env }
+```
+
+Trên macOS/Linux (zsh/bash), thay hai dòng copy bằng (`-n` không ghi đè file đã có):
+
+```bash
+cp -n pccc-FE/.env.example pccc-FE/.env.local
+cp -n pccc-BE/.env.example pccc-BE/.env
 ```
 
 Mở hai file vừa tạo trong IDE và kiểm tra:
 
-| File           | Biến            | Giá trị khi chạy local                             |
-| -------------- | --------------- | -------------------------------------------------- |
-| `.env.local`   | `BACKEND_URL`   | `http://127.0.0.1:4000`                            |
-| `Backend/.env` | `PORT`          | `4000`                                             |
-| `Backend/.env` | `APP_ORIGIN`    | `http://localhost:3000`                            |
-| `Backend/.env` | `DATABASE_PATH` | `./data/pccc.sqlite`                               |
-| `Backend/.env` | `COOKIE_SECURE` | `false`                                            |
-| `Backend/.env` | `DEMO_PASSWORD` | `PcccDemo@2026` — mật khẩu mẫu chung cho team test |
+| File                 | Biến                            | Giá trị khi chạy local                                                       |
+| -------------------- | ------------------------------- | ---------------------------------------------------------------------------- |
+| `pccc-FE/.env.local` | `BACKEND_URL`                   | `http://127.0.0.1:4000`                                                      |
+| `pccc-BE/.env`       | `PORT`                          | `4000`                                                                       |
+| `pccc-BE/.env`       | `APP_ORIGIN`                    | `http://localhost:3000`                                                      |
+| `pccc-BE/.env`       | `DATABASE_PATH`                 | `./data/pccc.sqlite`                                                         |
+| `pccc-BE/.env`       | `COOKIE_SECURE`                 | `false`                                                                      |
+| `pccc-BE/.env`       | `DEMO_PASSWORD`                 | `PcccDemo@2026` — mật khẩu mẫu chung cho team test                           |
+| `pccc-BE/.env`       | `INSPECTION_DOCUMENT_MAX_BYTES` | `5242880` — giới hạn file biên bản/tài liệu kiểm tra (byte), có thể bỏ trống |
 
 Lưu file cấu hình, sau đó tạo bảng và dữ liệu mẫu. Vẫn chạy tại thư mục gốc:
 
 ```powershell
-npm --prefix Backend run migrate
-npm --prefix Backend run seed
+pnpm migrate
+pnpm seed
 ```
 
-Database được tạo ở `Backend/data/pccc.sqlite`. Không commit `.env`, `.env.local` hoặc database.
+Database được tạo ở `pccc-BE/data/pccc.sqlite`. Không commit `.env`, `.env.local` hoặc database.
 Seed chỉ cần chạy khi khởi tạo dữ liệu mẫu; chạy lại không ghi đè mật khẩu, quyền hoặc phạm vi
 đã cấu hình của tài khoản hiện có.
 
@@ -74,8 +265,7 @@ Seed chỉ cần chạy khi khởi tạo dữ liệu mẫu; chạy lại không 
 Mở terminal tại thư mục gốc repo:
 
 ```powershell
-cd Backend
-npm run dev
+pnpm dev:be
 ```
 
 Giữ terminal này chạy. Backend mặc định nghe tại `http://127.0.0.1:4000`.
@@ -83,10 +273,10 @@ Có thể mở `http://127.0.0.1:4000/api/health` để kiểm tra; kết quả 
 
 ### 4. Chạy frontend — terminal 2
 
-Mở **terminal mới tại thư mục gốc repo**, không phải bên trong `Backend`:
+Mở **terminal mới tại thư mục gốc repo**:
 
 ```powershell
-npm run dev
+pnpm dev:fe
 ```
 
 Giữ cả hai terminal chạy và mở **http://localhost:3000/dang-nhap**.
@@ -105,7 +295,7 @@ Frontend chuyển các request `/api/*` sang backend theo `BACKEND_URL`.
 | A06 — Lãnh đạo cấp phòng/Người xem    | `demo.nguoi-xem` | `PcccDemo@2026`  |
 
 Đây là toàn bộ 6 tài khoản được seed. A07 chưa có tài khoản mẫu vì vai trò này chưa kích hoạt.
-`Backend/.env.example` đã điền sẵn `DEMO_PASSWORD=PcccDemo@2026`. Nếu đã có `Backend/.env`,
+`pccc-BE/.env.example` đã điền sẵn `DEMO_PASSWORD=PcccDemo@2026`. Nếu đã có `pccc-BE/.env`,
 đặt biến này cùng giá trị trước khi seed lần đầu để mật khẩu khớp bảng trên.
 Nếu seed bằng giá trị khác, các tài khoản mới dùng giá trị đó thay vì mật khẩu trong bảng.
 
@@ -122,13 +312,13 @@ hoặc seed lại dữ liệu.
 Các lệnh kiểm tra chạy tại thư mục gốc:
 
 ```powershell
-npm run format:check
-npm run lint
-npm run typecheck
-npm test
-npm --prefix Backend run check
-npm run build
-npm run test:integration
+pnpm format:check
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm check
+pnpm build
+pnpm test:integration
 ```
 
 `test:integration` cần build frontend trước, tự mở/dừng server kiểm thử và dùng database in-memory.
@@ -138,23 +328,27 @@ Lần build chưa có cache font Inter cần kết nối Internet để tải fo
 Để kiểm tra frontend bản build ở local, giữ backend đang chạy, dừng frontend dev rồi chạy tại root:
 
 ```powershell
-npm run build
-npm run start
+pnpm build
+pnpm start:fe
 ```
 
-Backend có thể chạy bằng `npm run start` trong thư mục `Backend` nếu không cần chế độ tự khởi động
+Backend có thể chạy bằng `pnpm start:be` nếu không cần chế độ tự khởi động
 lại khi sửa mã. Triển khai production với `NODE_ENV=production` yêu cầu HTTPS và `COOKIE_SECURE=true`;
-xem cấu hình chi tiết trong [`Backend/README.md`](Backend/README.md).
+xem cấu hình chi tiết trong [`pccc-BE/README.md`](pccc-BE/README.md).
 
 ### 7. Xử lý lỗi khởi chạy thường gặp
 
 | Hiện tượng                                                                | Cách xử lý                                                                                                                                                                         |
 | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Seed báo lỗi `DEMO_PASSWORD`                                              | Điền mật khẩu tạm 12–256 ký tự trong `Backend/.env`, lưu file rồi chạy lại seed.                                                                                                   |
-| Trang báo dịch vụ xác thực không khả dụng hoặc không kết nối được máy chủ | Kiểm tra terminal backend, `/api/health` và `BACKEND_URL` trong `.env.local`.                                                                                                      |
+| Seed báo lỗi `DEMO_PASSWORD`                                              | Điền mật khẩu tạm 12–256 ký tự trong `pccc-BE/.env`, lưu file rồi chạy lại seed.                                                                                                   |
+| Trang báo dịch vụ xác thực không khả dụng hoặc không kết nối được máy chủ | Kiểm tra terminal backend, `/api/health` và `BACKEND_URL` trong `pccc-FE/.env.local`.                                                                                              |
 | Đăng nhập trả lỗi nguồn yêu cầu/Origin                                    | Mở đúng `http://localhost:3000`; `APP_ORIGIN` phải khớp chính xác URL frontend, không có dấu `/` cuối.                                                                             |
 | Cổng 3000/4000 đang được sử dụng                                          | Dừng tiến trình cũ. Nếu đổi cổng frontend, cập nhật `APP_ORIGIN`; nếu đổi cổng backend, cập nhật `PORT` và `BACKEND_URL`. Khởi động lại cả hai phần; build lại nếu dùng bản build. |
 | Mật khẩu seed không đăng nhập được sau khi đã đổi mật khẩu                | Dùng mật khẩu mới. Sửa `DEMO_PASSWORD` hoặc seed lại không reset mật khẩu tài khoản hiện có.                                                                                       |
+| `pnpm: command not found`                                                 | Chạy `npm install -g pnpm@10.34.7` rồi mở lại terminal. Nếu `corepack enable` báo `EACCES ... .cache/node/corepack`, thư mục `~/.cache` đang thuộc `root`: dùng cách cài bằng npm. |
+| Trang kiểm tra báo không có quyền dù đã seed                              | DB tạo trước khi có M06 giữ nguyên quyền cũ. Cấp `M06.*` tại `/quan-tri/vai-tro` hoặc tạo lại DB demo (dòng dưới).                                                                 |
+| Muốn tạo lại DB demo (xóa toàn bộ dữ liệu local)                          | Dừng backend, xóa `pccc-BE/data/pccc.sqlite*` (PowerShell: `Remove-Item pccc-BE/data/pccc.sqlite*`; zsh: `rm -f pccc-BE/data/pccc.sqlite(N)`), rồi `pnpm migrate` và `pnpm seed`.  |
+| zsh báo `no matches found: pccc-BE/data/pccc.sqlite*`                     | Chưa có DB nên không có gì để xóa; bỏ qua và chạy tiếp `pnpm migrate`.                                                                                                             |
 
 ## Công nghệ
 
@@ -170,16 +364,18 @@ xem cấu hình chi tiết trong [`Backend/README.md`](Backend/README.md).
 ## Bộ màu
 
 Đỏ cứu hỏa `#C8102E` làm màu chủ đạo trên nền trắng — sidebar đỏ đậm, tiêu đề bảng đỏ, nội dung trắng.
-Toàn bộ token định nghĩa dưới dạng biến CSS trong [`src/app/globals.css`](src/app/globals.css), có
+Toàn bộ token định nghĩa dưới dạng biến CSS trong [`src/app/globals.css`](pccc-FE/src/app/globals.css), có
 sẵn cả biến thể **sáng/tối** (nút đổi giao diện ở header).
 
-Quy ước màu trạng thái dùng chung (xem [`status-badge.tsx`](src/components/shared/status-badge.tsx)):
+Quy ước màu trạng thái dùng chung (xem [`status-badge.tsx`](pccc-FE/src/components/shared/status-badge.tsx)):
 đỏ = cần xử lý/nghiêm trọng, vàng = sắp tới hạn, xanh lá = đã hoàn thành, xám = không áp dụng.
 
 ## Cấu trúc thư mục
 
+Cấu trúc toàn repo và các module backend xem [PROJECT.md](PROJECT.md) §3. Frontend trong `pccc-FE`:
+
 ```
-src/
+pccc-FE/src/
 ├── app/                      # Route App Router, mỗi thư mục là một màn hình
 ├── components/
 │   ├── ui/                   # Primitive shadcn/ui (button, table, sidebar, …)
@@ -197,35 +393,40 @@ src/
 
 ## Bản đồ màn hình ↔ URD
 
-| Đường dẫn                 | Phân hệ | Use Case                                                |
-| ------------------------- | ------- | ------------------------------------------------------- |
-| `/`                       | M10     | UC-SYS-02 — Dashboard điều hành (R01–R12)               |
-| `/tra-cuu`                | M10     | UC-SYS-01 — Tìm kiếm toàn hệ thống                      |
-| `/canh-bao`               | M10     | UC-SYS-03 — Chuông nhắc việc, cấu hình BR-07            |
-| `/to-chuc/don-vi`         | M02     | UC-ORG-01 — Cây tổ chức 4 cấp                           |
-| `/to-chuc/can-bo`         | M02     | UC-ORG-02 — Danh bạ cán bộ                              |
-| `/to-chuc/khu-vuc`        | M02     | UC-ORG-03 — Danh mục khu phố                            |
-| `/to-chuc/phan-cong`      | M02     | UC-ORG-03, UC-ADM-04 — Phân công & chuyển giao          |
-| `/co-so`                  | M03     | UC-FAC-01, UC-FAC-02 — Danh sách cơ sở                  |
-| `/co-so/them`             | M03     | UC-FAC-02 — Biểu mẫu tạo hồ sơ cơ sở                    |
-| `/co-so/[id]`             | M03     | UC-FAC-03..08 — Hồ sơ, điều kiện PCCC, nhân sự, lịch sử |
-| `/co-so/[id]/sua`         | M03     | UC-FAC-02 — Biểu mẫu cập nhật hồ sơ cơ sở               |
-| `/vi-pham`                | M04     | UC-VIO-01..05 — Vi phạm, đình chỉ, khắc phục            |
-| `/van-ban`                | M05     | UC-DOC-01, UC-DOC-02 — Kho văn bản/quy chuẩn            |
-| `/kiem-tra/ke-hoach`      | M06     | UC-INS-01, UC-INS-02 — Chỉ tiêu & nợ chỉ tiêu           |
-| `/kiem-tra/cuoc-kiem-tra` | M06     | UC-INS-03..08 — Hồ sơ cuộc kiểm tra                     |
-| `/cong-viec/lich`         | M07     | UC-WRK-01 — Lịch công tác 7 ngày                        |
-| `/cong-viec/giao-viec`    | M07     | UC-WRK-02, UC-WRK-03 — Giao việc & tiến độ              |
-| `/cong-viec/kpi`          | M07     | UC-WRK-04 — KPI & nợ chỉ tiêu                           |
-| `/cong-viec/giai-trinh`   | M07     | UC-WRK-05 — Yêu cầu/phản hồi giải trình                 |
-| `/bao-cao`                | M08     | UC-RPT-01..04 — Báo cáo & deadline                      |
-| `/su-co`                  | M09     | UC-INC-01..06 — Sự cố và thiệt hại                      |
-| `/tien-ich/import`        | M11     | UC-FAC-07, UC-SYS-04 — Import Excel có preview lỗi      |
-| `/tien-ich/export`        | M11     | UC-RPT-06 — Kết xuất R01–R12                            |
-| `/quan-tri/tai-khoan`     | M01     | UC-ADM-02 — Tài khoản                                   |
-| `/quan-tri/vai-tro`       | M01     | UC-ADM-03 — Ma trận quyền 7 vai trò × 11 phân hệ        |
-| `/quan-tri/nhat-ky`       | M01     | UC-SYS-05 — Nhật ký thao tác                            |
-| `/dang-nhap`              | M01     | UC-ADM-01 — Đăng nhập (layout riêng, ngoài sidebar)     |
+| Đường dẫn                  | Phân hệ | Use Case                                                |
+| -------------------------- | ------- | ------------------------------------------------------- |
+| `/`                        | M10     | UC-SYS-02 — Dashboard điều hành (R01–R12)               |
+| `/tra-cuu`                 | M10     | UC-SYS-01 — Tìm kiếm toàn hệ thống                      |
+| `/canh-bao`                | M10     | UC-SYS-03 — Chuông nhắc việc, cấu hình BR-07            |
+| `/to-chuc/don-vi`          | M02     | UC-ORG-01 — Cây tổ chức 4 cấp                           |
+| `/to-chuc/can-bo`          | M02     | UC-ORG-02 — Danh bạ cán bộ                              |
+| `/to-chuc/khu-vuc`         | M02     | UC-ORG-03 — Danh mục khu phố                            |
+| `/to-chuc/phan-cong`       | M02     | UC-ORG-03, UC-ADM-04 — Phân công & chuyển giao          |
+| `/co-so`                   | M03     | UC-FAC-01, UC-FAC-02 — Danh sách cơ sở                  |
+| `/co-so/them`              | M03     | UC-FAC-02 — Biểu mẫu tạo hồ sơ cơ sở                    |
+| `/co-so/[id]`              | M03     | UC-FAC-03..08 — Hồ sơ, điều kiện PCCC, nhân sự, lịch sử |
+| `/co-so/[id]/sua`          | M03     | UC-FAC-02 — Biểu mẫu cập nhật hồ sơ cơ sở               |
+| `/vi-pham`                 | M04     | UC-VIO-01..05 — Vi phạm, đình chỉ, khắc phục            |
+| `/van-ban`                 | M05     | UC-DOC-01, UC-DOC-02 — Kho văn bản/quy chuẩn            |
+| `/kiem-tra/ke-hoach`       | M06     | UC-INS-01, UC-INS-02 — Chỉ tiêu & nợ chỉ tiêu           |
+| `/kiem-tra/cuoc-kiem-tra`  | M06     | UC-INS-03..05 — Hồ sơ cuộc kiểm tra (dữ liệu mẫu)       |
+| `/kiem-tra/thuc-hien`      | M06     | UC-INS-07..09 — Thực hiện kiểm tra (API thật)           |
+| `/kiem-tra/thuc-hien/tao`  | M06     | UC-INS-09 — Tạo kiểm tra đột xuất/chuyên đề             |
+| `/kiem-tra/thuc-hien/[id]` | M06     | UC-INS-06..08 — Checklist, biên bản, kết luận, hậu kiểm |
+| `/kiem-tra/checklist`      | M06     | UC-INS-06 — Checklist và hướng dẫn kiểm tra             |
+| `/kiem-tra/checklist/tao`  | M06     | UC-INS-06 — Tạo checklist (Chỉ huy, Phó chỉ huy)        |
+| `/cong-viec/lich`          | M07     | UC-WRK-01 — Lịch công tác 7 ngày                        |
+| `/cong-viec/giao-viec`     | M07     | UC-WRK-02, UC-WRK-03 — Giao việc & tiến độ              |
+| `/cong-viec/kpi`           | M07     | UC-WRK-04 — KPI & nợ chỉ tiêu                           |
+| `/cong-viec/giai-trinh`    | M07     | UC-WRK-05 — Yêu cầu/phản hồi giải trình                 |
+| `/bao-cao`                 | M08     | UC-RPT-01..04 — Báo cáo & deadline                      |
+| `/su-co`                   | M09     | UC-INC-01..06 — Sự cố và thiệt hại                      |
+| `/tien-ich/import`         | M11     | UC-FAC-07, UC-SYS-04 — Import Excel có preview lỗi      |
+| `/tien-ich/export`         | M11     | UC-RPT-06 — Kết xuất R01–R12                            |
+| `/quan-tri/tai-khoan`      | M01     | UC-ADM-02 — Tài khoản                                   |
+| `/quan-tri/vai-tro`        | M01     | UC-ADM-03 — Ma trận quyền 7 vai trò × 11 phân hệ        |
+| `/quan-tri/nhat-ky`        | M01     | UC-SYS-05 — Nhật ký thao tác                            |
+| `/dang-nhap`               | M01     | UC-ADM-01 — Đăng nhập (layout riêng, ngoài sidebar)     |
 
 ## Quyết định đã chốt với người sử dụng
 
@@ -237,7 +438,7 @@ src/
 
 ## Biểu mẫu nhập liệu
 
-Ràng buộc dữ liệu tập trung ở [`src/data/schemas.ts`](src/data/schemas.ts) — khi đơn vị chốt bộ trường
+Ràng buộc dữ liệu tập trung ở [`src/data/schemas.ts`](pccc-FE/src/data/schemas.ts) — khi đơn vị chốt bộ trường
 chuẩn (Q04), chỉ cần sửa file này là toàn bộ biểu mẫu có hiệu lực theo.
 
 | Biểu mẫu      | Dạng                           | Ràng buộc đáng chú ý                                                                                   |
@@ -272,10 +473,11 @@ import/export, Q13 ở đăng nhập.
 
 ## Việc còn lại
 
-Các phân hệ ngoài Authentication & Authorization vẫn là **giao diện dùng dữ liệu mẫu tĩnh**. Để đưa vào vận hành cần:
+Các phân hệ ngoài các mục đã nối API ở trên vẫn là **giao diện dùng dữ liệu mẫu tĩnh**. Để đưa vào vận hành cần:
 
 1. Thay `src/data/mock.ts` bằng lớp gọi API thật (giữ nguyên kiểu trong `src/data/types.ts`).
 2. Nối `onSubmit` của các biểu mẫu nghiệp vụ vào API; dùng middleware xác thực/phân quyền và bộ lọc
-   phạm vi trong `Backend` để bảo vệ từng module trước khi mở route trong `src/lib/auth-contract.ts`.
-3. Bổ sung màn hình chi tiết còn thiếu: cuộc kiểm tra, sự cố, hồ sơ vi phạm, trao đổi theo công việc.
+   phạm vi trong `pccc-BE` để bảo vệ từng module trước khi mở route trong `src/lib/auth-contract.ts`.
+3. Bổ sung màn hình chi tiết còn thiếu: sự cố, hồ sơ vi phạm, trao đổi theo công việc; nối kế hoạch/thông
+   báo/dời lịch kiểm tra (UC-INS-01..05) vào bảng `inspections` dùng chung.
 4. Chốt các điểm còn lại Q01, Q02, Q04–Q12, Q15 trước khi làm SRS/FSD.
