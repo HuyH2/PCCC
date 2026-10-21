@@ -4,6 +4,8 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { FileDown } from "lucide-react";
+
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -67,6 +69,7 @@ export function ReportWorkspace({ user }: { user: AuthUser }) {
     user.permissions.includes("M08.create") && ["A01", "A02", "A04", "A05"].includes(user.role);
   const canManageTypes =
     canCreate && user.role === "A05" && user.scopes.some((s) => s.kind === "all");
+  const canExport = user.permissions.includes("M08.export");
   const [types, setTypes] = React.useState<ReportType[]>([]);
   const [assignees, setAssignees] = React.useState<Assignee[]>([]);
   const [items, setItems] = React.useState<Request[]>([]);
@@ -188,24 +191,36 @@ export function ReportWorkspace({ user }: { user: AuthUser }) {
         useCases={["UC-RPT-01", "UC-RPT-02", "UC-RPT-03", "UC-RPT-04", "UC-RPT-05"]}
         description="Giao yêu cầu, theo dõi hạn nộp, tiếp nhận file và xác nhận hoàn thành."
         actions={
-          canCreate ? (
+          canExport || canCreate ? (
             <div className="flex flex-wrap gap-2">
-              {canManageTypes && (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setEditingTypeId("");
-                    setTypeName("");
-                    setPanel("type");
-                  }}
-                >
-                  Loại báo cáo
+              {canExport && (
+                <Button variant="outline" asChild>
+                  <Link href="/bao-cao/ket-xuat">
+                    <FileDown />
+                    Kết xuất báo cáo
+                  </Link>
                 </Button>
               )}
-              <Button variant="outline" onClick={() => setPanel("schedule")}>
-                Lịch định kỳ
-              </Button>
-              <Button onClick={() => setPanel("request")}>+ Tạo yêu cầu</Button>
+              {canCreate && (
+                <>
+                  {canManageTypes && (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setEditingTypeId("");
+                        setTypeName("");
+                        setPanel("type");
+                      }}
+                    >
+                      Loại báo cáo
+                    </Button>
+                  )}
+                  <Button variant="outline" onClick={() => setPanel("schedule")}>
+                    Lịch định kỳ
+                  </Button>
+                  <Button onClick={() => setPanel("request")}>+ Tạo yêu cầu</Button>
+                </>
+              )}
             </div>
           ) : undefined
         }

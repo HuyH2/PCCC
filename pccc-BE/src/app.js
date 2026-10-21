@@ -20,6 +20,7 @@ import { organizationRoutes } from "./modules/organization/organization.routes.j
 import { dataTransferRoutes } from "./modules/data-transfer/data-transfer.routes.js";
 import { violationsRoutes } from "./modules/violations/violations.routes.js";
 import { reportsRoutes } from "./modules/reports/reports.routes.js";
+import { reportExportRoutes } from "./modules/report-export/report-export.routes.js";
 import { notificationRoutes } from "./modules/notifications/notifications.routes.js";
 
 // Modular monolith: each business module registers its routes here; all share one process and DB.
@@ -43,6 +44,7 @@ const routes = [
   ...explanationsRoutes,
   ...dataTransferRoutes,
   ...reportsRoutes,
+  ...reportExportRoutes,
   ...notificationRoutes,
 ];
 
