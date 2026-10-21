@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { canhBaoList } from "@/data/mock";
+import { NotificationBell } from "./notification-bell";
 import { nhanDuongDan } from "@/lib/navigation";
 import { canVisit, roleNames, type AuthUser } from "@/lib/auth-contract";
 
@@ -37,7 +37,6 @@ function dungBreadcrumb(pathname: string) {
 export function AppHeader({ user }: { user: AuthUser }) {
   const pathname = usePathname();
   const crumbs = dungBreadcrumb(pathname);
-  const chuaDoc = canhBaoList.filter((c) => !c.daDoc).length;
   const [toi, setToi] = React.useState(false);
 
   React.useEffect(() => {
@@ -121,24 +120,7 @@ export function AppHeader({ user }: { user: AuthUser }) {
         {toi ? <Moon className="size-4" /> : <Sun className="size-4" />}
       </Button>
 
-      {canVisit(user, "/canh-bao") && (
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          asChild
-          className="relative"
-          aria-label={chuaDoc > 0 ? `Cảnh báo (${chuaDoc})` : "Cảnh báo"}
-        >
-          <Link href="/canh-bao">
-            <Bell className="size-4" />
-            {chuaDoc > 0 && (
-              <span className="bg-primary text-primary-foreground absolute -top-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full text-[10px] font-bold">
-                {chuaDoc}
-              </span>
-            )}
-          </Link>
-        </Button>
-      )}
+      {canVisit(user, "/canh-bao") && <NotificationBell />}
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
