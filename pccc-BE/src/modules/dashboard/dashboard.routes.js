@@ -3,15 +3,19 @@ import { dashboardSummary, facilitiesByOfficer, facilitiesByRegion } from "./das
 
 // UC-SYS-02
 export const dashboardRoutes = [
-  { method: "GET", path: "/api/dashboard", handle: (ctx) => dashboardSummary(ctx.db, ctx.user) },
+  {
+    method: "GET",
+    path: "/api/dashboard",
+    handle: async (ctx) => await dashboardSummary(ctx.db, ctx.user),
+  },
   {
     method: "GET",
     path: "/api/dashboard/facilities-by-region",
-    handle: (ctx) => facilitiesByRegion(ctx.db, ctx.user, pagination(ctx.url)),
+    handle: async (ctx) => await facilitiesByRegion(ctx.db, ctx.user, pagination(ctx.url)),
   },
   {
     method: "GET",
     path: "/api/dashboard/facilities-by-officer",
-    handle: (ctx) => facilitiesByOfficer(ctx.db, ctx.user, pagination(ctx.url)),
+    handle: async (ctx) => await facilitiesByOfficer(ctx.db, ctx.user, pagination(ctx.url)),
   },
 ];

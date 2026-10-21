@@ -24,17 +24,17 @@ import {
 
 const password = "Report-test-password-2026";
 async function fixture(t) {
-  const db = openDatabase(":memory:");
+  const db = await openDatabase(":memory:");
   await seedDemo(db, password);
-  db.exec("UPDATE accounts SET must_change_password=0");
-  t.after(() => db.close());
-  const user = (role) => {
+  await db.exec("UPDATE accounts SET must_change_password=0");
+  t.after(async () => await db.close());
+  const user = async (role) => {
     const id = `DEMO-${role}`;
     return {
       id,
       role,
-      permissions: permissionsFor(db, role),
-      scopes: scopesFor(db, id),
+      permissions: await permissionsFor(db, role),
+      scopes: await scopesFor(db, id),
       mustChangePassword: false,
     };
   };
@@ -42,23 +42,23 @@ async function fixture(t) {
 }
 test("seed tạo nhiều báo cáo và không ghi đè dữ liệu khi chạy lại", async (t) => {
   const { db } = await fixture(t);
-  assert.equal(db.prepare("SELECT count(*) AS n FROM report_requests").get().n, 48);
-  db.prepare("UPDATE report_requests SET title='Đã chỉnh sửa' WHERE id='BC-DEMO-001'").run();
+  assert.equal((await db.prepare("SELECT count(*) AS n FROM report_requests").get()).n, 48);
+  await db.prepare("UPDATE report_requests SET title='Đã chỉnh sửa' WHERE id='BC-DEMO-001'").run();
   await seedDemo(db, password);
   assert.equal(
-    db.prepare("SELECT title FROM report_requests WHERE id='BC-DEMO-001'").get().title,
+    (await db.prepare("SELECT title FROM report_requests WHERE id='BC-DEMO-001'").get()).title,
     "Đã chỉnh sửa",
   );
-  assert.equal(db.prepare("SELECT count(*) AS n FROM report_requests").get().n, 48);
+  assert.equal((await db.prepare("SELECT count(*) AS n FROM report_requests").get()).n, 48);
 });
 
 test("giao → cảnh báo → nộp file → hoàn thành, quyền và audit", async (t) => {
   const { db, user } = await fixture(t);
-  const admin = user("A05"),
-    assignee = user("A04"),
-    outsider = user("A06");
+  const admin = await user("A05"),
+    assignee = await user("A04"),
+    outsider = await user("A06");
   const dueDate = businessDate();
-  const created = createReportRequest(
+  const created = await createReportRequest(
     db,
     admin,
     {
@@ -72,21 +72,30 @@ test("giao → cảnh báo → nộp file → hoàn thành, quyền và audit", 
   );
   const id = created.request.id;
   assert.equal(
-    listReportRequests(db, assignee, new URL("http://localhost/api/reports/requests?q=tích%20hợp"))
-      .total,
+    (
+      await listReportRequests(
+        db,
+        assignee,
+        new URL("http://localhost/api/reports/requests?q=tích%20hợp"),
+      )
+    ).total,
     1,
   );
-  assert.throws(() => submitReport(db, outsider, id, {}, "test"), { code: "FORBIDDEN" });
-  refreshReportReminders(db, assignee);
-  refreshReportReminders(db, assignee);
+  await assert.rejects(async () => await submitReport(db, outsider, id, {}, "test"), {
+    code: "FORBIDDEN",
+  });
+  await refreshReportReminders(db, assignee);
+  await refreshReportReminders(db, assignee);
   assert.equal(
-    db
-      .prepare("SELECT count(*) AS n FROM notifications WHERE object_id=? AND kind='due_soon'")
-      .get(id).n,
+    (
+      await db
+        .prepare("SELECT count(*) AS n FROM notifications WHERE object_id=? AND kind='due_soon'")
+        .get(id)
+    ).n,
     1,
   );
   const data = Buffer.from("%PDF-1.4\n%%EOF\n");
-  submitReport(
+  await submitReport(
     db,
     assignee,
     id,
@@ -94,12 +103,12 @@ test("giao → cảnh báo → nộp file → hoàn thành, quyền và audit", 
     "test",
   );
   assert.equal(
-    db.prepare("SELECT status FROM report_requests WHERE id=?").get(id).status,
+    (await db.prepare("SELECT status FROM report_requests WHERE id=?").get(id)).status,
     "submitted",
   );
-  assert.throws(
-    () =>
-      submitReport(
+  await assert.rejects(
+    async () =>
+      await submitReport(
         db,
         assignee,
         id,
@@ -108,24 +117,29 @@ test("giao → cảnh báo → nộp file → hoàn thành, quyền và audit", 
       ),
     { code: "INVALID_STATE" },
   );
-  assert.throws(() => completeReport(db, assignee, id, "test"), { code: "FORBIDDEN" });
-  completeReport(db, admin, id, "test");
-  refreshReportReminders(db, assignee);
+  await assert.rejects(async () => await completeReport(db, assignee, id, "test"), {
+    code: "FORBIDDEN",
+  });
+  await completeReport(db, admin, id, "test");
+  await refreshReportReminders(db, assignee);
   assert.equal(
-    db.prepare("SELECT status FROM report_requests WHERE id=?").get(id).status,
+    (await db.prepare("SELECT status FROM report_requests WHERE id=?").get(id)).status,
     "completed",
   );
   assert.equal(
-    db.prepare("SELECT count(*) AS n FROM audit_logs WHERE object_id=? AND feature='M08'").get(id)
-      .n,
+    (
+      await db
+        .prepare("SELECT count(*) AS n FROM audit_logs WHERE object_id=? AND feature='M08'")
+        .get(id)
+    ).n,
     3,
   );
 });
 
 test("lịch định kỳ sinh kỳ kế tiếp và chặn tạo trùng", async (t) => {
   const { db, user } = await fixture(t);
-  const admin = user("A05");
-  const schedule = createReportSchedule(
+  const admin = await user("A05");
+  const schedule = await createReportSchedule(
     db,
     admin,
     {
@@ -136,26 +150,30 @@ test("lịch định kỳ sinh kỳ kế tiếp và chặn tạo trùng", async 
     },
     "test",
   );
-  const generated = generateReportPeriod(db, admin, schedule.id, "test");
+  const generated = await generateReportPeriod(db, admin, schedule.id, "test");
   assert.equal(generated.dueDate, "2026-11-05");
   assert.equal(
-    db.prepare("SELECT next_due_date FROM report_schedules WHERE id=?").get(schedule.id)
+    (await db.prepare("SELECT next_due_date FROM report_schedules WHERE id=?").get(schedule.id))
       .next_due_date,
     "2026-11-12",
   );
   assert.equal(
-    db.prepare("SELECT count(*) AS n FROM report_requests WHERE schedule_id=?").get(schedule.id).n,
+    (
+      await db
+        .prepare("SELECT count(*) AS n FROM report_requests WHERE schedule_id=?")
+        .get(schedule.id)
+    ).n,
     1,
   );
 });
 
 test("dropdown chỉ đưa người có quyền nộp; thông báo theo scope và đọc riêng", async (t) => {
   const { db, user } = await fixture(t);
-  const admin = user("A05"),
-    viewer = user("A06"),
-    assignee = user("A04");
-  assert(!listReportAssignees(db, admin).items.some((a) => a.id === viewer.id));
-  const created = createReportRequest(
+  const admin = await user("A05"),
+    viewer = await user("A06"),
+    assignee = await user("A04");
+  assert(!(await listReportAssignees(db, admin)).items.some((a) => a.id === viewer.id));
+  const created = await createReportRequest(
     db,
     admin,
     {
@@ -168,15 +186,17 @@ test("dropdown chỉ đưa người có quyền nộp; thông báo theo scope v�
     "test",
   );
   const url = new URL("http://localhost/api/notifications");
-  const list = listNotifications(db, assignee, url);
+  const list = await listNotifications(db, assignee, url);
   const notification = list.items.find((n) => n.object_id === created.request.id);
   assert(notification);
-  assert.throws(() => markNotificationRead(db, admin, notification.id), { code: "NOT_FOUND" });
-  assert.equal(markNotificationRead(db, assignee, notification.id).read, true);
-  assert(markAllNotificationsRead(db, assignee).updated >= 0);
-  db.prepare("DELETE FROM account_scopes WHERE account_id=?").run(assignee.id);
+  await assert.rejects(async () => await markNotificationRead(db, admin, notification.id), {
+    code: "NOT_FOUND",
+  });
+  assert.equal((await markNotificationRead(db, assignee, notification.id)).read, true);
+  assert((await markAllNotificationsRead(db, assignee)).updated >= 0);
+  await db.prepare("DELETE FROM account_scopes WHERE account_id=?").run(assignee.id);
   assert(
-    !listNotifications(db, { ...assignee, scopes: [] }, url).items.some(
+    !(await listNotifications(db, { ...assignee, scopes: [] }, url)).items.some(
       (n) => n.object_id === created.request.id,
     ),
   );
@@ -184,8 +204,8 @@ test("dropdown chỉ đưa người có quyền nộp; thông báo theo scope v�
 
 test("API yêu cầu session và không lộ báo cáo ngoài phạm vi", async (t) => {
   const { db, user } = await fixture(t);
-  const admin = user("A05");
-  const created = createReportRequest(
+  const admin = await user("A05");
+  const created = await createReportRequest(
     db,
     admin,
     {
@@ -197,11 +217,11 @@ test("API yêu cầu session và không lộ báo cáo ngoài phạm vi", async 
     },
     "test",
   );
-  const restricted = user("A03");
-  assert.throws(
-    () => {
-      db.prepare("DELETE FROM account_scopes WHERE account_id=?").run(restricted.id);
-      listReportRequests(
+  const restricted = await user("A03");
+  await assert.rejects(
+    async () => {
+      await db.prepare("DELETE FROM account_scopes WHERE account_id=?").run(restricted.id);
+      await listReportRequests(
         db,
         { ...restricted, scopes: [] },
         new URL("http://localhost/api/reports/requests"),

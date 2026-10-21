@@ -12,7 +12,7 @@ const ALLOCATION_ROLES = ["A01", "A02"];
 // UC-INS-03 — allocate periodic inspection targets (month / week / officer / region)
 // ---------------------------------------------------------------------------
 
-export function createTarget(db, user, planId, payload, ip) {
+export async function createTarget(db, user, planId, payload, ip) {
   requirePlanning(user, "edit");
   requireRole(user, ALLOCATION_ROLES, "Chỉ Chỉ huy hoặc Phó chỉ huy được phân bổ chỉ tiêu.");
   object(payload, [
@@ -24,7 +24,7 @@ export function createTarget(db, user, planId, payload, ip) {
     "target_count",
     "parent_id",
   ]);
-  const plan = scopedPlan(db, user, planId);
+  const plan = await scopedPlan(db, user, planId);
   assert(
     plan.status !== "closed",
     409,
@@ -44,20 +44,20 @@ export function createTarget(db, user, planId, payload, ip) {
   const officerId = payload.officer_id ? trimmed(payload.officer_id, "Cán bộ", 1, 100) : null;
   const regionId = payload.region_id ? trimmed(payload.region_id, "Địa bàn", 1, 100) : null;
   if (officerId) {
-    const officer = db
+    const officer = await db
       .prepare("SELECT * FROM officers WHERE id=? AND status='ACTIVE'")
       .get(officerId);
     assert(
-      officer && unitWithin(db, officer.unit_id, plan.unit_id),
+      officer && (await unitWithin(db, officer.unit_id, plan.unit_id)),
       400,
       "INVALID_INPUT",
       "Cán bộ không thuộc đơn vị của kế hoạch.",
     );
   }
   if (regionId) {
-    const region = db.prepare("SELECT unit_id FROM regions WHERE id=?").get(regionId);
+    const region = await db.prepare("SELECT unit_id FROM regions WHERE id=?").get(regionId);
     assert(
-      region && unitWithin(db, region.unit_id, plan.unit_id),
+      region && (await unitWithin(db, region.unit_id, plan.unit_id)),
       400,
       "INVALID_INPUT",
       "Địa bàn không thuộc đơn vị của kế hoạch.",
@@ -65,14 +65,14 @@ export function createTarget(db, user, planId, payload, ip) {
   }
   let parentId = payload.parent_id ?? null;
   if (parentId) {
-    const parent = db
+    const parent = await db
       .prepare("SELECT * FROM inspection_targets WHERE id=? AND plan_id=?")
       .get(parentId, planId);
     assert(parent, 400, "INVALID_INPUT", "Chỉ tiêu cha không hợp lệ.");
   }
   const aggregate = officerId == null && regionId == null;
   if (aggregate && periodType === "month") {
-    const yearTarget = db
+    const yearTarget = await db
       .prepare("SELECT id FROM inspection_targets WHERE plan_id=? AND period_type='year'")
       .get(planId);
     assert(yearTarget, 409, "INVALID_STATE", "Kế hoạch chưa có chỉ tiêu năm.");
@@ -83,11 +83,13 @@ export function createTarget(db, user, planId, payload, ip) {
       "Chỉ tiêu tháng phải thuộc chỉ tiêu năm.",
     );
     parentId = yearTarget.id;
-    const existing = db
-      .prepare(
-        "SELECT coalesce(sum(target_count),0) AS n FROM inspection_targets WHERE plan_id=? AND period_type='month' AND officer_id IS NULL AND region_id IS NULL",
-      )
-      .get(planId).n;
+    const existing = (
+      await db
+        .prepare(
+          "SELECT coalesce(sum(target_count),0) AS n FROM inspection_targets WHERE plan_id=? AND period_type='month' AND officer_id IS NULL AND region_id IS NULL",
+        )
+        .get(planId)
+    ).n;
     assert(
       existing + targetCount <= plan.annual_target,
       409,
@@ -96,7 +98,7 @@ export function createTarget(db, user, planId, payload, ip) {
     );
   }
   if (aggregate && periodType === "week") {
-    const monthTarget = db
+    const monthTarget = await db
       .prepare(
         "SELECT id,target_count FROM inspection_targets WHERE plan_id=? AND period_type='month' AND month=? AND officer_id IS NULL AND region_id IS NULL",
       )
@@ -107,11 +109,13 @@ export function createTarget(db, user, planId, payload, ip) {
       "MISSING_PARENT_TARGET",
       "Cần phân bổ chỉ tiêu tháng trước khi phân bổ tuần.",
     );
-    const existing = db
-      .prepare(
-        "SELECT coalesce(sum(target_count),0) AS n FROM inspection_targets WHERE plan_id=? AND period_type='week' AND month=? AND officer_id IS NULL AND region_id IS NULL",
-      )
-      .get(planId, month).n;
+    const existing = (
+      await db
+        .prepare(
+          "SELECT coalesce(sum(target_count),0) AS n FROM inspection_targets WHERE plan_id=? AND period_type='week' AND month=? AND officer_id IS NULL AND region_id IS NULL",
+        )
+        .get(planId, month)
+    ).n;
     assert(
       existing + targetCount <= monthTarget.target_count,
       409,
@@ -128,7 +132,7 @@ export function createTarget(db, user, planId, payload, ip) {
   }
   if (!aggregate) {
     assert(parentId, 400, "INVALID_INPUT", "Chỉ tiêu cán bộ/địa bàn phải thuộc một chỉ tiêu kỳ.");
-    const parent = db
+    const parent = await db
       .prepare("SELECT * FROM inspection_targets WHERE id=? AND plan_id=?")
       .get(parentId, planId);
     assert(
@@ -137,11 +141,13 @@ export function createTarget(db, user, planId, payload, ip) {
       "INVALID_INPUT",
       "Chỉ tiêu cha không cùng kỳ phân bổ.",
     );
-    const existing = db
-      .prepare(
-        "SELECT coalesce(sum(target_count),0) AS n FROM inspection_targets WHERE parent_id=?",
-      )
-      .get(parentId).n;
+    const existing = (
+      await db
+        .prepare(
+          "SELECT coalesce(sum(target_count),0) AS n FROM inspection_targets WHERE parent_id=?",
+        )
+        .get(parentId)
+    ).n;
     assert(
       existing + targetCount <= parent.target_count,
       409,
@@ -149,7 +155,7 @@ export function createTarget(db, user, planId, payload, ip) {
       "Tổng giao cho cán bộ/địa bàn vượt chỉ tiêu kỳ.",
     );
   }
-  const duplicate = db
+  const duplicate = await db
     .prepare(
       `SELECT 1 FROM inspection_targets WHERE plan_id=? AND period_type=? AND year=?
     AND coalesce(month,0)=? AND coalesce(week,0)=? AND coalesce(officer_id,'')=? AND coalesce(region_id,'')=?`,
@@ -158,30 +164,32 @@ export function createTarget(db, user, planId, payload, ip) {
   assert(!duplicate, 409, "DUPLICATE", "Chỉ tiêu cho kỳ và đối tượng này đã tồn tại.");
   const id = randomUUID();
   const now = Date.now();
-  return transaction(db, () => {
-    db.prepare(
-      `INSERT INTO inspection_targets(
+  return await transaction(db, async () => {
+    await db
+      .prepare(
+        `INSERT INTO inspection_targets(
       id,plan_id,parent_id,period_type,year,month,week,officer_id,region_id,target_count,
       created_by,updated_by,created_at,updated_at
     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    ).run(
-      id,
-      planId,
-      parentId,
-      periodType,
-      plan.year,
-      month,
-      week,
-      officerId,
-      regionId,
-      targetCount,
-      user.id,
-      user.id,
-      now,
-      now,
-    );
-    const target = db.prepare("SELECT * FROM inspection_targets WHERE id=?").get(id);
-    writeAudit(db, {
+      )
+      .run(
+        id,
+        planId,
+        parentId,
+        periodType,
+        plan.year,
+        month,
+        week,
+        officerId,
+        regionId,
+        targetCount,
+        user.id,
+        user.id,
+        now,
+        now,
+      );
+    const target = await db.prepare("SELECT * FROM inspection_targets WHERE id=?").get(id);
+    await writeAudit(db, {
       actorId: user.id,
       feature: "M06.planning",
       objectType: "inspection_target",

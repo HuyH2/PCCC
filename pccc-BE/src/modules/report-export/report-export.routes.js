@@ -11,8 +11,8 @@ import {
 
 const EXPORT_ID = /^\/api\/report-export\/exports\/([a-zA-Z0-9-]+)\/file$/;
 
-function downloadFile(ctx, id) {
-  const file = downloadReportFile(ctx.db, ctx.user, id);
+async function downloadFile(ctx, id) {
+  const file = await downloadReportFile(ctx.db, ctx.user, id);
   const extension = file.file_name.toLowerCase().endsWith(".pdf") ? ".pdf" : ".xlsx";
   const { response } = ctx;
   response.statusCode = 200;
@@ -32,17 +32,17 @@ export const reportExportRoutes = [
   {
     method: "GET",
     path: "/api/report-export/types",
-    handle: (ctx) => listReportTypes(ctx.db, ctx.user),
+    handle: async (ctx) => await listReportTypes(ctx.db, ctx.user),
   },
   {
     method: "GET",
     path: "/api/report-export/options",
-    handle: (ctx) => reportOptions(ctx.db, ctx.user),
+    handle: async (ctx) => await reportOptions(ctx.db, ctx.user),
   },
   {
     method: "GET",
     path: "/api/report-export/templates",
-    handle: (ctx) => listReportTemplates(ctx.db, ctx.user, ctx.url),
+    handle: async (ctx) => await listReportTemplates(ctx.db, ctx.user, ctx.url),
   },
   {
     method: "POST",
@@ -50,13 +50,13 @@ export const reportExportRoutes = [
     async handle(ctx) {
       const payload = await ctx.readJson();
       ctx.status = 201;
-      return { item: createReportTemplate(ctx.db, ctx.user, payload, ctx.ip) };
+      return { item: await createReportTemplate(ctx.db, ctx.user, payload, ctx.ip) };
     },
   },
   {
     method: "GET",
     path: "/api/report-export/preview",
-    handle: (ctx) => previewReport(ctx.db, ctx.user, ctx.url),
+    handle: async (ctx) => await previewReport(ctx.db, ctx.user, ctx.url),
   },
   {
     method: "POST",
@@ -64,17 +64,17 @@ export const reportExportRoutes = [
     async handle(ctx) {
       const payload = await ctx.readJson();
       ctx.status = 201;
-      return createReportExport(ctx.db, ctx.user, payload, ctx.ip);
+      return await createReportExport(ctx.db, ctx.user, payload, ctx.ip);
     },
   },
   {
     method: "GET",
     path: "/api/report-export/exports",
-    handle: (ctx) => listReportExports(ctx.db, ctx.user, ctx.url),
+    handle: async (ctx) => await listReportExports(ctx.db, ctx.user, ctx.url),
   },
   {
     method: "GET",
     path: EXPORT_ID,
-    handle: (ctx, match) => downloadFile(ctx, match[1]),
+    handle: async (ctx, match) => await downloadFile(ctx, match[1]),
   },
 ];

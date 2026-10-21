@@ -11,15 +11,15 @@ const password = "Work-kpi-test-2026";
 const origin = "http://localhost:3000";
 
 async function fixture(t) {
-  const db = openDatabase(":memory:");
+  const db = await openDatabase(":memory:");
   await seedDemo(db, password);
-  db.exec("UPDATE accounts SET must_change_password=0");
+  await db.exec("UPDATE accounts SET must_change_password=0");
   const server = createApp(db);
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   t.after(async () => {
     await new Promise((resolve) => server.close(resolve));
-    db.close();
+    await db.close();
   });
   const base = `http://127.0.0.1:${server.address().port}`;
   async function request(path, { method = "GET", cookie, body } = {}) {
@@ -51,10 +51,13 @@ async function fixture(t) {
 
 test("migration adds KPI, explanation, assignment and progress structures", async (t) => {
   const { db } = await fixture(t);
-  const tables = db
-    .prepare("SELECT name FROM sqlite_master WHERE type='table'")
-    .all()
-    .map((row) => row.name);
+  const tables = (
+    await db
+      .prepare(
+        "SELECT table_name AS name FROM information_schema.tables WHERE table_schema='public'",
+      )
+      .all()
+  ).map((row) => row.name);
   for (const table of [
     "task_assignments",
     "task_progress",
@@ -64,14 +67,17 @@ test("migration adds KPI, explanation, assignment and progress structures", asyn
   ])
     assert.ok(tables.includes(table), `missing ${table}`);
   assert.equal(
-    db.prepare("SELECT count(*) AS n FROM task_assignments WHERE ended_at IS NULL").get().n,
+    (await db.prepare("SELECT count(*) AS n FROM task_assignments WHERE ended_at IS NULL").get()).n,
     7,
   );
   assert.ok(
-    db
-      .prepare("PRAGMA table_info(tasks)")
-      .all()
-      .some((column) => column.name === "completed_at"),
+    (
+      await db
+        .prepare(
+          "SELECT column_name AS name FROM information_schema.columns WHERE table_name='tasks'",
+        )
+        .all()
+    ).some((column) => column.name === "completed_at"),
   );
 });
 
@@ -134,9 +140,13 @@ test("task filters, completion and KPI debt/explanation flow", async (t) => {
     assert.equal(created.status, 201);
     createdIds.push(created.data.task.id);
     assert.equal(
-      db
-        .prepare("SELECT count(*) AS n FROM task_assignments WHERE task_id=? AND ended_at IS NULL")
-        .get(created.data.task.id).n,
+      (
+        await db
+          .prepare(
+            "SELECT count(*) AS n FROM task_assignments WHERE task_id=? AND ended_at IS NULL",
+          )
+          .get(created.data.task.id)
+      ).n,
       1,
     );
   }

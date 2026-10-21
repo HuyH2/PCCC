@@ -110,15 +110,15 @@ export function officerScope(principal, alias = "o") {
   };
 }
 
-function scopedRow(db, table, alias, scope, id, message) {
-  const row = db
+async function scopedRow(db, table, alias, scope, id, message) {
+  const row = await db
     .prepare(`SELECT ${alias}.* FROM ${table} ${alias} WHERE ${scope.sql} AND ${alias}.id=?`)
     .get(...scope.params, id);
   assert(row, 404, "NOT_FOUND", message);
   return row;
 }
-const findUnit = (db, principal, id, write = false) =>
-  scopedRow(
+const findUnit = async (db, principal, id, write = false) =>
+  await scopedRow(
     db,
     "units",
     "u",
@@ -126,8 +126,8 @@ const findUnit = (db, principal, id, write = false) =>
     id,
     "Không tìm thấy đơn vị trong phạm vi được cấp.",
   );
-const findRegion = (db, principal, id, write = false) =>
-  scopedRow(
+const findRegion = async (db, principal, id, write = false) =>
+  await scopedRow(
     db,
     "regions",
     "r",
@@ -135,8 +135,8 @@ const findRegion = (db, principal, id, write = false) =>
     id,
     "Không tìm thấy khu phố trong phạm vi được cấp.",
   );
-const findOfficer = (db, principal, id) =>
-  scopedRow(
+const findOfficer = async (db, principal, id) =>
+  await scopedRow(
     db,
     "officers",
     "o",
@@ -183,13 +183,13 @@ function date(value) {
   return value;
 }
 
-function officerSnapshot(db, row) {
-  const related = db
+async function officerSnapshot(db, row) {
+  const related = await db
     .prepare(
       "SELECT u.name unit_name,r.name role_name FROM units u JOIN roles r ON r.code=? WHERE u.id=?",
     )
     .get(row.business_role, row.unit_id);
-  const links = db
+  const links = await db
     .prepare(
       "SELECT count(*) total,sum(CASE WHEN status='active' THEN 1 ELSE 0 END) active FROM accounts WHERE officer_id=?",
     )
@@ -217,59 +217,60 @@ function officerSnapshot(db, row) {
   };
 }
 
-function officerRows(db, scope, suffix, suffixParams = []) {
-  return db
-    .prepare(
-      `SELECT o.*,u.name unit_name,r.name role_name,
+async function officerRows(db, scope, suffix, suffixParams = []) {
+  return (
+    await db
+      .prepare(
+        `SELECT o.*,u.name unit_name,r.name role_name,
     (SELECT count(*) FROM accounts a WHERE a.officer_id=o.id) link_total,
     (SELECT count(*) FROM accounts a WHERE a.officer_id=o.id AND a.status='active') link_active
     FROM officers o JOIN units u ON u.id=o.unit_id JOIN roles r ON r.code=o.business_role
     WHERE ${scope.sql} ${suffix}`,
-    )
-    .all(...scope.params, ...suffixParams)
-    .map((r) => ({
-      id: r.id,
-      officerCode: r.officer_code,
-      fullName: r.full_name,
-      rank: r.rank,
-      position: r.position,
-      phone: r.phone,
-      email: r.email,
-      notes: r.notes,
-      unitId: r.unit_id,
-      unitName: r.unit_name,
-      businessRole: r.business_role,
-      businessRoleName: r.role_name,
-      status: r.status,
-      statusReason: r.status_reason,
-      statusEffectiveDate: r.status_effective_date,
-      createdAt: r.created_at,
-      updatedAt: r.updated_at,
-      linkedAccountCount: r.link_total,
-      linkedActiveAccountCount: r.link_active,
-    }));
+      )
+      .all(...scope.params, ...suffixParams)
+  ).map((r) => ({
+    id: r.id,
+    officerCode: r.officer_code,
+    fullName: r.full_name,
+    rank: r.rank,
+    position: r.position,
+    phone: r.phone,
+    email: r.email,
+    notes: r.notes,
+    unitId: r.unit_id,
+    unitName: r.unit_name,
+    businessRole: r.business_role,
+    businessRoleName: r.role_name,
+    status: r.status,
+    statusReason: r.status_reason,
+    statusEffectiveDate: r.status_effective_date,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    linkedAccountCount: r.link_total,
+    linkedActiveAccountCount: r.link_active,
+  }));
 }
 
-function nodeSnapshot(db, principal, row, kind, counts = true, context = null) {
+async function nodeSnapshot(db, principal, row, kind, counts = true, context = null) {
   const parentId = kind === "unit" ? row.parent_id : row.unit_id;
   const parent = parentId
     ? context
       ? context.units.get(parentId)
-      : db.prepare("SELECT name,level FROM units WHERE id=?").get(parentId)
+      : await db.prepare("SELECT name,level FROM units WHERE id=?").get(parentId)
     : null;
   // Only expose leader identity if the officer itself is inside the caller's scope.
   const leaderScope = officerScope(principal);
   const leader = row.leader_officer_id
     ? context
       ? context.officers.get(row.leader_officer_id)
-      : db
+      : await db
           .prepare(`SELECT id,full_name FROM officers o WHERE ${leaderScope.sql} AND o.id=?`)
           .get(...leaderScope.params, row.leader_officer_id)
     : null;
   const writable = kind === "unit" ? unitWriteScope(principal) : regionScope(principal, "r", true);
   const editable = context
     ? (kind === "unit" ? context.writableUnits : context.writableRegions).has(row.id)
-    : db
+    : await db
         .prepare(
           `SELECT 1 FROM ${kind === "unit" ? "units u" : "regions r"} WHERE ${writable.sql} AND ${kind === "unit" ? "u" : "r"}.id=?`,
         )
@@ -301,16 +302,20 @@ function nodeSnapshot(db, principal, row, kind, counts = true, context = null) {
     }
     const facilities = facilityScope(principal),
       officers = officerScope(principal);
-    result.facilityCount = db
-      .prepare(
-        `SELECT count(*) total FROM facilities f WHERE ${facilities.sql} AND ${kind === "unit" ? `f.region_id IN (SELECT id FROM regions WHERE unit_id IN (${descendants}))` : "f.region_id=?"}`,
-      )
-      .get(...facilities.params, row.id).total;
-    result.officerCount = db
-      .prepare(
-        `SELECT count(*) total FROM officers o WHERE ${officers.sql} AND ${kind === "unit" ? `o.unit_id IN (${descendants})` : `EXISTS(SELECT 1 FROM facilities f WHERE ${facilities.sql} AND f.region_id=? AND f.officer_id=o.id)`}`,
-      )
-      .get(...officers.params, ...(kind === "region" ? facilities.params : []), row.id).total;
+    result.facilityCount = (
+      await db
+        .prepare(
+          `SELECT count(*) total FROM facilities f WHERE ${facilities.sql} AND ${kind === "unit" ? `f.region_id IN (SELECT id FROM regions WHERE unit_id IN (${descendants}))` : "f.region_id=?"}`,
+        )
+        .get(...facilities.params, row.id)
+    ).total;
+    result.officerCount = (
+      await db
+        .prepare(
+          `SELECT count(*) total FROM officers o WHERE ${officers.sql} AND ${kind === "unit" ? `o.unit_id IN (${descendants})` : `EXISTS(SELECT 1 FROM facilities f WHERE ${facilities.sql} AND f.region_id=? AND f.officer_id=o.id)`}`,
+        )
+        .get(...officers.params, ...(kind === "region" ? facilities.params : []), row.id)
+    ).total;
   }
   return result;
 }
@@ -332,25 +337,27 @@ function nodeAuditSnapshot(row, kind) {
 }
 
 /** One scoped batch per relation, independent of how many tree or lookup rows exist. */
-function nodeContext(db, principal) {
+async function nodeContext(db, principal) {
   const readableUnits = unitReadScope(principal),
     writableUnits = unitWriteScope(principal),
     writableRegions = regionScope(principal, "r", true),
     visibleOfficers = officerScope(principal),
     visibleFacilities = facilityScope(principal);
   const units = new Map(
-    db
-      .prepare(`SELECT u.id,u.name,u.level,u.parent_id FROM units u WHERE ${readableUnits.sql}`)
-      .all(...readableUnits.params)
-      .map((r) => [r.id, r]),
+    (
+      await db
+        .prepare(`SELECT u.id,u.name,u.level,u.parent_id FROM units u WHERE ${readableUnits.sql}`)
+        .all(...readableUnits.params)
+    ).map((r) => [r.id, r]),
   );
   const officers = new Map(
-    db
-      .prepare(`SELECT o.id,o.full_name,o.unit_id FROM officers o WHERE ${visibleOfficers.sql}`)
-      .all(...visibleOfficers.params)
-      .map((r) => [r.id, r]),
+    (
+      await db
+        .prepare(`SELECT o.id,o.full_name,o.unit_id FROM officers o WHERE ${visibleOfficers.sql}`)
+        .all(...visibleOfficers.params)
+    ).map((r) => [r.id, r]),
   );
-  const facilities = db
+  const facilities = await db
     .prepare(
       `SELECT f.id,f.officer_id,f.region_id,r.unit_id FROM facilities f JOIN regions r ON r.id=f.region_id WHERE ${visibleFacilities.sql}`,
     )
@@ -387,21 +394,23 @@ function nodeContext(db, principal) {
     unitCounts,
     regionCounts,
     writableUnits: new Set(
-      db
-        .prepare(`SELECT u.id FROM units u WHERE ${writableUnits.sql}`)
-        .all(...writableUnits.params)
-        .map((r) => r.id),
+      (
+        await db
+          .prepare(`SELECT u.id FROM units u WHERE ${writableUnits.sql}`)
+          .all(...writableUnits.params)
+      ).map((r) => r.id),
     ),
     writableRegions: new Set(
-      db
-        .prepare(`SELECT r.id FROM regions r WHERE ${writableRegions.sql}`)
-        .all(...writableRegions.params)
-        .map((r) => r.id),
+      (
+        await db
+          .prepare(`SELECT r.id FROM regions r WHERE ${writableRegions.sql}`)
+          .all(...writableRegions.params)
+      ).map((r) => r.id),
     ),
   };
 }
 
-function validateOfficer(db, principal, payload, before) {
+async function validateOfficer(db, principal, payload, before) {
   object(payload, officerFields.concat(before ? [] : ["status"]));
   assert(Object.keys(payload).length > 0, 400, "INVALID_INPUT", "Chưa có thông tin cần lưu.");
   if (!before && payload.status !== undefined)
@@ -442,7 +451,7 @@ function validateOfficer(db, principal, payload, before) {
   merged.unitId = idValue(merged.unitId, "Đơn vị");
   merged.businessRole = idValue(merged.businessRole, "Vai trò nghiệp vụ");
   assert(
-    db
+    await db
       .prepare("SELECT 1 FROM roles WHERE code=? AND enabled=1 AND code<>'A07'")
       .get(merged.businessRole),
     400,
@@ -451,19 +460,17 @@ function validateOfficer(db, principal, payload, before) {
   );
   const changedUnit = !before || before.unit_id !== merged.unitId;
   const unit = changedUnit
-    ? findUnit(db, principal, merged.unitId, true)
-    : db.prepare("SELECT * FROM units WHERE id=?").get(merged.unitId);
+    ? await findUnit(db, principal, merged.unitId, true)
+    : await db.prepare("SELECT * FROM units WHERE id=?").get(merged.unitId);
   assert(
     unit && (unit.status === "ACTIVE" || (!changedUnit && before.status !== "ACTIVE")),
     409,
     "INACTIVE_PARENT",
     "Cán bộ đang công tác phải thuộc đơn vị hoạt động.",
   );
-  if (before && changedUnit) assertNoResponsibilities(db, before.id);
-  const duplicate = db
-    .prepare(
-      "SELECT officer_code,email FROM officers WHERE id<>? AND (officer_code=? COLLATE NOCASE OR email=? COLLATE NOCASE)",
-    )
+  if (before && changedUnit) await assertNoResponsibilities(db, before.id);
+  const duplicate = await db
+    .prepare("SELECT officer_code,email FROM officers WHERE id<>? AND (officer_code=? OR email=?)")
     .get(before?.id ?? "", merged.officerCode, merged.email);
   if (duplicate)
     throw new ApiError(
@@ -478,8 +485,8 @@ function validateOfficer(db, principal, payload, before) {
   return merged;
 }
 
-function assertNoResponsibilities(db, officerId) {
-  const involved = db
+async function assertNoResponsibilities(db, officerId) {
+  const involved = await db
     .prepare(
       `SELECT
     (SELECT count(*) FROM units WHERE leader_officer_id=? AND status='ACTIVE') units,
@@ -498,9 +505,9 @@ function assertNoResponsibilities(db, officerId) {
   );
 }
 
-function validateLeader(db, principal, officerId, unitId) {
+async function validateLeader(db, principal, officerId, unitId) {
   if (officerId === null) return;
-  const officer = findOfficer(db, principal, officerId);
+  const officer = await findOfficer(db, principal, officerId);
   assert(
     officer.status === "ACTIVE",
     409,
@@ -508,7 +515,7 @@ function validateLeader(db, principal, officerId, unitId) {
     "Người phụ trách phải đang công tác.",
   );
   assert(
-    db
+    await db
       .prepare(`SELECT 1 FROM units WHERE id=? AND id IN (${ancestors})`)
       .get(officer.unit_id, unitId),
     400,
@@ -517,8 +524,8 @@ function validateLeader(db, principal, officerId, unitId) {
   );
 }
 
-function assertUnitDeactivation(db, id) {
-  const counts = db
+async function assertUnitDeactivation(db, id) {
+  const counts = await db
     .prepare(
       `SELECT
     (SELECT count(*) FROM units WHERE parent_id=? AND status='ACTIVE') children,
@@ -541,8 +548,8 @@ function assertUnitDeactivation(db, id) {
   );
 }
 
-function assertRegionDeactivation(db, id) {
-  const counts = db
+async function assertRegionDeactivation(db, id) {
+  const counts = await db
     .prepare(
       `SELECT
     (SELECT count(*) FROM facilities WHERE region_id=? AND status='active') facilities,
@@ -558,8 +565,8 @@ function assertRegionDeactivation(db, id) {
   );
 }
 
-function assertUnreferencedUnit(db, id) {
-  const counts = db
+async function assertUnreferencedUnit(db, id) {
+  const counts = await db
     .prepare(
       `SELECT
     (SELECT count(*) FROM units WHERE id IN (${descendants}) AND leader_officer_id IS NOT NULL) leaders,
@@ -579,7 +586,7 @@ function assertUnreferencedUnit(db, id) {
   );
 }
 
-function validateNode(db, principal, payload, before, kind) {
+async function validateNode(db, principal, payload, before, kind) {
   object(payload, nodeFields);
   assert(Object.keys(payload).length > 0, 400, "INVALID_INPUT", "Chưa có thông tin cần lưu.");
   const data = {
@@ -620,8 +627,8 @@ function validateNode(db, principal, payload, before, kind) {
     "Đơn vị không thể làm cha chính nó.",
   );
   const parent = parentChanged
-    ? findUnit(db, principal, data.parentId, true)
-    : db.prepare("SELECT * FROM units WHERE id=?").get(data.parentId);
+    ? await findUnit(db, principal, data.parentId, true)
+    : await db.prepare("SELECT * FROM units WHERE id=?").get(data.parentId);
   assert(parent, 400, "INVALID_PARENT", "Đơn vị cha không tồn tại.");
   assert(
     data.status !== "ACTIVE" || parent.status === "ACTIVE",
@@ -640,16 +647,16 @@ function validateNode(db, principal, payload, before, kind) {
   if (before && parentChanged) {
     if (kind === "unit") {
       assert(
-        !db
+        !(await db
           .prepare(`SELECT 1 FROM units WHERE id=? AND id IN (${descendants})`)
-          .get(data.parentId, before.id),
+          .get(data.parentId, before.id)),
         400,
         "INVALID_HIERARCHY",
         "Không thể tạo vòng lặp cha/con.",
       );
-      assertUnreferencedUnit(db, before.id);
+      await assertUnreferencedUnit(db, before.id);
     } else {
-      const linked = db
+      const linked = await db
         .prepare(
           `SELECT 1 FROM facilities WHERE region_id=? UNION SELECT 1 FROM account_scopes WHERE region_id=?
            UNION SELECT 1 FROM incidents WHERE region_id=? OR facility_id IN (SELECT id FROM facilities WHERE region_id=?) LIMIT 1`,
@@ -670,7 +677,7 @@ function validateNode(db, principal, payload, before, kind) {
     parentChanged ||
     data.status !== before.status
   )
-    validateLeader(
+    await validateLeader(
       db,
       principal,
       data.leaderOfficerId,
@@ -678,13 +685,13 @@ function validateNode(db, principal, payload, before, kind) {
     );
   if (data.status === "INACTIVE" && before?.status === "ACTIVE")
     kind === "unit"
-      ? assertUnitDeactivation(db, before.id)
-      : assertRegionDeactivation(db, before.id);
+      ? await assertUnitDeactivation(db, before.id)
+      : await assertRegionDeactivation(db, before.id);
   const table = kind === "unit" ? "units" : "regions";
   assert(
-    !db
-      .prepare(`SELECT 1 FROM ${table} WHERE code=? COLLATE NOCASE AND id<>?`)
-      .get(data.code, before?.id ?? ""),
+    !(await db
+      .prepare(`SELECT 1 FROM ${table} WHERE code=? AND id<>?`)
+      .get(data.code, before?.id ?? "")),
     409,
     "DUPLICATE_CODE",
     "Mã đơn vị/khu phố đã tồn tại.",
@@ -692,9 +699,9 @@ function validateNode(db, principal, payload, before, kind) {
   return data;
 }
 
-function writeWithAudit(db, work) {
+async function writeWithAudit(db, work) {
   try {
-    return transaction(db, work);
+    return await transaction(db, work);
   } catch (error) {
     if (error instanceof ApiError) throw error;
     // Database unique constraints also cover simultaneous requests, not just prechecks.
@@ -710,62 +717,72 @@ function writeWithAudit(db, work) {
   }
 }
 
-export function createOfficer(db, principal, payload, ip) {
+export async function createOfficer(db, principal, payload, ip) {
   requirePermission(principal, "M02.create");
-  return writeWithAudit(db, () => {
-    const data = validateOfficer(db, principal, payload);
+  return await writeWithAudit(db, async () => {
+    const data = await validateOfficer(db, principal, payload);
     const id = randomUUID(),
       now = Date.now();
-    db.prepare(
-      `INSERT INTO officers(id,officer_code,full_name,rank,position,phone,email,notes,unit_id,business_role,created_at,updated_at)
+    await db
+      .prepare(
+        `INSERT INTO officers(id,officer_code,full_name,rank,position,phone,email,notes,unit_id,business_role,created_at,updated_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-    ).run(
-      id,
-      data.officerCode,
-      data.fullName,
-      data.rank,
-      data.position,
-      data.phone,
-      data.email,
-      data.notes,
-      data.unitId,
-      data.businessRole,
-      now,
-      now,
+      )
+      .run(
+        id,
+        data.officerCode,
+        data.fullName,
+        data.rank,
+        data.position,
+        data.phone,
+        data.email,
+        data.notes,
+        data.unitId,
+        data.businessRole,
+        now,
+        now,
+      );
+    const after = await officerSnapshot(
+      db,
+      await db.prepare("SELECT * FROM officers WHERE id=?").get(id),
     );
-    const after = officerSnapshot(db, db.prepare("SELECT * FROM officers WHERE id=?").get(id));
-    audit(db, principal.id, "organization.officer_created", id, null, after, ip);
+    await audit(db, principal.id, "organization.officer_created", id, null, after, ip);
     return after;
   });
 }
 
-export function updateOfficer(db, principal, id, payload, ip) {
+export async function updateOfficer(db, principal, id, payload, ip) {
   requirePermission(principal, "M02.edit");
-  return writeWithAudit(db, () => {
-    const before = findOfficer(db, principal, id);
-    const data = validateOfficer(db, principal, payload, before);
-    db.prepare(
-      `UPDATE officers SET officer_code=?,full_name=?,rank=?,position=?,phone=?,email=?,notes=?,unit_id=?,business_role=?,updated_at=? WHERE id=?`,
-    ).run(
-      data.officerCode,
-      data.fullName,
-      data.rank,
-      data.position,
-      data.phone,
-      data.email,
-      data.notes,
-      data.unitId,
-      data.businessRole,
-      Date.now(),
-      id,
+  return await writeWithAudit(db, async () => {
+    const before = await findOfficer(db, principal, id);
+    const data = await validateOfficer(db, principal, payload, before);
+    await db
+      .prepare(
+        `UPDATE officers SET officer_code=?,full_name=?,rank=?,position=?,phone=?,email=?,notes=?,unit_id=?,business_role=?,updated_at=? WHERE id=?`,
+      )
+      .run(
+        data.officerCode,
+        data.fullName,
+        data.rank,
+        data.position,
+        data.phone,
+        data.email,
+        data.notes,
+        data.unitId,
+        data.businessRole,
+        Date.now(),
+        id,
+      );
+    const after = await officerSnapshot(
+      db,
+      await db.prepare("SELECT * FROM officers WHERE id=?").get(id),
     );
-    const after = officerSnapshot(db, db.prepare("SELECT * FROM officers WHERE id=?").get(id));
-    audit(
+    await audit(
       db,
       principal.id,
       "organization.officer_updated",
       id,
-      officerSnapshot(db, before),
+      await officerSnapshot(db, before),
       after,
       ip,
     );
@@ -773,33 +790,38 @@ export function updateOfficer(db, principal, id, payload, ip) {
   });
 }
 
-export function changeOfficerStatus(db, principal, id, payload, ip) {
+export async function changeOfficerStatus(db, principal, id, payload, ip) {
   requirePermission(principal, "M02.edit");
   object(payload, ["status", "reason", "effectiveDate"]);
   const newStatus = status(payload.status, ["ACTIVE", "INACTIVE", "TRANSFERRED"]);
   const reason = trimmed(payload.reason, "Lý do", 1, 1000),
     effectiveDate = date(payload.effectiveDate);
-  return writeWithAudit(db, () => {
-    const before = findOfficer(db, principal, id);
+  return await writeWithAudit(db, async () => {
+    const before = await findOfficer(db, principal, id);
     assert(before.status !== newStatus, 409, "UNCHANGED_STATUS", "Cán bộ đã có trạng thái này.");
-    if (newStatus !== "ACTIVE") assertNoResponsibilities(db, id);
+    if (newStatus !== "ACTIVE") await assertNoResponsibilities(db, id);
     else
       assert(
-        db.prepare("SELECT 1 FROM units WHERE id=? AND status='ACTIVE'").get(before.unit_id),
+        await db.prepare("SELECT 1 FROM units WHERE id=? AND status='ACTIVE'").get(before.unit_id),
         409,
         "INACTIVE_PARENT",
         "Phải kích hoạt đơn vị trước khi khôi phục công tác.",
       );
-    db.prepare(
-      "UPDATE officers SET status=?,status_reason=?,status_effective_date=?,updated_at=? WHERE id=?",
-    ).run(newStatus, reason, effectiveDate, Date.now(), id);
-    const after = officerSnapshot(db, db.prepare("SELECT * FROM officers WHERE id=?").get(id));
-    audit(
+    await db
+      .prepare(
+        "UPDATE officers SET status=?,status_reason=?,status_effective_date=?,updated_at=? WHERE id=?",
+      )
+      .run(newStatus, reason, effectiveDate, Date.now(), id);
+    const after = await officerSnapshot(
+      db,
+      await db.prepare("SELECT * FROM officers WHERE id=?").get(id),
+    );
+    await audit(
       db,
       principal.id,
       "organization.officer_status_changed",
       id,
-      officerSnapshot(db, before),
+      await officerSnapshot(db, before),
       after,
       ip,
     );
@@ -807,65 +829,71 @@ export function changeOfficerStatus(db, principal, id, payload, ip) {
   });
 }
 
-export function saveNode(db, principal, kind, id, payload, ip) {
+export async function saveNode(db, principal, kind, id, payload, ip) {
   requirePermission(principal, id ? "M02.edit" : "M02.create");
-  return writeWithAudit(db, () => {
+  return await writeWithAudit(db, async () => {
     const before = id
       ? kind === "unit"
-        ? findUnit(db, principal, id, true)
-        : findRegion(db, principal, id, true)
+        ? await findUnit(db, principal, id, true)
+        : await findRegion(db, principal, id, true)
       : null;
     assert(before?.level !== "ROOT", 409, "READ_ONLY_ROOT", "PC07 là danh mục gốc chỉ đọc.");
-    const data = validateNode(db, principal, payload, before, kind);
+    const data = await validateNode(db, principal, payload, before, kind);
     const target = id ?? randomUUID(),
       now = Date.now(),
       table = kind === "unit" ? "units" : "regions",
       parentColumn = kind === "unit" ? "parent_id" : "unit_id";
     if (id)
-      db.prepare(
-        `UPDATE ${table} SET code=?,name=?,${parentColumn}=?,leader_officer_id=?,status=?,notes=?,updated_at=? WHERE id=?`,
-      ).run(
-        data.code,
-        data.name,
-        data.parentId,
-        data.leaderOfficerId,
-        data.status,
-        data.notes,
-        now,
-        id,
-      );
+      await db
+        .prepare(
+          `UPDATE ${table} SET code=?,name=?,${parentColumn}=?,leader_officer_id=?,status=?,notes=?,updated_at=? WHERE id=?`,
+        )
+        .run(
+          data.code,
+          data.name,
+          data.parentId,
+          data.leaderOfficerId,
+          data.status,
+          data.notes,
+          now,
+          id,
+        );
     else if (kind === "unit")
-      db.prepare(
-        "INSERT INTO units(id,code,name,level,parent_id,leader_officer_id,status,notes,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-      ).run(
-        target,
-        data.code,
-        data.name,
-        data.level,
-        data.parentId,
-        data.leaderOfficerId,
-        data.status,
-        data.notes,
-        now,
-        now,
-      );
+      await db
+        .prepare(
+          "INSERT INTO units(id,code,name,level,parent_id,leader_officer_id,status,notes,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        )
+        .run(
+          target,
+          data.code,
+          data.name,
+          data.level,
+          data.parentId,
+          data.leaderOfficerId,
+          data.status,
+          data.notes,
+          now,
+          now,
+        );
     else
-      db.prepare(
-        "INSERT INTO regions(id,code,name,unit_id,leader_officer_id,status,notes,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
-      ).run(
-        target,
-        data.code,
-        data.name,
-        data.parentId,
-        data.leaderOfficerId,
-        data.status,
-        data.notes,
-        now,
-        now,
-      );
-    const afterRow = db.prepare(`SELECT * FROM ${table} WHERE id=?`).get(target);
-    const after = nodeSnapshot(db, principal, afterRow, kind);
-    audit(
+      await db
+        .prepare(
+          "INSERT INTO regions(id,code,name,unit_id,leader_officer_id,status,notes,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+        )
+        .run(
+          target,
+          data.code,
+          data.name,
+          data.parentId,
+          data.leaderOfficerId,
+          data.status,
+          data.notes,
+          now,
+          now,
+        );
+    const afterRow = await db.prepare(`SELECT * FROM ${table} WHERE id=?`).get(target);
+    const after = await nodeSnapshot(db, principal, afterRow, kind);
+    await audit(
       db,
       principal.id,
       `organization.${kind}_${id ? "updated" : "created"}`,
@@ -878,13 +906,15 @@ export function saveNode(db, principal, kind, id, payload, ip) {
   });
 }
 
-export function changeNodeStatus(db, principal, kind, id, payload, ip) {
+export async function changeNodeStatus(db, principal, kind, id, payload, ip) {
   object(payload, ["status"]);
   requirePermission(principal, "M02.edit");
   status(payload.status);
-  return writeWithAudit(db, () => {
+  return await writeWithAudit(db, async () => {
     const before =
-      kind === "unit" ? findUnit(db, principal, id, true) : findRegion(db, principal, id, true);
+      kind === "unit"
+        ? await findUnit(db, principal, id, true)
+        : await findRegion(db, principal, id, true);
     assert(before.level !== "ROOT", 409, "READ_ONLY_ROOT", "PC07 là danh mục gốc chỉ đọc.");
     assert(
       before.status !== payload.status,
@@ -892,11 +922,13 @@ export function changeNodeStatus(db, principal, kind, id, payload, ip) {
       "UNCHANGED_STATUS",
       "Đơn vị/khu phố đã có trạng thái này.",
     );
-    const parent = db
+    const parent = await db
       .prepare("SELECT * FROM units WHERE id=?")
       .get(kind === "unit" ? before.parent_id : before.unit_id);
     if (payload.status === "INACTIVE")
-      kind === "unit" ? assertUnitDeactivation(db, id) : assertRegionDeactivation(db, id);
+      kind === "unit"
+        ? await assertUnitDeactivation(db, id)
+        : await assertRegionDeactivation(db, id);
     else {
       assert(
         parent?.status === "ACTIVE",
@@ -904,7 +936,7 @@ export function changeNodeStatus(db, principal, kind, id, payload, ip) {
         "INACTIVE_PARENT",
         "Phải kích hoạt đơn vị cha trước.",
       );
-      validateLeader(
+      await validateLeader(
         db,
         principal,
         before.leader_officer_id,
@@ -912,14 +944,12 @@ export function changeNodeStatus(db, principal, kind, id, payload, ip) {
       );
     }
     const table = kind === "unit" ? "units" : "regions";
-    db.prepare(`UPDATE ${table} SET status=?,updated_at=? WHERE id=?`).run(
-      payload.status,
-      Date.now(),
-      id,
-    );
-    const afterRow = db.prepare(`SELECT * FROM ${table} WHERE id=?`).get(id);
-    const after = nodeSnapshot(db, principal, afterRow, kind);
-    audit(
+    await db
+      .prepare(`UPDATE ${table} SET status=?,updated_at=? WHERE id=?`)
+      .run(payload.status, Date.now(), id);
+    const afterRow = await db.prepare(`SELECT * FROM ${table} WHERE id=?`).get(id);
+    const after = await nodeSnapshot(db, principal, afterRow, kind);
+    await audit(
       db,
       principal.id,
       `organization.${kind}_status_changed`,
@@ -932,31 +962,33 @@ export function changeNodeStatus(db, principal, kind, id, payload, ip) {
   });
 }
 
-export function organizationTree(db, principal) {
+export async function organizationTree(db, principal) {
   requirePermission(principal, "M02.view");
   const units = unitReadScope(principal),
     regions = regionScope(principal),
     officers = officerScope(principal);
-  const context = nodeContext(db, principal);
-  const items = db
+  const context = await nodeContext(db, principal);
+  const unitRows = await db
     .prepare(`SELECT u.* FROM units u WHERE ${units.sql} ORDER BY u.code,u.id`)
-    .all(...units.params)
-    .map((r) => nodeSnapshot(db, principal, r, "unit", true, context));
-  items.push(
-    ...db
-      .prepare(`SELECT r.* FROM regions r WHERE ${regions.sql} ORDER BY r.code,r.id`)
-      .all(...regions.params)
-      .map((r) => nodeSnapshot(db, principal, r, "region", true, context)),
-  );
+    .all(...units.params);
+  const regionRows = await db
+    .prepare(`SELECT r.* FROM regions r WHERE ${regions.sql} ORDER BY r.code,r.id`)
+    .all(...regions.params);
+  const items = await Promise.all([
+    ...unitRows.map(async (r) => await nodeSnapshot(db, principal, r, "unit", true, context)),
+    ...regionRows.map(async (r) => await nodeSnapshot(db, principal, r, "region", true, context)),
+  ]);
   return {
     items,
     stats: {
       unitCount: items.filter((r) => r.kind === "unit").length,
       regionCount: items.filter((r) => r.kind === "region").length,
       activeCount: items.filter((r) => r.status === "ACTIVE").length,
-      officerCount: db
-        .prepare(`SELECT count(*) total FROM officers o WHERE ${officers.sql}`)
-        .get(...officers.params).total,
+      officerCount: (
+        await db
+          .prepare(`SELECT count(*) total FROM officers o WHERE ${officers.sql}`)
+          .get(...officers.params)
+      ).total,
     },
     permissions: {
       view: true,
@@ -966,24 +998,27 @@ export function organizationTree(db, principal) {
   };
 }
 
-export function organizationOptions(db, principal) {
+export async function organizationOptions(db, principal) {
   requirePermission(principal, "M02.view");
   const units = unitWriteScope(principal),
     officers = officerScope(principal);
-  const context = nodeContext(db, principal);
+  const context = await nodeContext(db, principal);
   return {
-    units: db
-      .prepare(`SELECT u.* FROM units u WHERE ${units.sql} ORDER BY u.name,u.id`)
-      .all(...units.params)
-      .map((r) => nodeSnapshot(db, principal, r, "unit", true, context)),
-    officers: officerRows(db, officers, "ORDER BY o.full_name,o.id"),
-    roles: db
+    units: await Promise.all(
+      (
+        await db
+          .prepare(`SELECT u.* FROM units u WHERE ${units.sql} ORDER BY u.name,u.id`)
+          .all(...units.params)
+      ).map(async (r) => await nodeSnapshot(db, principal, r, "unit", true, context)),
+    ),
+    officers: await officerRows(db, officers, "ORDER BY o.full_name,o.id"),
+    roles: await db
       .prepare("SELECT code,name FROM roles WHERE enabled=1 AND code<>'A07' ORDER BY code")
       .all(),
   };
 }
 
-export function listOfficers(db, principal, url) {
+export async function listOfficers(db, principal, url) {
   requirePermission(principal, "M02.view");
   const scope = officerScope(principal),
     { page, pageSize } = pagination(url);
@@ -1008,19 +1043,23 @@ export function listOfficers(db, principal, url) {
     params.push(unitId);
   }
   return {
-    items: officerRows(db, { sql, params }, "ORDER BY o.full_name,o.id LIMIT ? OFFSET ?", [
+    items: await officerRows(db, { sql, params }, "ORDER BY o.full_name,o.id LIMIT ? OFFSET ?", [
       pageSize,
       (page - 1) * pageSize,
     ]),
-    total: db
-      .prepare(`SELECT count(*) total FROM officers o JOIN units u ON u.id=o.unit_id WHERE ${sql}`)
-      .get(...params).total,
+    total: (
+      await db
+        .prepare(
+          `SELECT count(*) total FROM officers o JOIN units u ON u.id=o.unit_id WHERE ${sql}`,
+        )
+        .get(...params)
+    ).total,
     page,
     pageSize,
   };
 }
 
-export function listUnits(db, principal, url) {
+export async function listUnits(db, principal, url) {
   requirePermission(principal, "M02.view");
   const scope = unitReadScope(principal),
     { page, pageSize } = pagination(url),
@@ -1033,13 +1072,17 @@ export function listUnits(db, principal, url) {
     sql += " AND u.status=?";
     params.push(filterStatus);
   }
-  const context = nodeContext(db, principal);
+  const context = await nodeContext(db, principal);
   return {
-    items: db
-      .prepare(`SELECT u.* FROM units u WHERE ${sql} ORDER BY u.code,u.id LIMIT ? OFFSET ?`)
-      .all(...params, pageSize, (page - 1) * pageSize)
-      .map((r) => nodeSnapshot(db, principal, r, "unit", true, context)),
-    total: db.prepare(`SELECT count(*) total FROM units u WHERE ${sql}`).get(...params).total,
+    items: await Promise.all(
+      (
+        await db
+          .prepare(`SELECT u.* FROM units u WHERE ${sql} ORDER BY u.code,u.id LIMIT ? OFFSET ?`)
+          .all(...params, pageSize, (page - 1) * pageSize)
+      ).map(async (r) => await nodeSnapshot(db, principal, r, "unit", true, context)),
+    ),
+    total: (await db.prepare(`SELECT count(*) total FROM units u WHERE ${sql}`).get(...params))
+      .total,
     page,
     pageSize,
   };
@@ -1060,19 +1103,19 @@ export async function handleOrganization({
   if (!/^\/api\/(organization|units|regions|officers)(\/|$)/.test(path)) return false;
   if (method === "GET") {
     if (path === "/api/organization/tree") {
-      send(200, organizationTree(db, user));
+      send(200, await organizationTree(db, user));
       return true;
     }
     if (path === "/api/organization/options") {
-      send(200, organizationOptions(db, user));
+      send(200, await organizationOptions(db, user));
       return true;
     }
     if (path === "/api/officers") {
-      send(200, listOfficers(db, user, url));
+      send(200, await listOfficers(db, user, url));
       return true;
     }
     if (path === "/api/units") {
-      send(200, listUnits(db, user, url));
+      send(200, await listUnits(db, user, url));
       return true;
     }
     const match = path.match(/^\/api\/(units|regions|officers)\/([^/]+)$/);
@@ -1081,10 +1124,10 @@ export async function handleOrganization({
       const id = decodeURIComponent(match[2]);
       const result =
         match[1] === "officers"
-          ? { officer: officerSnapshot(db, findOfficer(db, user, id)) }
+          ? { officer: await officerSnapshot(db, await findOfficer(db, user, id)) }
           : match[1] === "units"
-            ? { unit: nodeSnapshot(db, user, findUnit(db, user, id), "unit") }
-            : { region: nodeSnapshot(db, user, findRegion(db, user, id), "region") };
+            ? { unit: await nodeSnapshot(db, user, await findUnit(db, user, id), "unit") }
+            : { region: await nodeSnapshot(db, user, await findRegion(db, user, id), "region") };
       send(200, result);
       return true;
     }
@@ -1096,20 +1139,27 @@ export async function handleOrganization({
   if (!createMatch && !updateMatch) return false;
   requirePermission(user, createMatch ? "M02.create" : "M02.edit");
   const payload = await readBody();
-  const current = authenticateAgain();
+  const current = await authenticateAgain();
   const resource = createMatch ? createMatch[1] : updateMatch[1],
     id = updateMatch ? decodeURIComponent(updateMatch[2]) : null;
   let result;
   if (resource === "officers")
     result = updateMatch?.[3]
-      ? changeOfficerStatus(db, current, id, payload, ip)
+      ? await changeOfficerStatus(db, current, id, payload, ip)
       : id
-        ? updateOfficer(db, current, id, payload, ip)
-        : createOfficer(db, current, payload, ip);
+        ? await updateOfficer(db, current, id, payload, ip)
+        : await createOfficer(db, current, payload, ip);
   else
     result = updateMatch?.[3]
-      ? changeNodeStatus(db, current, resource === "units" ? "unit" : "region", id, payload, ip)
-      : saveNode(db, current, resource === "units" ? "unit" : "region", id, payload, ip);
+      ? await changeNodeStatus(
+          db,
+          current,
+          resource === "units" ? "unit" : "region",
+          id,
+          payload,
+          ip,
+        )
+      : await saveNode(db, current, resource === "units" ? "unit" : "region", id, payload, ip);
   send(createMatch ? 201 : 200, {
     [resource === "officers" ? "officer" : resource === "units" ? "unit" : "region"]: result,
     message: createMatch ? "Đã tạo thành công." : "Đã cập nhật thành công.",

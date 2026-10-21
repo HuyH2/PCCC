@@ -19,34 +19,35 @@ export const violationsRoutes = [
   {
     method: "GET",
     path: "/api/violations",
-    handle: (ctx) =>
+    handle: async (ctx) =>
       ctx.user.permissions.includes("M04.view")
-        ? listViolations(ctx.db, ctx.user, ctx.url)
-        : listFacilityViolations(ctx.db, ctx.user, ctx.url),
+        ? await listViolations(ctx.db, ctx.user, ctx.url)
+        : await listFacilityViolations(ctx.db, ctx.user, ctx.url),
   },
   {
     method: "GET",
     path: "/api/violations/facilities",
-    handle: (ctx) => listViolationFacilities(ctx.db, ctx.user, ctx.url),
+    handle: async (ctx) => await listViolationFacilities(ctx.db, ctx.user, ctx.url),
   },
   {
     method: "POST",
     path: "/api/violations",
     handle: async (ctx) => {
       ctx.status = 201;
-      return { violation: createViolation(ctx.db, ctx.user, await ctx.readJson(), ctx.ip) };
+      return { violation: await createViolation(ctx.db, ctx.user, await ctx.readJson(), ctx.ip) };
     },
   },
   {
     method: "GET",
     path: /^\/api\/violations\/([^/]+)$/,
-    handle: (ctx, match) => violationDetail(ctx.db, ctx.user, decodeURIComponent(match[1])),
+    handle: async (ctx, match) =>
+      await violationDetail(ctx.db, ctx.user, decodeURIComponent(match[1])),
   },
   {
     method: "PUT",
     path: /^\/api\/violations\/([^/]+)$/,
     handle: async (ctx, match) => ({
-      violation: updateViolation(
+      violation: await updateViolation(
         ctx.db,
         ctx.user,
         decodeURIComponent(match[1]),
@@ -61,7 +62,7 @@ export const violationsRoutes = [
     handle: async (ctx, match) => {
       ctx.status = 201;
       return {
-        suspension: createSuspension(
+        suspension: await createSuspension(
           ctx.db,
           ctx.user,
           decodeURIComponent(match[1]),
@@ -75,7 +76,7 @@ export const violationsRoutes = [
     method: "PUT",
     path: /^\/api\/violations\/([^/]+)\/suspension$/,
     handle: async (ctx, match) => ({
-      suspension: updateSuspension(
+      suspension: await updateSuspension(
         ctx.db,
         ctx.user,
         decodeURIComponent(match[1]),
@@ -90,7 +91,7 @@ export const violationsRoutes = [
     handle: async (ctx, match) => {
       ctx.status = 201;
       return {
-        remediation: addRemediation(
+        remediation: await addRemediation(
           ctx.db,
           ctx.user,
           decodeURIComponent(match[1]),
@@ -106,7 +107,7 @@ export const violationsRoutes = [
     handle: async (ctx, match) => {
       ctx.status = 201;
       return {
-        evidence: addEvidence(
+        evidence: await addEvidence(
           ctx.db,
           ctx.user,
           decodeURIComponent(match[1]),
@@ -119,8 +120,8 @@ export const violationsRoutes = [
   {
     method: "GET",
     path: /^\/api\/violations\/([^/]+)\/evidences\/([^/]+)$/,
-    handle: (ctx, match) => {
-      const evidence = readEvidence(
+    handle: async (ctx, match) => {
+      const evidence = await readEvidence(
         ctx.db,
         ctx.user,
         decodeURIComponent(match[1]),
@@ -135,15 +136,15 @@ export const violationsRoutes = [
   {
     method: "POST",
     path: /^\/api\/violations\/([^/]+)\/submit-approval$/,
-    handle: (ctx, match) => ({
-      violation: submitApproval(ctx.db, ctx.user, decodeURIComponent(match[1]), ctx.ip),
+    handle: async (ctx, match) => ({
+      violation: await submitApproval(ctx.db, ctx.user, decodeURIComponent(match[1]), ctx.ip),
     }),
   },
   {
     method: "POST",
     path: /^\/api\/violations\/([^/]+)\/approve$/,
     handle: async (ctx, match) => ({
-      violation: decideApproval(
+      violation: await decideApproval(
         ctx.db,
         ctx.user,
         decodeURIComponent(match[1]),
@@ -157,7 +158,7 @@ export const violationsRoutes = [
     method: "POST",
     path: /^\/api\/violations\/([^/]+)\/reject$/,
     handle: async (ctx, match) => ({
-      violation: decideApproval(
+      violation: await decideApproval(
         ctx.db,
         ctx.user,
         decodeURIComponent(match[1]),

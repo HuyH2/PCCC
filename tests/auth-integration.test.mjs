@@ -16,7 +16,7 @@ test(
   "Next frontend proxy + separate backend: login, first-password change, role navigation, scope and logout",
   { timeout: 60000 },
   async (t) => {
-    const db = openDatabase(":memory:");
+    const db = await openDatabase(":memory:");
     const password = "Integration-only-password";
     await seedDemo(db, password);
     const frontendPort = Number(process.env.PCCC_TEST_FRONTEND_PORT || 3100);
@@ -50,7 +50,7 @@ test(
         await ended;
       }
       await new Promise((resolve) => backend.close(resolve));
-      db.close();
+      await db.close();
     });
     const base = `http://127.0.0.1:${frontendPort}`;
     let ready = false;

@@ -9,15 +9,15 @@ const password = "Facility-management-test-2026";
 const origin = "http://localhost:3000";
 
 async function fixture(t) {
-  const db = openDatabase(":memory:");
+  const db = await openDatabase(":memory:");
   await seedDemo(db, password);
-  db.exec("UPDATE accounts SET must_change_password=0");
+  await db.exec("UPDATE accounts SET must_change_password=0");
   const server = createApp(db, { appOrigin: origin });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   t.after(async () => {
     await new Promise((resolve) => server.close(resolve));
-    db.close();
+    await db.close();
   });
   const base = `http://127.0.0.1:${server.address().port}`;
   async function request(path, { method = "GET", cookie, body } = {}) {
@@ -66,8 +66,11 @@ test("facility create validates fields, scope and duplicates, then writes an aud
   assert.equal(created.data.facility.officer_id, "CB-A03");
   assert.equal(created.data.facility.status, "active");
   assert.equal(
-    db.prepare("SELECT action FROM audit_logs WHERE object_id=?").get(created.data.facility.id)
-      .action,
+    (
+      await db
+        .prepare("SELECT action FROM audit_logs WHERE object_id=?")
+        .get(created.data.facility.id)
+    ).action,
     "facility.created",
   );
 

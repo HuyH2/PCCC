@@ -132,12 +132,12 @@ export function createApp(
         token,
         uploadDirectory,
         incidentNow,
-        readJson: (limit) => readJson(request, limit),
+        readJson: async (limit) => await readJson(request, limit),
         setSessionCookie: (value) => response.setHeader("Set-Cookie", cookie(value, ttlSeconds)),
         clearSessionCookie: () => response.setHeader("Set-Cookie", cookie("", 0)),
       };
       // Every non-public route (and unknown paths) requires a valid session first.
-      if (!found?.route.public) ctx.user = authenticate(db, token);
+      if (!found?.route.public) ctx.user = await authenticate(db, token);
       if (found) {
         const body = await found.route.handle(ctx, found.match);
         if (!response.writableEnded) send(ctx.status ?? 200, body);

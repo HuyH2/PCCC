@@ -1,21 +1,23 @@
 import { assert } from "../../core/errors.js";
 
-export function permissionsFor(db, role) {
-  return db
-    .prepare(
-      "SELECT permission_code FROM role_permissions WHERE role_code=? ORDER BY permission_code",
-    )
-    .all(role)
-    .map((r) => r.permission_code);
+export async function permissionsFor(db, role) {
+  return (
+    await db
+      .prepare(
+        "SELECT permission_code FROM role_permissions WHERE role_code=? ORDER BY permission_code",
+      )
+      .all(role)
+  ).map((r) => r.permission_code);
 }
 
-export function scopesFor(db, accountId) {
-  return db
-    .prepare(
-      "SELECT kind,unit_id,region_id,facility_id FROM account_scopes WHERE account_id=? ORDER BY id",
-    )
-    .all(accountId)
-    .map((s) => ({ kind: s.kind, targetId: s.unit_id ?? s.region_id ?? s.facility_id ?? null }));
+export async function scopesFor(db, accountId) {
+  return (
+    await db
+      .prepare(
+        "SELECT kind,unit_id,region_id,facility_id FROM account_scopes WHERE account_id=? ORDER BY id",
+      )
+      .all(accountId)
+  ).map((s) => ({ kind: s.kind, targetId: s.unit_id ?? s.region_id ?? s.facility_id ?? null }));
 }
 
 export function requirePermission(principal, permission) {

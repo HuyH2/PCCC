@@ -133,8 +133,8 @@ function validatePersonnel(input, before = null) {
  * If a new active head is designated, any existing active head is stepped down
  * with version incremented and an audit record created.
  */
-function auditHeadReplacement(db, user, ip, facilityId, replacementId, now) {
-  const previousHead = db
+async function auditHeadReplacement(db, user, ip, facilityId, replacementId, now) {
+  const previousHead = await db
     .prepare(
       `SELECT * FROM facility_personnel
        WHERE facility_id = ? AND is_head = 1 AND is_active = 1 AND id <> ?`,
@@ -145,13 +145,15 @@ function auditHeadReplacement(db, user, ip, facilityId, replacementId, now) {
     return;
   }
 
-  db.prepare(
-    `UPDATE facility_personnel
+  await db
+    .prepare(
+      `UPDATE facility_personnel
      SET is_head = 0, version = version + 1, updated_by = ?, updated_at = ?
      WHERE id = ?`,
-  ).run(user.id, now, previousHead.id);
+    )
+    .run(user.id, now, previousHead.id);
 
-  writeAudit(db, {
+  await writeAudit(db, {
     actorId: user.id,
     feature: "M03",
     objectType: "facility_personnel",
@@ -171,8 +173,8 @@ function auditHeadReplacement(db, user, ip, facilityId, replacementId, now) {
  * Fetch a single personnel row with creator/updater details.
  * Exported so other facility services (such as attachments) can verify personnel ownership.
  */
-export function personnelRow(db, facilityId, personnelId) {
-  return db
+export async function personnelRow(db, facilityId, personnelId) {
+  return await db
     .prepare(
       `SELECT ${personnelColumns}
        FROM facility_personnel p
@@ -186,13 +188,13 @@ export function personnelRow(db, facilityId, personnelId) {
 /**
  * List facility personnel with pagination, ordered by head-first, active-first, then name.
  */
-export function listFacilityPersonnel(db, user, facilityId, url) {
-  getFacility(db, user, facilityId);
+export async function listFacilityPersonnel(db, user, facilityId, url) {
+  await getFacility(db, user, facilityId);
   const { page, pageSize } = pagination(url);
   const includeInactive = url.searchParams.get("includeInactive") === "true";
   const where = `p.facility_id = ?${includeInactive ? "" : " AND p.is_active = 1"}`;
 
-  const items = db
+  const items = await db
     .prepare(
       `SELECT ${personnelColumns}
        FROM facility_personnel p
@@ -204,9 +206,11 @@ export function listFacilityPersonnel(db, user, facilityId, url) {
     )
     .all(facilityId, pageSize, (page - 1) * pageSize);
 
-  const total = db
-    .prepare(`SELECT count(*) AS n FROM facility_personnel p WHERE ${where}`)
-    .get(facilityId).n;
+  const total = (
+    await db
+      .prepare(`SELECT count(*) AS n FROM facility_personnel p WHERE ${where}`)
+      .get(facilityId)
+  ).n;
 
   return {
     items,
@@ -219,9 +223,9 @@ export function listFacilityPersonnel(db, user, facilityId, url) {
 /**
  * Get detailed information of a specific personnel in a facility.
  */
-export function getFacilityPersonnel(db, user, facilityId, personnelId) {
-  getFacility(db, user, facilityId);
-  const personnel = personnelRow(db, facilityId, personnelId);
+export async function getFacilityPersonnel(db, user, facilityId, personnelId) {
+  await getFacility(db, user, facilityId);
+  const personnel = await personnelRow(db, facilityId, personnelId);
   assert(personnel, 404, "NOT_FOUND", "Không tìm thấy nhân sự trong cơ sở này.");
   return { personnel };
 }
@@ -230,75 +234,79 @@ export function getFacilityPersonnel(db, user, facilityId, personnelId) {
  * Create or update a personnel record in a facility.
  * Enforces M03.edit permission, facility data scope, optimistic locking, and head reassignment audit.
  */
-export function saveFacilityPersonnel(db, user, facilityId, input, personnelId, ip) {
+export async function saveFacilityPersonnel(db, user, facilityId, input, personnelId, ip) {
   requirePermission(user, "M03.edit");
-  getFacility(db, user, facilityId);
+  await getFacility(db, user, facilityId);
 
   const before = personnelId
-    ? getFacilityPersonnel(db, user, facilityId, personnelId).personnel
+    ? (await getFacilityPersonnel(db, user, facilityId, personnelId)).personnel
     : null;
   const values = validatePersonnel(input, before);
 
-  return transaction(db, () => {
+  return await transaction(db, async () => {
     const id = personnelId ?? randomUUID();
     const now = Date.now();
 
     if (values.isHead) {
-      auditHeadReplacement(db, user, ip, facilityId, id, now);
+      await auditHeadReplacement(db, user, ip, facilityId, id, now);
     }
 
     if (before) {
-      db.prepare(
-        `UPDATE facility_personnel
+      await db
+        .prepare(
+          `UPDATE facility_personnel
          SET full_name = ?, position = ?, phone = ?, email = ?, is_head = ?,
              training_status = ?, certificate_number = ?, certificate_expiry = ?, notes = ?, is_active = ?,
              version = version + 1, updated_by = ?, updated_at = ?
          WHERE id = ?`,
-      ).run(
-        values.fullName,
-        values.position,
-        values.phone,
-        values.email,
-        values.isHead,
-        values.trainingStatus,
-        values.certificateNumber,
-        values.certificateExpiry,
-        values.notes,
-        values.isActive,
-        user.id,
-        now,
-        id,
-      );
+        )
+        .run(
+          values.fullName,
+          values.position,
+          values.phone,
+          values.email,
+          values.isHead,
+          values.trainingStatus,
+          values.certificateNumber,
+          values.certificateExpiry,
+          values.notes,
+          values.isActive,
+          user.id,
+          now,
+          id,
+        );
     } else {
-      db.prepare(
-        `INSERT INTO facility_personnel (
+      await db
+        .prepare(
+          `INSERT INTO facility_personnel (
            id, facility_id, full_name, position, phone, email, is_head,
            training_status, certificate_number, certificate_expiry, notes, is_active,
            created_by, updated_by, created_at, updated_at
          )
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(
-        id,
-        facilityId,
-        values.fullName,
-        values.position,
-        values.phone,
-        values.email,
-        values.isHead,
-        values.trainingStatus,
-        values.certificateNumber,
-        values.certificateExpiry,
-        values.notes,
-        values.isActive,
-        user.id,
-        user.id,
-        now,
-        now,
-      );
+        )
+        .run(
+          id,
+          facilityId,
+          values.fullName,
+          values.position,
+          values.phone,
+          values.email,
+          values.isHead,
+          values.trainingStatus,
+          values.certificateNumber,
+          values.certificateExpiry,
+          values.notes,
+          values.isActive,
+          user.id,
+          user.id,
+          now,
+          now,
+        );
     }
 
-    const after = personnelRow(db, facilityId, id);
-    writeAudit(db, {
+    const after = await personnelRow(db, facilityId, id);
+    await writeAudit(db, {
       actorId: user.id,
       feature: "M03",
       objectType: "facility_personnel",
@@ -313,24 +321,26 @@ export function saveFacilityPersonnel(db, user, facilityId, input, personnelId, 
   });
 }
 
-export function deactivateFacilityPersonnel(db, user, facilityId, personnelId, ip) {
+export async function deactivateFacilityPersonnel(db, user, facilityId, personnelId, ip) {
   requirePermission(user, "M03.edit");
-  getFacility(db, user, facilityId);
+  await getFacility(db, user, facilityId);
 
-  const before = personnelRow(db, facilityId, personnelId);
+  const before = await personnelRow(db, facilityId, personnelId);
   assert(before, 404, "NOT_FOUND", "Không tìm thấy nhân sự trong cơ sở này.");
   assert(before.is_active === 1, 400, "INVALID_STATE", "Nhân sự này đã ngưng hoạt động.");
 
-  return transaction(db, () => {
+  return await transaction(db, async () => {
     const now = Date.now();
-    db.prepare(
-      `UPDATE facility_personnel
+    await db
+      .prepare(
+        `UPDATE facility_personnel
        SET is_active = 0, is_head = 0, version = version + 1, updated_by = ?, updated_at = ?
        WHERE id = ?`,
-    ).run(user.id, now, personnelId);
+      )
+      .run(user.id, now, personnelId);
 
-    const after = personnelRow(db, facilityId, personnelId);
-    writeAudit(db, {
+    const after = await personnelRow(db, facilityId, personnelId);
+    await writeAudit(db, {
       actorId: user.id,
       feature: "M03",
       objectType: "facility_personnel",

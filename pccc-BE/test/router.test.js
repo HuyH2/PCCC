@@ -26,15 +26,15 @@ test("findRoute matches method and exact or RegExp paths, first match wins", () 
 });
 
 test("app dispatches public routes without session, protects the rest, 404 only after login", async (t) => {
-  const db = openDatabase(":memory:");
+  const db = await openDatabase(":memory:");
   await seedDemo(db, password);
-  db.exec("UPDATE accounts SET must_change_password=0");
+  await db.exec("UPDATE accounts SET must_change_password=0");
   const server = createApp(db, { appOrigin: origin });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   t.after(async () => {
     await new Promise((resolve) => server.close(resolve));
-    db.close();
+    await db.close();
   });
   const base = `http://127.0.0.1:${server.address().port}`;
   const get = async (path, cookie) => {

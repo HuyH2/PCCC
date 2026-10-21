@@ -10,15 +10,15 @@ const password = "Region-test-password-2026";
 const origin = "http://localhost:3000";
 
 async function fixture(t) {
-  const db = openDatabase(":memory:");
+  const db = await openDatabase(":memory:");
   await seedDemo(db, password);
-  db.exec("UPDATE accounts SET must_change_password=0");
+  await db.exec("UPDATE accounts SET must_change_password=0");
   const server = createApp(db);
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   t.after(async () => {
     await new Promise((resolve) => server.close(resolve));
-    db.close();
+    await db.close();
   });
   const base = `http://127.0.0.1:${server.address().port}`;
   async function request(path, { method = "GET", cookie, body } = {}) {
@@ -110,22 +110,25 @@ test("assignment keeps one owner, history and the data scope in sync", async (t)
   assert.equal(assigned.data.history[0].from_name, "Cán bộ kiểm tra/Quản lý địa bàn (mẫu)");
   assert.equal(assigned.data.history[0].to_name, "Cán bộ tổng hợp (mẫu)");
   assert.equal(
-    db.prepare("SELECT account_id FROM region_assignments WHERE region_id='KP01'").get().account_id,
+    (await db.prepare("SELECT account_id FROM region_assignments WHERE region_id='KP01'").get())
+      .account_id,
     "DEMO-A04",
   );
   assert.ok(
-    db
+    await db
       .prepare(
         "SELECT 1 FROM account_scopes WHERE account_id='DEMO-A04' AND kind='region' AND region_id='KP01'",
       )
       .get(),
   );
   assert.equal(
-    db.prepare("SELECT 1 FROM account_scopes WHERE account_id='DEMO-A03' AND kind='region'").get(),
+    await db
+      .prepare("SELECT 1 FROM account_scopes WHERE account_id='DEMO-A03' AND kind='region'")
+      .get(),
     undefined,
   );
   assert.ok(
-    db
+    await db
       .prepare(
         "SELECT 1 FROM account_scopes WHERE account_id='DEMO-A03' AND kind='facility' AND facility_id='CS001'",
       )
@@ -148,14 +151,13 @@ test("assignment keeps one owner, history and the data scope in sync", async (t)
   assert.equal(unassigned.data.region.officer_account_id, null);
   assert.equal(unassigned.data.history[0].action, "unassign");
   assert.equal(
-    db.prepare("SELECT 1 FROM region_assignments WHERE region_id='KP01'").get(),
+    await db.prepare("SELECT 1 FROM region_assignments WHERE region_id='KP01'").get(),
     undefined,
   );
 
-  const audit = db
-    .prepare("SELECT action FROM audit_logs WHERE object_id='KP01' ORDER BY id")
-    .all()
-    .map((row) => row.action);
+  const audit = (
+    await db.prepare("SELECT action FROM audit_logs WHERE object_id='KP01' ORDER BY id").all()
+  ).map((row) => row.action);
   assert.deepEqual(audit, ["region.assigned", "region.unassigned"]);
 });
 
@@ -350,7 +352,8 @@ test("region and account writes validate input, permissions and lifecycle", asyn
     200,
   );
   assert.equal(
-    db.prepare("SELECT count(*) AS n FROM assignment_events WHERE region_id='KP09'").get().n,
+    (await db.prepare("SELECT count(*) AS n FROM assignment_events WHERE region_id='KP09'").get())
+      .n,
     1,
   );
 });
@@ -405,7 +408,7 @@ test("officer lookup and assignment target obey the caller scope", async (t) => 
   assert.equal(denied.status, 403);
   assert.equal(denied.data.error.code, "ACCOUNT_OUT_OF_SCOPE");
   assert.equal(
-    db
+    await db
       .prepare(
         "SELECT 1 FROM account_scopes WHERE account_id=? AND kind='region' AND region_id='KP02'",
       )
@@ -425,9 +428,11 @@ test("officer lookup and assignment target obey the caller scope", async (t) => 
 test("region detail and counts never expose facilities outside the caller scope", async (t) => {
   const { db, request, login } = await fixture(t);
   const admin = await login();
-  db.prepare(
-    "INSERT INTO facilities(id,name,address,region_id,officer_id) VALUES ('CS009','Cơ sở ngoài phạm vi','Địa chỉ giả lập','KP01','CB-OTHER')",
-  ).run();
+  await db
+    .prepare(
+      "INSERT INTO facilities(id,name,address,region_id,officer_id) VALUES ('CS009','Cơ sở ngoài phạm vi','Địa chỉ giả lập','KP01','CB-OTHER')",
+    )
+    .run();
   const created = await request("/api/authorization/accounts", {
     method: "POST",
     cookie: admin,
@@ -439,8 +444,10 @@ test("region detail and counts never expose facilities outside the caller scope"
   });
   assert.equal(created.status, 201, JSON.stringify(created.data));
   const accountId = created.data.account.id;
-  db.prepare("INSERT OR IGNORE INTO role_permissions VALUES ('A03','M02.view')").run();
-  db.prepare("UPDATE accounts SET must_change_password=0 WHERE id=?").run(accountId);
+  await db
+    .prepare("INSERT INTO role_permissions VALUES ('A03','M02.view') ON CONFLICT DO NOTHING")
+    .run();
+  await db.prepare("UPDATE accounts SET must_change_password=0 WHERE id=?").run(accountId);
   const facilityUser = await login("facility.user", "Temp-password-2026");
 
   const detail = await request("/api/regions/KP01", { cookie: facilityUser });
@@ -482,7 +489,7 @@ test("account changes cannot break assignment links or leave an owner without ac
   assert.equal(rename.status, 409);
   assert.equal(rename.data.error.code, "ACCOUNT_ASSIGNED");
   assert.equal(
-    db.prepare("SELECT officer_id FROM accounts WHERE id='DEMO-A03'").get().officer_id,
+    (await db.prepare("SELECT officer_id FROM accounts WHERE id='DEMO-A03'").get()).officer_id,
     "CB-A03",
   );
 
@@ -497,14 +504,15 @@ test("account changes cannot break assignment links or leave an owner without ac
   assert.deepEqual(update.data.scopes, []);
   assert.deepEqual(update.data.removedRegionIds, ["KP01"]);
   assert.equal(
-    db.prepare("SELECT account_id FROM region_assignments WHERE region_id='KP01'").get(),
+    await db.prepare("SELECT account_id FROM region_assignments WHERE region_id='KP01'").get(),
     undefined,
   );
   assert.equal(
-    db.prepare("SELECT count(*) AS n FROM account_scopes WHERE account_id='DEMO-A03'").get().n,
+    (await db.prepare("SELECT count(*) AS n FROM account_scopes WHERE account_id='DEMO-A03'").get())
+      .n,
     0,
   );
-  const event = db
+  const event = await db
     .prepare("SELECT action,reason FROM assignment_events WHERE region_id='KP01'")
     .get();
   assert.equal(event.action, "unassign");
@@ -547,7 +555,8 @@ test("transfers append assignment history instead of inheriting old notes", asyn
   assert.equal(detail.data.history[0].to_name, "Cán bộ kiểm tra/Quản lý địa bàn (mẫu)");
   assert.equal(detail.data.history[0].performed_by_name, "Quản trị hệ thống (mẫu)");
   assert.equal(
-    db.prepare("SELECT count(*) AS n FROM assignment_events WHERE region_id='KP01'").get().n,
+    (await db.prepare("SELECT count(*) AS n FROM assignment_events WHERE region_id='KP01'").get())
+      .n,
     2,
   );
 
@@ -635,12 +644,12 @@ test("status guards and an audit failure roll back the assignment", async (t) =>
   assert.equal(inactiveAssignment.status, 409);
   assert.equal(inactiveAssignment.data.error.code, "ACCOUNT_UNAVAILABLE");
 
-  db.exec(
-    "CREATE TRIGGER fail_region_audit BEFORE INSERT ON audit_logs WHEN NEW.action='region.assigned' BEGIN SELECT RAISE(ABORT,'test'); END",
+  await db.exec(
+    "CREATE TRIGGER fail_region_audit BEFORE INSERT ON audit_logs FOR EACH ROW WHEN (NEW.action='region.assigned') EXECUTE FUNCTION raise_abort('test')",
   );
-  const before = db
-    .prepare("SELECT account_id FROM region_assignments WHERE region_id='KP01'")
-    .get().account_id;
+  const before = (
+    await db.prepare("SELECT account_id FROM region_assignments WHERE region_id='KP01'").get()
+  ).account_id;
   const failed = await request("/api/regions/KP01/assignment", {
     method: "POST",
     cookie: admin,
@@ -648,11 +657,13 @@ test("status guards and an audit failure roll back the assignment", async (t) =>
   });
   assert.equal(failed.status, 500);
   assert.equal(
-    db.prepare("SELECT account_id FROM region_assignments WHERE region_id='KP01'").get().account_id,
+    (await db.prepare("SELECT account_id FROM region_assignments WHERE region_id='KP01'").get())
+      .account_id,
     before,
   );
   assert.equal(
-    db.prepare("SELECT count(*) AS n FROM assignment_events WHERE region_id='KP01'").get().n,
+    (await db.prepare("SELECT count(*) AS n FROM assignment_events WHERE region_id='KP01'").get())
+      .n,
     0,
   );
 });
@@ -661,21 +672,19 @@ test("schema enforces unique officer codes and append-only assignment history", 
   const { db, request, login } = await fixture(t);
   const admin = await login();
   assert.ok(
-    db
-      .prepare("SELECT 1 FROM sqlite_master WHERE type='index' AND name='accounts_officer_unique'")
-      .get(),
+    await db.prepare("SELECT 1 FROM pg_indexes WHERE indexname='accounts_officer_unique'").get(),
     "accounts.officer_id must have a unique index",
   );
-  assert.throws(
-    () =>
-      db
+  await assert.rejects(
+    async () =>
+      await db
         .prepare(
           `INSERT INTO accounts(id,username,password_hash,full_name,officer_id,role_code,
             status,must_change_password,created_at)
           VALUES ('ACC-DUP','dup.user','x','Trùng mã','CB-A03','A03','active',0,?)`,
         )
         .run(Date.now()),
-    /UNIQUE/,
+    /unique constraint/,
   );
 
   const assigned = await request("/api/regions/KP02/assignment", {
@@ -684,12 +693,13 @@ test("schema enforces unique officer codes and append-only assignment history", 
     body: { accountId: "DEMO-A04", note: "test" },
   });
   assert.equal(assigned.status, 200);
-  assert.throws(
-    () => db.prepare("UPDATE assignment_events SET reason='x' WHERE region_id='KP02'").run(),
+  await assert.rejects(
+    async () =>
+      await db.prepare("UPDATE assignment_events SET reason='x' WHERE region_id='KP02'").run(),
     /append-only/,
   );
-  assert.throws(
-    () => db.prepare("DELETE FROM assignment_events WHERE region_id='KP02'").run(),
+  await assert.rejects(
+    async () => await db.prepare("DELETE FROM assignment_events WHERE region_id='KP02'").run(),
     /append-only/,
   );
 });
@@ -697,8 +707,12 @@ test("schema enforces unique officer codes and append-only assignment history", 
 test("a region-scoped officer can assign within the region's unit", async (t) => {
   const { db, request, login } = await fixture(t);
   const admin = await login();
-  db.prepare("INSERT OR IGNORE INTO role_permissions VALUES ('A03','M02.view')").run();
-  db.prepare("INSERT OR IGNORE INTO role_permissions VALUES ('A03','M02.edit')").run();
+  await db
+    .prepare("INSERT INTO role_permissions VALUES ('A03','M02.view') ON CONFLICT DO NOTHING")
+    .run();
+  await db
+    .prepare("INSERT INTO role_permissions VALUES ('A03','M02.edit') ON CONFLICT DO NOTHING")
+    .run();
   const created = await request("/api/authorization/accounts", {
     method: "POST",
     cookie: admin,
@@ -709,7 +723,9 @@ test("a region-scoped officer can assign within the region's unit", async (t) =>
     }),
   });
   assert.equal(created.status, 201, JSON.stringify(created.data));
-  db.prepare("UPDATE accounts SET must_change_password=0 WHERE id=?").run(created.data.account.id);
+  await db
+    .prepare("UPDATE accounts SET must_change_password=0 WHERE id=?")
+    .run(created.data.account.id);
   const regionManager = await login("region.manager", "Temp-password-2026");
 
   const candidates = await request("/api/regions/officers?regionId=KP01", {

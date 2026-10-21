@@ -1,10 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { openDatabase } from "../src/core/database.js";
 import { seedDemo } from "../src/core/seed.js";
 import { createApp } from "../src/app.js";
@@ -13,9 +9,6 @@ import { MAX_DOCUMENT_BYTES } from "../src/modules/legal-documents/legal-documen
 
 const password = "Documents-test-password-2026";
 const origin = "http://localhost:3000";
-const migrationCount = readdirSync(new URL("../migrations/", import.meta.url)).filter(
-  (f) => f.endsWith(".sql") || f.endsWith(".cjs"),
-).length;
 const pdf = Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n");
 const payload = (extra = {}) => ({
   category_id: "law",
@@ -30,50 +23,16 @@ const payload = (extra = {}) => ({
   ...extra,
 });
 
-test("forward migration preserves pre-existing audit content and remains idempotent", () => {
-  const directory = mkdtempSync(join(tmpdir(), "pccc-document-migration-"));
-  const path = join(directory, "upgrade.sqlite");
-  let db;
-  try {
-    db = new DatabaseSync(path);
-    db.exec(
-      "PRAGMA foreign_keys=ON; CREATE TABLE schema_migrations(name TEXT PRIMARY KEY,applied_at INTEGER NOT NULL)",
-    );
-    for (const name of ["001-auth.sql", "003-search-dashboard.sql"]) {
-      db.exec(readFileSync(new URL(`../migrations/${name}`, import.meta.url), "utf8"));
-      db.prepare("INSERT INTO schema_migrations VALUES (?,1)").run(name);
-    }
-    db.prepare(
-      "INSERT INTO audit_logs(action,object_id,occurred_at,ip,before_json) VALUES ('auth.login','legacy',1,'local','{}')",
-    ).run();
-    db.close();
-    db = openDatabase(path);
-    const legacy = db.prepare("SELECT * FROM audit_logs WHERE object_id='legacy'").get();
-    assert.equal(legacy.action, "auth.login");
-    assert.equal(legacy.before_json, "{}");
-    assert.equal(legacy.occurred_at, 1);
-    assert.equal(legacy.feature, "system");
-    assert.throws(() => db.exec("UPDATE audit_logs SET before_json='changed'"));
-    db.close();
-    db = openDatabase(path);
-    assert.equal(db.prepare("SELECT count(*) AS n FROM schema_migrations").get().n, migrationCount);
-    assert.equal(db.prepare("SELECT count(*) AS n FROM audit_logs").get().n, 1);
-  } finally {
-    db?.close();
-    rmSync(directory, { recursive: true, force: true });
-  }
-});
-
 async function fixture(t) {
-  const db = openDatabase(":memory:");
+  const db = await openDatabase(":memory:");
   await seedDemo(db, password);
-  db.exec("UPDATE accounts SET must_change_password=0");
+  await db.exec("UPDATE accounts SET must_change_password=0");
   const server = createApp(db);
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   t.after(async () => {
     await new Promise((resolve) => server.close(resolve));
-    db.close();
+    await db.close();
   });
   const base = `http://127.0.0.1:${server.address().port}`;
   async function request(path, { method = "GET", body, cookie, headers = {}, raw } = {}) {
@@ -119,10 +78,10 @@ test("document access requires session, M05 permissions and scope; writes requir
       .status,
     403,
   );
-  db.prepare("INSERT INTO role_permissions VALUES ('A03','M05.create')").run();
-  db.prepare("INSERT INTO role_permissions VALUES ('A03','M05.edit')").run();
-  db.prepare("DELETE FROM account_scopes WHERE account_id='DEMO-A03'").run();
-  db.prepare("INSERT INTO account_scopes(account_id,kind) VALUES ('DEMO-A03','all')").run();
+  await db.prepare("INSERT INTO role_permissions VALUES ('A03','M05.create')").run();
+  await db.prepare("INSERT INTO role_permissions VALUES ('A03','M05.edit')").run();
+  await db.prepare("DELETE FROM account_scopes WHERE account_id='DEMO-A03'").run();
+  await db.prepare("INSERT INTO account_scopes(account_id,kind) VALUES ('DEMO-A03','all')").run();
   assert.equal(
     (await request("/api/legal-documents", { method: "POST", cookie: reader, body: payload() }))
       .status,
@@ -138,7 +97,7 @@ test("document access requires session, M05 permissions and scope; writes requir
     ).status,
     403,
   );
-  db.prepare("DELETE FROM account_scopes WHERE account_id='DEMO-A03'").run();
+  await db.prepare("DELETE FROM account_scopes WHERE account_id='DEMO-A03'").run();
   for (const path of [
     "/api/legal-documents",
     "/api/legal-document-categories",
@@ -148,9 +107,9 @@ test("document access requires session, M05 permissions and scope; writes requir
   ])
     assert.equal((await request(path, { cookie: reader })).status, 403, path);
   const admin = await login();
-  db.prepare(
-    "DELETE FROM role_permissions WHERE role_code='A05' AND permission_code='M05.view'",
-  ).run();
+  await db
+    .prepare("DELETE FROM role_permissions WHERE role_code='A05' AND permission_code='M05.view'")
+    .run();
   assert.equal((await request("/api/legal-documents", { cookie: admin })).status, 403);
 });
 
@@ -176,9 +135,9 @@ test("Commander manages documents with unit scope; grants, role and scope are en
     2,
   );
 
-  db.prepare(
-    "DELETE FROM role_permissions WHERE role_code='A01' AND permission_code='M05.edit'",
-  ).run();
+  await db
+    .prepare("DELETE FROM role_permissions WHERE role_code='A01' AND permission_code='M05.edit'")
+    .run();
   assert.equal(
     (
       await request(`/api/legal-documents/${id}`, {
@@ -200,7 +159,7 @@ test("Commander manages documents with unit scope; grants, role and scope are en
     ).status,
     403,
   );
-  db.prepare("DELETE FROM account_scopes WHERE account_id='DEMO-A01'").run();
+  await db.prepare("DELETE FROM account_scopes WHERE account_id='DEMO-A01'").run();
   assert.equal(
     (
       await request("/api/legal-documents", {
@@ -211,92 +170,6 @@ test("Commander manages documents with unit scope; grants, role and scope are en
     ).status,
     403,
   );
-});
-
-test("permission migration upgrades existing roles without changing accounts or unrelated grants", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "pccc-document-grants-"));
-  const path = join(directory, "upgrade.sqlite");
-  let db;
-  try {
-    db = openDatabase(path);
-    await seedDemo(db, password);
-    db.prepare(
-      "DELETE FROM role_permissions WHERE role_code='A01' AND permission_code IN ('M05.create','M05.edit')",
-    ).run();
-    db.prepare(
-      "DELETE FROM role_permissions WHERE role_code='A05' AND permission_code='M05.edit'",
-    ).run();
-    db.prepare(
-      "DELETE FROM schema_migrations WHERE name='008-legal-document-management-permissions.sql'",
-    ).run();
-    const accountsBefore = db
-      .prepare("SELECT id,username,password_hash,role_code FROM accounts ORDER BY id")
-      .all();
-    const scopesBefore = db
-      .prepare(
-        "SELECT account_id,kind,unit_id,region_id,facility_id FROM account_scopes ORDER BY id",
-      )
-      .all();
-    const otherGrantsBefore = db
-      .prepare(
-        "SELECT role_code,permission_code FROM role_permissions WHERE permission_code NOT LIKE 'M05.%' ORDER BY role_code,permission_code",
-      )
-      .all();
-    db.close();
-
-    db = openDatabase(path);
-    for (const role of ["A01", "A05"])
-      assert.deepEqual(
-        db
-          .prepare(
-            "SELECT permission_code FROM role_permissions WHERE role_code=? AND permission_code LIKE 'M05.%' ORDER BY permission_code",
-          )
-          .all(role)
-          .map((row) => row.permission_code),
-        ["M05.create", "M05.edit", "M05.view"],
-      );
-    assert.deepEqual(
-      db.prepare("SELECT id,username,password_hash,role_code FROM accounts ORDER BY id").all(),
-      accountsBefore,
-    );
-    assert.deepEqual(
-      db
-        .prepare(
-          "SELECT account_id,kind,unit_id,region_id,facility_id FROM account_scopes ORDER BY id",
-        )
-        .all(),
-      scopesBefore,
-    );
-    assert.deepEqual(
-      db
-        .prepare(
-          "SELECT role_code,permission_code FROM role_permissions WHERE permission_code NOT LIKE 'M05.%' ORDER BY role_code,permission_code",
-        )
-        .all(),
-      otherGrantsBefore,
-    );
-    assert.equal(
-      db
-        .prepare(
-          "SELECT count(*) AS n FROM audit_logs WHERE action='authorization.legal_document_management_enabled'",
-        )
-        .get().n,
-      2,
-    );
-    db.close();
-    db = openDatabase(path);
-    assert.equal(
-      db
-        .prepare(
-          "SELECT count(*) AS n FROM audit_logs WHERE action='authorization.legal_document_management_enabled'",
-        )
-        .get().n,
-      2,
-    );
-  } finally {
-    db?.close();
-    rmSync(directory, { recursive: true, force: true });
-  }
 });
 
 test("create, detail, accent search, combined filters, pagination and versioned update with history", async (t) => {
@@ -341,7 +214,7 @@ test("create, detail, accent search, combined filters, pagination and versioned 
   assert.equal(JSON.parse(history.data.items[0].after_json).status, "expired");
   assert.ok(history.data.items[0].actor_name);
   assert.equal(
-    db.prepare("SELECT count(*) AS n FROM audit_logs WHERE object_id=?").get(doc.id).n,
+    (await db.prepare("SELECT count(*) AS n FROM audit_logs WHERE object_id=?").get(doc.id)).n,
     2,
   );
 });
@@ -467,38 +340,41 @@ test("PDF create/upload/download enforce authorization, content, size, filename 
 test("audit failure rolls back document mutation; seed preserves existing edits and append-only log", async (t) => {
   const { db, request, login } = await fixture(t);
   const cookie = await login();
-  db.exec(
-    "CREATE TRIGGER test_audit_failure BEFORE INSERT ON audit_logs WHEN NEW.feature='M05' BEGIN SELECT RAISE(ABORT,'test failure'); END",
+  await db.exec(
+    "CREATE TRIGGER test_audit_failure BEFORE INSERT ON audit_logs FOR EACH ROW WHEN (NEW.feature='M05') EXECUTE FUNCTION raise_abort('test failure')",
   );
   const result = await request("/api/legal-documents", { method: "POST", cookie, body: payload() });
   assert.equal(result.status, 500);
   assert.equal(
-    db
-      .prepare("SELECT count(*) AS n FROM legal_documents WHERE reference_number='TEST-01/2026'")
-      .get().n,
+    (
+      await db
+        .prepare("SELECT count(*) AS n FROM legal_documents WHERE reference_number='TEST-01/2026'")
+        .get()
+    ).n,
     0,
   );
-  db.exec("DROP TRIGGER test_audit_failure");
-  db.prepare("UPDATE legal_documents SET title='Edited sample' WHERE id='DEMO-DOC-1'").run();
-  const count = db.prepare("SELECT count(*) AS n FROM audit_logs WHERE feature='M05'").get().n;
+  await db.exec("DROP TRIGGER test_audit_failure ON audit_logs");
+  await db.prepare("UPDATE legal_documents SET title='Edited sample' WHERE id='DEMO-DOC-1'").run();
+  const count = (await db.prepare("SELECT count(*) AS n FROM audit_logs WHERE feature='M05'").get())
+    .n;
   await seedDemo(db, password);
   assert.equal(
-    db.prepare("SELECT title FROM legal_documents WHERE id='DEMO-DOC-1'").get().title,
+    (await db.prepare("SELECT title FROM legal_documents WHERE id='DEMO-DOC-1'").get()).title,
     "Edited sample",
   );
   assert.equal(
-    db.prepare("SELECT count(*) AS n FROM audit_logs WHERE feature='M05'").get().n,
+    (await db.prepare("SELECT count(*) AS n FROM audit_logs WHERE feature='M05'").get()).n,
     count,
   );
-  assert.throws(() => db.exec("DELETE FROM audit_logs"));
-  assert.throws(() => db.exec("UPDATE audit_logs SET feature='changed'"));
+  await assert.rejects(async () => await db.exec("DELETE FROM audit_logs"));
+  await assert.rejects(async () => await db.exec("UPDATE audit_logs SET feature='changed'"));
 });
 
 test("system audit filters actor/time/feature/action/object and protects snapshots from ordinary users", async (t) => {
   const { db, request, login } = await fixture(t);
   const cookie = await login();
   const start = new Date(Date.now() - 1000).toISOString();
-  writeAudit(db, {
+  await writeAudit(db, {
     actorId: "DEMO-A05",
     feature: "TEST",
     objectType: "test",

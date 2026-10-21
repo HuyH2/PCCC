@@ -9,7 +9,7 @@ const secureCookie = process.env.COOKIE_SECURE === "true";
 if (production && (!secureCookie || !appOrigin.startsWith("https://"))) {
   throw new Error("Production requires COOKIE_SECURE=true and an HTTPS APP_ORIGIN.");
 }
-const db = openDatabase();
+const db = await openDatabase();
 const server = createApp(db, {
   appOrigin,
   secureCookie,
@@ -20,27 +20,28 @@ server.listen(port, process.env.HOST || "127.0.0.1", () => {
   console.info(`PCCC pccc-BE listening on port ${port}`);
 });
 // Also generate deadline reminders when no browser is open. Per-day dedupe keys keep sweeps idempotent.
-function sweepReportReminders() {
+async function sweepReportReminders() {
   try {
-    const accounts = db
+    const accounts = await db
       .prepare(
         `SELECT a.* FROM accounts a JOIN roles r ON r.code=a.role_code
       WHERE a.status='active' AND r.enabled=1`,
       )
       .all();
-    for (const account of accounts) refreshReportReminders(db, principalFor(db, account));
+    for (const account of accounts)
+      await refreshReportReminders(db, await principalFor(db, account));
   } catch (error) {
     console.error("Report reminder sweep failed", { name: error.name });
   }
 }
-sweepReportReminders();
+await sweepReportReminders();
 const reminderTimer = setInterval(sweepReportReminders, 60 * 60 * 1000);
 reminderTimer.unref();
 for (const signal of ["SIGINT", "SIGTERM"])
   process.on(signal, () => {
     clearInterval(reminderTimer);
-    server.close(() => {
-      db.close();
+    server.close(async () => {
+      await db.close();
       process.exit(0);
     });
   });

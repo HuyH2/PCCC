@@ -8,7 +8,7 @@ import { audit } from "../audit/audit.service.js";
 export const COOKIE_NAME = "pccc_session";
 export const tokenHash = (token) => createHash("sha256").update(token).digest("hex");
 
-export function principalFor(db, account) {
+export async function principalFor(db, account) {
   return {
     id: account.id,
     username: account.username,
@@ -16,19 +16,19 @@ export function principalFor(db, account) {
     officerId: account.officer_id,
     role: account.role_code,
     mustChangePassword: Boolean(account.must_change_password),
-    permissions: permissionsFor(db, account.role_code),
-    scopes: scopesFor(db, account.id),
+    permissions: await permissionsFor(db, account.role_code),
+    scopes: await scopesFor(db, account.id),
   };
 }
 
-export function authenticate(db, token, now = Date.now()) {
+export async function authenticate(db, token, now = Date.now()) {
   assert(
     typeof token === "string" && /^[a-f0-9]{64}$/.test(token),
     401,
     "UNAUTHENTICATED",
     "Vui lòng đăng nhập.",
   );
-  const account = db
+  const account = await db
     .prepare(
       `SELECT a.*,r.enabled FROM sessions s JOIN accounts a ON a.id=s.account_id
     JOIN roles r ON r.code=a.role_code WHERE s.token_hash=? AND s.expires_at>?`,
@@ -40,7 +40,7 @@ export function authenticate(db, token, now = Date.now()) {
     "UNAUTHENTICATED",
     "Phiên đã hết hạn hoặc tài khoản không còn hoạt động.",
   );
-  return principalFor(db, account);
+  return await principalFor(db, account);
 }
 
 export function createAuthentication(db, { ttlSeconds = 28800 } = {}) {
@@ -51,7 +51,7 @@ export function createAuthentication(db, { ttlSeconds = 28800 } = {}) {
       const now = Date.now();
       const keys = [`ip:${ip}`, `user:${username}`].map(tokenHash);
       for (const key of keys) {
-        const attempt = db.prepare("SELECT * FROM login_attempts WHERE key=?").get(key);
+        const attempt = await db.prepare("SELECT * FROM login_attempts WHERE key=?").get(key);
         assert(
           !attempt || now - attempt.window_start >= 900000 || attempt.attempts < 10,
           429,
@@ -59,22 +59,24 @@ export function createAuthentication(db, { ttlSeconds = 28800 } = {}) {
           "Đã thử đăng nhập quá nhiều lần. Vui lòng thử lại sau 15 phút.",
         );
       }
-      transaction(db, () => {
-        db.prepare("DELETE FROM login_attempts WHERE window_start<?").run(now - 900000);
+      await transaction(db, async () => {
+        await db.prepare("DELETE FROM login_attempts WHERE window_start<?").run(now - 900000);
         for (const key of keys)
-          db.prepare(
-            `INSERT INTO login_attempts VALUES (?,1,?)
-          ON CONFLICT(key) DO UPDATE SET attempts=attempts+1`,
-          ).run(key, now);
+          await db
+            .prepare(
+              `INSERT INTO login_attempts VALUES (?,1,?)
+          ON CONFLICT(key) DO UPDATE SET attempts=login_attempts.attempts+1`,
+            )
+            .run(key, now);
       });
-      let account = db
+      let account = await db
         .prepare(
           "SELECT a.*,r.enabled FROM accounts a JOIN roles r ON r.code=a.role_code WHERE a.username=?",
         )
         .get(username);
       const valid = await verifyPassword(password, account?.password_hash ?? (await dummyHash));
       if (!account || !valid) {
-        audit(
+        await audit(
           db,
           account?.id ?? null,
           "auth.login_failed",
@@ -86,7 +88,7 @@ export function createAuthentication(db, { ttlSeconds = 28800 } = {}) {
         assert(false, 401, "INVALID_CREDENTIALS", "Tên đăng nhập hoặc mật khẩu không đúng.");
       }
       // Password hashing yields to other requests. Re-read lifecycle/role before issuing a session.
-      const current = db
+      const current = await db
         .prepare(
           "SELECT a.*,r.enabled FROM accounts a JOIN roles r ON r.code=a.role_code WHERE a.id=?",
         )
@@ -99,7 +101,7 @@ export function createAuthentication(db, { ttlSeconds = 28800 } = {}) {
       );
       account = current;
       if (account.status !== "active" || account.enabled !== 1) {
-        audit(
+        await audit(
           db,
           account.id,
           "auth.login_failed",
@@ -116,42 +118,43 @@ export function createAuthentication(db, { ttlSeconds = 28800 } = {}) {
         );
       }
       const token = randomBytes(32).toString("hex");
-      transaction(db, () => {
-        db.prepare("DELETE FROM sessions WHERE expires_at<=?").run(now);
-        db.prepare("INSERT INTO sessions VALUES (?,?,?,?)").run(
-          tokenHash(token),
-          account.id,
-          now,
-          now + ttlSeconds * 1000,
-        );
-        db.prepare("UPDATE accounts SET last_login_at=? WHERE id=?").run(now, account.id);
-        db.prepare("DELETE FROM login_attempts WHERE key=?").run(keys[1]);
+      await transaction(db, async () => {
+        await db.prepare("DELETE FROM sessions WHERE expires_at<=?").run(now);
+        await db
+          .prepare("INSERT INTO sessions VALUES (?,?,?,?)")
+          .run(tokenHash(token), account.id, now, now + ttlSeconds * 1000);
+        await db.prepare("UPDATE accounts SET last_login_at=? WHERE id=?").run(now, account.id);
+        await db.prepare("DELETE FROM login_attempts WHERE key=?").run(keys[1]);
         // The frontend proxy shares one socket IP. Successful logins must not
         // consume the failure budget for every other user behind that proxy.
-        db.prepare("UPDATE login_attempts SET attempts=max(0,attempts-1) WHERE key=?").run(keys[0]);
-        audit(db, account.id, "auth.login", account.id, null, null, ip);
+        await db
+          .prepare("UPDATE login_attempts SET attempts=GREATEST(0,attempts-1) WHERE key=?")
+          .run(keys[0]);
+        await audit(db, account.id, "auth.login", account.id, null, null, ip);
       });
-      return { token, user: principalFor(db, account) };
+      return { token, user: await principalFor(db, account) };
     },
-    logout(token, ip) {
+    async logout(token, ip) {
       const session = token
-        ? db.prepare("SELECT account_id FROM sessions WHERE token_hash=?").get(tokenHash(token))
+        ? await db
+            .prepare("SELECT account_id FROM sessions WHERE token_hash=?")
+            .get(tokenHash(token))
         : null;
       if (session)
-        transaction(db, () => {
-          db.prepare("DELETE FROM sessions WHERE token_hash=?").run(tokenHash(token));
-          audit(db, session.account_id, "auth.logout", session.account_id, null, null, ip);
+        await transaction(db, async () => {
+          await db.prepare("DELETE FROM sessions WHERE token_hash=?").run(tokenHash(token));
+          await audit(db, session.account_id, "auth.logout", session.account_id, null, null, ip);
         });
     },
-    skipPasswordChange(principal, ip) {
-      transaction(db, () => {
-        const result = db
+    async skipPasswordChange(principal, ip) {
+      await transaction(db, async () => {
+        const result = await db
           .prepare(
             "UPDATE accounts SET must_change_password=0 WHERE id=? AND must_change_password=1",
           )
           .run(principal.id);
         if (result.changes === 1) {
-          audit(
+          await audit(
             db,
             principal.id,
             "auth.password_change_skipped",
@@ -164,7 +167,9 @@ export function createAuthentication(db, { ttlSeconds = 28800 } = {}) {
       });
     },
     async changePassword(principal, currentPassword, newPassword, ip) {
-      const account = db.prepare("SELECT password_hash FROM accounts WHERE id=?").get(principal.id);
+      const account = await db
+        .prepare("SELECT password_hash FROM accounts WHERE id=?")
+        .get(principal.id);
       assert(
         await verifyPassword(currentPassword, account.password_hash),
         400,
@@ -178,8 +183,8 @@ export function createAuthentication(db, { ttlSeconds = 28800 } = {}) {
         "Mật khẩu mới phải khác mật khẩu hiện tại.",
       );
       const nextHash = await hashPassword(newPassword);
-      transaction(db, () => {
-        const currentAccount = db
+      await transaction(db, async () => {
+        const currentAccount = await db
           .prepare(
             "SELECT a.status,r.enabled FROM accounts a JOIN roles r ON r.code=a.role_code WHERE a.id=?",
           )
@@ -190,14 +195,14 @@ export function createAuthentication(db, { ttlSeconds = 28800 } = {}) {
           "UNAUTHENTICATED",
           "Tài khoản không còn hoạt động.",
         );
-        const result = db
+        const result = await db
           .prepare(
             "UPDATE accounts SET password_hash=?,must_change_password=0 WHERE id=? AND password_hash=?",
           )
           .run(nextHash, principal.id, account.password_hash);
         assert(result.changes === 1, 409, "CONFLICT", "Tài khoản vừa thay đổi. Vui lòng thử lại.");
-        db.prepare("DELETE FROM sessions WHERE account_id=?").run(principal.id);
-        audit(db, principal.id, "auth.password_changed", principal.id, null, null, ip);
+        await db.prepare("DELETE FROM sessions WHERE account_id=?").run(principal.id);
+        await audit(db, principal.id, "auth.password_changed", principal.id, null, null, ip);
       });
     },
   };

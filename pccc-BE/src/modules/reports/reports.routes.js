@@ -47,7 +47,7 @@ async function upload(ctx, id) {
     chunks.push(chunk);
   }
   ctx.status = 201;
-  return submitReport(
+  return await submitReport(
     ctx.db,
     ctx.user,
     id,
@@ -61,12 +61,16 @@ async function upload(ctx, id) {
   );
 }
 export const reportsRoutes = [
-  { method: "GET", path: "/api/reports/types", handle: (ctx) => listReportTypes(ctx.db, ctx.user) },
+  {
+    method: "GET",
+    path: "/api/reports/types",
+    handle: async (ctx) => await listReportTypes(ctx.db, ctx.user),
+  },
   {
     method: "POST",
     path: "/api/reports/types",
     async handle(ctx) {
-      const result = createReportType(ctx.db, ctx.user, await ctx.readJson(), ctx.ip);
+      const result = await createReportType(ctx.db, ctx.user, await ctx.readJson(), ctx.ip);
       ctx.status = 201;
       return result;
     },
@@ -75,24 +79,24 @@ export const reportsRoutes = [
     method: "PUT",
     path: /^\/api\/reports\/types\/([a-zA-Z0-9-]+)$/,
     async handle(ctx, match) {
-      return updateReportType(ctx.db, ctx.user, match[1], await ctx.readJson(), ctx.ip);
+      return await updateReportType(ctx.db, ctx.user, match[1], await ctx.readJson(), ctx.ip);
     },
   },
   {
     method: "GET",
     path: "/api/reports/assignees",
-    handle: (ctx) => listReportAssignees(ctx.db, ctx.user),
+    handle: async (ctx) => await listReportAssignees(ctx.db, ctx.user),
   },
   {
     method: "GET",
     path: "/api/reports/requests",
-    handle: (ctx) => listReportRequests(ctx.db, ctx.user, ctx.url),
+    handle: async (ctx) => await listReportRequests(ctx.db, ctx.user, ctx.url),
   },
   {
     method: "POST",
     path: "/api/reports/requests",
     async handle(ctx) {
-      const result = createReportRequest(ctx.db, ctx.user, await ctx.readJson(), ctx.ip);
+      const result = await createReportRequest(ctx.db, ctx.user, await ctx.readJson(), ctx.ip);
       ctx.status = 201;
       return result;
     },
@@ -100,42 +104,42 @@ export const reportsRoutes = [
   {
     method: "GET",
     path: requestPath,
-    handle: (ctx, match) => reportDetail(ctx.db, ctx.user, match[1]),
+    handle: async (ctx, match) => await reportDetail(ctx.db, ctx.user, match[1]),
   },
   {
     method: "PUT",
     path: requestPath,
     async handle(ctx, match) {
-      return updateReportRequest(ctx.db, ctx.user, match[1], await ctx.readJson(), ctx.ip);
+      return await updateReportRequest(ctx.db, ctx.user, match[1], await ctx.readJson(), ctx.ip);
     },
   },
   {
     method: "POST",
     path: /^\/api\/reports\/requests\/([a-zA-Z0-9-]+)\/submit$/,
-    handle: (ctx, match) => upload(ctx, match[1]),
+    handle: async (ctx, match) => await upload(ctx, match[1]),
   },
   {
     method: "POST",
     path: /^\/api\/reports\/requests\/([a-zA-Z0-9-]+)\/complete$/,
-    handle: (ctx, match) => completeReport(ctx.db, ctx.user, match[1], ctx.ip),
+    handle: async (ctx, match) => await completeReport(ctx.db, ctx.user, match[1], ctx.ip),
   },
   {
     method: "GET",
     path: submissionPath,
-    handle(ctx, match) {
-      sendFile(ctx.response, reportFile(ctx.db, ctx.user, match[1], match[2]));
+    async handle(ctx, match) {
+      sendFile(ctx.response, await reportFile(ctx.db, ctx.user, match[1], match[2]));
     },
   },
   {
     method: "GET",
     path: "/api/reports/schedules",
-    handle: (ctx) => listReportSchedules(ctx.db, ctx.user),
+    handle: async (ctx) => await listReportSchedules(ctx.db, ctx.user),
   },
   {
     method: "POST",
     path: "/api/reports/schedules",
     async handle(ctx) {
-      const result = createReportSchedule(ctx.db, ctx.user, await ctx.readJson(), ctx.ip);
+      const result = await createReportSchedule(ctx.db, ctx.user, await ctx.readJson(), ctx.ip);
       ctx.status = 201;
       return result;
     },
@@ -143,13 +147,13 @@ export const reportsRoutes = [
   {
     method: "POST",
     path: schedulePath,
-    handle: (ctx, match) => generateReportPeriod(ctx.db, ctx.user, match[1], ctx.ip),
+    handle: async (ctx, match) => await generateReportPeriod(ctx.db, ctx.user, match[1], ctx.ip),
   },
   {
     method: "PUT",
     path: /^\/api\/reports\/schedules\/([a-zA-Z0-9-]+)$/,
     async handle(ctx, match) {
-      return updateReportSchedule(ctx.db, ctx.user, match[1], await ctx.readJson(), ctx.ip);
+      return await updateReportSchedule(ctx.db, ctx.user, match[1], await ctx.readJson(), ctx.ip);
     },
   },
 ];

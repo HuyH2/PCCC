@@ -24,24 +24,24 @@ export const dataTransferRoutes = [
   {
     method: "GET",
     path: "/api/data-transfers/datasets",
-    handle: (ctx) => listExportDatasets(ctx.db, ctx.user),
+    handle: async (ctx) => await listExportDatasets(ctx.db, ctx.user),
   },
   {
     method: "POST",
     path: "/api/data-transfers/export",
     async handle(ctx) {
-      const result = exportDataset(ctx.db, ctx.user, await ctx.readJson(), ctx.ip);
+      const result = await exportDataset(ctx.db, ctx.user, await ctx.readJson(), ctx.ip);
       downloadCsv(ctx, result);
     },
   },
   {
     method: "GET",
     path: "/api/data-transfers",
-    handle: (ctx) => listTransferJobs(ctx.db, ctx.user, ctx.url),
+    handle: async (ctx) => await listTransferJobs(ctx.db, ctx.user, ctx.url),
   },
   {
     method: "GET",
     path: /^\/api\/data-transfers\/([^/]+)$/,
-    handle: (ctx, match) => transferJobDetail(ctx.db, ctx.user, match[1]),
+    handle: async (ctx, match) => await transferJobDetail(ctx.db, ctx.user, match[1]),
   },
 ];

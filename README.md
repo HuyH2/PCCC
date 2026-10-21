@@ -2,7 +2,7 @@
 
 ## Tổ chức, cán bộ và sự cố sau khi hợp nhất nhánh SCRUM-25
 
-`/to-chuc/don-vi`, `/to-chuc/can-bo` và `/su-co` dùng SQLite/API thật. M09 có hồ sơ,
+`/to-chuc/don-vi`, `/to-chuc/can-bo` và `/su-co` dùng PostgreSQL/API thật. M09 có hồ sơ,
 thiệt hại, phân công, tiến độ, tài liệu riêng tư và thống kê; `/su-co/thong-ke` đọc số liệu
 từ database. Cần cấp quyền M09 phù hợp ở `/quan-tri/vai-tro` trước khi sử dụng; seed không
 tự cấp quyền M09. Hai API địa bàn có mục đích riêng: `/api/regions` phục vụ phân công
@@ -10,16 +10,16 @@ phụ trách, còn `/api/organization/regions` phục vụ danh mục khu phố 
 Tổ chức và cán bộ khác xem [tài liệu backend](pccc-BE/README.md#tổ-chức-và-cán-bộ--uc-org-01-uc-org-02).
 
 Với database demo local mới, `pnpm seed` tạo 15 đơn vị và 79 hồ sơ cán bộ để thử
-`/to-chuc/don-vi` và `/to-chuc/can-bo`. Dữ liệu được lưu trong SQLite, tên có nhãn
+`/to-chuc/don-vi` và `/to-chuc/can-bo`. Dữ liệu được lưu trong PostgreSQL, tên có nhãn
 `(mẫu)` và thông tin liên hệ giả lập; xem thêm hướng dẫn seed M02 trong tài liệu backend.
 
 Để tạo dữ liệu M09 mẫu, dùng script riêng `pccc-BE/scripts/seed-incidents-demo.js` với
-database tên `incidents-demo.sqlite` và thư mục upload riêng; script từ chối database đang
-chạy. Không chạy script này trên `pccc-BE/data/pccc.sqlite`.
+thư mục database riêng tên `incidents-demo-db` và thư mục upload riêng; script từ chối database đang
+chạy. Không chạy script này trên `pccc-BE/data/pccc-pg`.
 
 Nếu đang dùng database demo local mặc định và trang `/su-co` trống, chạy
 `pnpm seed:incidents:local` tại root rồi bấm **Tải lại** trên trang. Lệnh thêm 80 hồ sơ giả lập
-vào `pccc-BE/data/pccc.sqlite` (3 khu phố, 4 loại sự cố, hồ sơ nháp/chính thức, đủ trạng thái,
+vào database local nhúng `pccc-BE/data/pccc-pg` (3 khu phố, 4 loại sự cố, hồ sơ nháp/chính thức, đủ trạng thái,
 deadline, thiệt hại, phân công, lịch sử và 4 tệp `.txt` mẫu). Chạy lại không tạo trùng hoặc
 ghi đè hồ sơ đã sửa. Lệnh chỉ chạy ngoài production khi database có các tài khoản `demo.*`;
 không cấp thêm quyền M09. Đăng nhập `demo.admin` hoặc cấp quyền/phạm vi thích hợp tại
@@ -95,7 +95,7 @@ chỉ được tạo khi chưa có cấu hình. Chi tiết API và quyền: [pcc
 
 ## Báo cáo, deadline và chuông thông báo — UC-RPT-01..05, UC-SYS-03
 
-`/bao-cao`, chi tiết báo cáo và `/canh-bao` đã nối SQLite/API thật. `pnpm seed` trên database
+`/bao-cao`, chi tiết báo cáo và `/canh-bao` đã nối PostgreSQL/API thật. `pnpm seed` trên database
 demo local tạo 5 loại báo cáo, 48 yêu cầu đủ nhóm sắp hạn/quá hạn/đã nộp/hoàn thành,
 4 lịch định kỳ, 10 file mẫu và thông báo hạn. Seed lại giữ các hồ sơ đã chỉnh sửa.
 Đăng nhập `demo.admin`, tạo yêu cầu giao `demo.tong-hop`, đặt deadline; đăng nhập
@@ -164,7 +164,7 @@ Chi tiết schema, API, quyền và giới hạn: [pccc-BE/REPORT_EXPORT.md](pcc
 Tài khoản `demo.chi-huy` trong ảnh minh họa là A01, không có quyền vào hai màn hình này.
 `/co-so` hiện đọc database và có thể dùng để kiểm tra người phụ trách sau chuyển giao. Seed không ghi đè mật khẩu hoặc phân công đã thay đổi; trên database demo đã dùng
 lâu, danh sách CB-A03 có thể khác ví dụ. Migration tự chạy khi backend khởi động. Nếu chưa seed
-database demo, kiểm tra đúng `DATABASE_PATH` trong `pccc-BE/.env` rồi chạy `pnpm seed` tại root;
+database demo, kiểm tra đúng `DATABASE_URL` trong `pccc-BE/.env` rồi chạy `pnpm seed` tại root;
 seed không khôi phục phân công hoặc mật khẩu đã thay đổi.
 Chuyển giao cập nhật người phụ trách; quyền xem rộng theo khu vực/đơn vị/toàn hệ thống cần quản trị
 rà soát riêng ở `/quan-tri/vai-tro` nếu cán bộ cũ không còn được xem dữ liệu đó.
@@ -227,7 +227,7 @@ CS001–CS002; `demo.chi-huy` (A01) tạo được cuộc kiểm tra/checklist n
 ## Authentication & Authorization — UC-ADM-01, UC-ADM-03
 
 Repo là monorepo pnpm gồm hai ứng dụng: frontend [`pccc-FE`](pccc-FE) (Next.js) và backend
-[`pccc-BE`](pccc-BE/README.md) (modular monolith, xem [PROJECT.md](PROJECT.md)). Backend: Node.js >= 22.13, SQLite,
+[`pccc-BE`](pccc-BE/README.md) (modular monolith, xem [PROJECT.md](PROJECT.md)). Backend: Node.js >= 22.13, PostgreSQL,
 session cookie HttpOnly, RBAC và phạm vi đơn vị/khu phố/cơ sở. Có migration, seed vai trò,
 audit đăng nhập/thay đổi quyền và kiểm thử HTTP.
 
@@ -260,8 +260,10 @@ của PC07 — Đội Khu vực 10, xây dựng theo `URD_He_thong_Quan_ly_PCCC_
 - Mở terminal (PowerShell trên Windows, Terminal/zsh trên macOS) tại **thư mục gốc repo**, nơi có
   `package.json`, `pccc-FE` và `pccc-BE`. Mọi lệnh bên dưới đều chạy tại đây.
 - Giữ hai terminal chạy đồng thời: frontend ở cổng **3000**, backend ở cổng **4000**.
-- Database là SQLite, không cần cài MySQL/PostgreSQL hoặc chạy Docker. Backend dùng thư viện có sẵn
-  trong Node.js, `pnpm install` ở root cài cho cả hai ứng dụng (pnpm workspace).
+- Database là PostgreSQL. Khi chạy local **không cần cài PostgreSQL hoặc Docker**: mặc định backend
+  dùng PostgreSQL nhúng (PGlite) lưu trong thư mục `pccc-BE/data/pccc-pg`. Muốn dùng PostgreSQL server
+  (local, Neon, Supabase...) thì đặt `DATABASE_URL=postgresql://...` trong `pccc-BE/.env`.
+  `pnpm install` ở root cài cho cả hai ứng dụng (pnpm workspace).
 
 ### 2. Chuẩn bị lần đầu
 
@@ -289,7 +291,7 @@ Mở hai file vừa tạo trong IDE và kiểm tra:
 | `pccc-FE/.env.local` | `BACKEND_URL`                   | `http://127.0.0.1:4000`                                                      |
 | `pccc-BE/.env`       | `PORT`                          | `4000`                                                                       |
 | `pccc-BE/.env`       | `APP_ORIGIN`                    | `http://localhost:3000`                                                      |
-| `pccc-BE/.env`       | `DATABASE_PATH`                 | `./data/pccc.sqlite`                                                         |
+| `pccc-BE/.env`       | `DATABASE_URL`                  | `./data/pccc-pg` (PostgreSQL nhúng) hoặc `postgresql://...` (server)         |
 | `pccc-BE/.env`       | `COOKIE_SECURE`                 | `false`                                                                      |
 | `pccc-BE/.env`       | `DEMO_PASSWORD`                 | `PcccDemo@2026` — mật khẩu mẫu chung cho team test                           |
 | `pccc-BE/.env`       | `INSPECTION_DOCUMENT_MAX_BYTES` | `5242880` — giới hạn file biên bản/tài liệu kiểm tra (byte), có thể bỏ trống |
@@ -301,7 +303,7 @@ pnpm migrate
 pnpm seed
 ```
 
-Database được tạo ở `pccc-BE/data/pccc.sqlite`. Không commit `.env`, `.env.local` hoặc database.
+Database nhúng được tạo ở thư mục `pccc-BE/data/pccc-pg`. Không commit `.env`, `.env.local` hoặc database.
 Seed chỉ cần chạy khi khởi tạo dữ liệu mẫu; chạy lại không ghi đè mật khẩu, quyền hoặc phạm vi
 đã cấu hình của tài khoản hiện có.
 
@@ -392,8 +394,8 @@ xem cấu hình chi tiết trong [`pccc-BE/README.md`](pccc-BE/README.md).
 | Mật khẩu seed không đăng nhập được sau khi đã đổi mật khẩu                | Dùng mật khẩu mới. Sửa `DEMO_PASSWORD` hoặc seed lại không reset mật khẩu tài khoản hiện có.                                                                                       |
 | `pnpm: command not found`                                                 | Chạy `npm install -g pnpm@10.34.7` rồi mở lại terminal. Nếu `corepack enable` báo `EACCES ... .cache/node/corepack`, thư mục `~/.cache` đang thuộc `root`: dùng cách cài bằng npm. |
 | Trang kiểm tra báo không có quyền dù đã seed                              | DB tạo trước khi có M06 giữ nguyên quyền cũ. Cấp `M06.*` tại `/quan-tri/vai-tro` hoặc tạo lại DB demo (dòng dưới).                                                                 |
-| Muốn tạo lại DB demo (xóa toàn bộ dữ liệu local)                          | Dừng backend, xóa `pccc-BE/data/pccc.sqlite*` (PowerShell: `Remove-Item pccc-BE/data/pccc.sqlite*`; zsh: `rm -f pccc-BE/data/pccc.sqlite(N)`), rồi `pnpm migrate` và `pnpm seed`.  |
-| zsh báo `no matches found: pccc-BE/data/pccc.sqlite*`                     | Chưa có DB nên không có gì để xóa; bỏ qua và chạy tiếp `pnpm migrate`.                                                                                                             |
+| Muốn tạo lại DB demo (xóa toàn bộ dữ liệu local)                          | Dừng backend, xóa thư mục `pccc-BE/data/pccc-pg` (PowerShell: `Remove-Item -Recurse pccc-BE/data/pccc-pg`; zsh: `rm -rf pccc-BE/data/pccc-pg`), rồi `pnpm migrate` và `pnpm seed`. |
+| Đang có `pccc-BE/data/pccc.sqlite` từ bản cũ                              | Bản hiện tại dùng PostgreSQL, không đọc file SQLite cũ. Trong `pccc-BE/.env` thay `DATABASE_PATH=...` bằng `DATABASE_URL=./data/pccc-pg`, rồi chạy `pnpm migrate` và `pnpm seed`.  |
 
 ## Công nghệ
 

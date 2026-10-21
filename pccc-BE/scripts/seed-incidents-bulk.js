@@ -1,8 +1,14 @@
-import { DatabaseSync } from "node:sqlite";
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { basename, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-import { openDatabase, transaction } from "../src/core/database.js";
+import { isPostgresUrl, openDatabase, transaction } from "../src/core/database.js";
 import { audit } from "../src/modules/audit/audit.service.js";
 
 const day = 86_400_000;
@@ -21,11 +27,13 @@ function incidentId(number) {
   return `DEMO-M09-${String(number).padStart(3, "0")}`;
 }
 
-function assertDemoData(db) {
-  const foreignAccounts = db
-    .prepare("SELECT count(*) AS total FROM accounts WHERE username NOT LIKE 'demo.%'")
-    .get().total;
-  const accountCount = db.prepare("SELECT count(*) AS total FROM accounts").get().total;
+async function assertDemoData(db) {
+  const foreignAccounts = (
+    await db
+      .prepare("SELECT count(*) AS total FROM accounts WHERE username NOT LIKE 'demo.%'")
+      .get()
+  ).total;
+  const accountCount = (await db.prepare("SELECT count(*) AS total FROM accounts").get()).total;
   if (foreignAccounts || accountCount < 6) {
     throw new Error("Chỉ nạp dữ liệu M09 vào database chứa các tài khoản demo của dự án.");
   }
@@ -40,7 +48,7 @@ function assertDemoData(db) {
       ["facilities", region.facilityId],
     ]),
   ]) {
-    if (!db.prepare(`SELECT 1 FROM ${table} WHERE id=?`).get(id)) {
+    if (!(await db.prepare(`SELECT 1 FROM ${table} WHERE id=?`).get(id))) {
       throw new Error(`Thiếu dữ liệu demo ${table}:${id}; chạy pnpm seed trước.`);
     }
   }
@@ -53,13 +61,13 @@ function documentContent(number) {
   );
 }
 
-export function seedIncidentsBulk(db, { now = Date.now(), uploadDirectory } = {}) {
+export async function seedIncidentsBulk(db, { now = Date.now(), uploadDirectory } = {}) {
   if (process.env.NODE_ENV === "production")
     throw new Error("Không nạp dữ liệu demo ở production.");
   if (!Number.isSafeInteger(now) || now < 120 * day)
     throw new Error("Thời gian seed không hợp lệ.");
   if (!uploadDirectory) throw new Error("Cần thư mục tài liệu riêng cho M09.");
-  assertDemoData(db);
+  await assertDemoData(db);
 
   const uploads = resolve(uploadDirectory);
   const publicDirectory = resolve("../pccc-FE/public");
@@ -82,7 +90,7 @@ export function seedIncidentsBulk(db, { now = Date.now(), uploadDirectory } = {}
     }
 
     let inserted = 0;
-    transaction(db, () => {
+    await transaction(db, async () => {
       const insertIncident = db.prepare(`INSERT INTO incidents
         (id,incident_code,incident_type,title,description,occurred_at,reported_at,address,scene_details,
          region_id,unit_id,facility_id,record_status,processing_status,deadline_at,completed_at,
@@ -124,7 +132,7 @@ export function seedIncidentsBulk(db, { now = Date.now(), uploadDirectory } = {}
         const completed = ["COMPLETED", "CLOSED"].includes(status)
           ? now - ((number % 12) + 1) * hour
           : null;
-        const result = insertIncident.run(
+        const result = await insertIncident.run(
           id,
           id,
           draft ? null : types[typeIndex],
@@ -148,7 +156,7 @@ export function seedIncidentsBulk(db, { now = Date.now(), uploadDirectory } = {}
         );
         if (!result.changes) continue;
         inserted++;
-        insertHistory.run(
+        await insertHistory.run(
           id,
           null,
           "NEW",
@@ -162,7 +170,7 @@ export function seedIncidentsBulk(db, { now = Date.now(), uploadDirectory } = {}
           "DEMO_M09_BULK",
         );
         if (["IN_PROGRESS", "COMPLETED", "CLOSED"].includes(status)) {
-          insertHistory.run(
+          await insertHistory.run(
             id,
             "NEW",
             "IN_PROGRESS",
@@ -177,7 +185,7 @@ export function seedIncidentsBulk(db, { now = Date.now(), uploadDirectory } = {}
           );
         }
         if (["COMPLETED", "CLOSED"].includes(status)) {
-          insertHistory.run(
+          await insertHistory.run(
             id,
             "IN_PROGRESS",
             "COMPLETED",
@@ -192,7 +200,7 @@ export function seedIncidentsBulk(db, { now = Date.now(), uploadDirectory } = {}
           );
         }
         if (status === "CLOSED") {
-          insertHistory.run(
+          await insertHistory.run(
             id,
             "COMPLETED",
             "CLOSED",
@@ -207,7 +215,7 @@ export function seedIncidentsBulk(db, { now = Date.now(), uploadDirectory } = {}
           );
         }
         if (!draft && number % 3 !== 0) {
-          insertDamage.run(
+          await insertDamage.run(
             `${id}-H`,
             id,
             "HUMAN",
@@ -220,7 +228,7 @@ export function seedIncidentsBulk(db, { now = Date.now(), uploadDirectory } = {}
             reported + hour,
             now,
           );
-          insertDamage.run(
+          await insertDamage.run(
             `${id}-P`,
             id,
             "PROPERTY",
@@ -236,7 +244,7 @@ export function seedIncidentsBulk(db, { now = Date.now(), uploadDirectory } = {}
         }
         if (!draft && number % 2 === 0) {
           const assignmentDone = ["COMPLETED", "CLOSED"].includes(status);
-          insertAssignment.run(
+          await insertAssignment.run(
             `${id}-A`,
             id,
             region.officerId,
@@ -252,7 +260,7 @@ export function seedIncidentsBulk(db, { now = Date.now(), uploadDirectory } = {}
         }
         if (documentNumbers.includes(number)) {
           const file = `demo-m09-${String(number).padStart(3, "0")}.txt`;
-          insertDocument.run(
+          await insertDocument.run(
             `${id}-DOC`,
             id,
             file,
@@ -265,16 +273,14 @@ export function seedIncidentsBulk(db, { now = Date.now(), uploadDirectory } = {}
             reported + hour,
           );
         }
-        audit(db, actor, "incident.demo_seeded", id, null, { id, status }, "demo-seed");
-      }
-      if (db.prepare("PRAGMA foreign_key_check").all().length) {
-        throw new Error("Dữ liệu M09 có lỗi khóa ngoại.");
+        await audit(db, actor, "incident.demo_seeded", id, null, { id, status }, "demo-seed");
       }
     });
     return {
       inserted,
-      total: db.prepare("SELECT count(*) AS total FROM incidents WHERE id LIKE 'DEMO-M09-%'").get()
-        .total,
+      total: (
+        await db.prepare("SELECT count(*) AS total FROM incidents WHERE id LIKE 'DEMO-M09-%'").get()
+      ).total,
     };
   } catch (error) {
     for (const file of createdFiles) unlinkSync(file);
@@ -282,42 +288,45 @@ export function seedIncidentsBulk(db, { now = Date.now(), uploadDirectory } = {}
   }
 }
 
-export function runBulkSeed(argv = process.argv.slice(2)) {
+export async function runBulkSeed(argv = process.argv.slice(2)) {
   if (argv.length !== 1 || argv[0] !== "--demo") {
     throw new Error("Chỉ chạy lệnh seed:incidents:local với cờ --demo.");
   }
   if (process.env.NODE_ENV === "production")
     throw new Error("Không nạp dữ liệu demo ở production.");
-  const databasePath = resolve(process.env.DATABASE_PATH || "./data/pccc.sqlite");
+  const configured = process.env.DATABASE_URL || "./data/pccc-pg";
+  const databasePath = resolve(configured);
   const dataDirectory = resolve("./data");
   if (
-    basename(databasePath) !== "pccc.sqlite" ||
+    isPostgresUrl(configured) ||
+    basename(databasePath) !== "pccc-pg" ||
     !databasePath.startsWith(`${dataDirectory}${sep}`)
   ) {
-    throw new Error("Chỉ nạp vào database demo local pccc-BE/data/pccc.sqlite.");
+    throw new Error("Chỉ nạp vào database demo local pccc-BE/data/pccc-pg.");
   }
-  if (!existsSync(databasePath))
+  if (!existsSync(databasePath) || !readdirSync(databasePath).length)
     throw new Error("Database chưa tồn tại; chạy pnpm migrate và pnpm seed.");
-  const verify = new DatabaseSync(databasePath, { readOnly: true });
+  // Check the demo accounts before migrations can touch the database.
+  const verify = await openDatabase(databasePath, { migrations: false });
   try {
-    assertDemoData(verify);
+    await assertDemoData(verify);
   } finally {
-    verify.close();
+    await verify.close();
   }
-  const db = openDatabase(databasePath);
+  const db = await openDatabase(databasePath);
   try {
     const uploadDirectory = resolve(
       process.env.INCIDENT_UPLOAD_DIR || "./src/private/incident-documents",
     );
-    return { ...seedIncidentsBulk(db, { uploadDirectory }), databasePath };
+    return { ...(await seedIncidentsBulk(db, { uploadDirectory })), databasePath };
   } finally {
-    db.close();
+    await db.close();
   }
 }
 
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
   try {
-    console.info(JSON.stringify(runBulkSeed()));
+    console.info(JSON.stringify(await runBulkSeed()));
   } catch (error) {
     console.error(error instanceof Error ? error.message : error);
     process.exitCode = 1;

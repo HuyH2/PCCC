@@ -58,12 +58,12 @@ function historyWhere(filters, prefix) {
   return { sql: clauses.length ? ` AND ${clauses.join(" AND ")}` : "", params };
 }
 
-export function getFacilityStatus(db, user, id) {
-  const { facility } = getFacility(db, user, id);
+export async function getFacilityStatus(db, user, id) {
+  const { facility } = await getFacility(db, user, id);
   return { facilityId: id, status: facility.status };
 }
 
-export function listFacilityViolations(db, user, url) {
+export async function listFacilityViolations(db, user, url) {
   requirePermission(user, "M03.view");
   const { page, pageSize } = pagination(url);
   const status = url.searchParams.get("status") || "all";
@@ -77,7 +77,7 @@ export function listFacilityViolations(db, user, url) {
   const where = `${scope.sql}${status === "all" ? "" : " AND v.status=?"}`;
   const params = [...scope.params, ...(status === "all" ? [] : [status])];
   return {
-    items: db
+    items: await db
       .prepare(
         `SELECT v.*,f.name AS facility_name,f.status AS facility_status,
         a.full_name AS suspended_by_name,p.full_name AS approved_by_name
@@ -86,47 +86,51 @@ export function listFacilityViolations(db, user, url) {
       WHERE ${where} ORDER BY v.suspension_at DESC,v.id DESC LIMIT ? OFFSET ?`,
       )
       .all(...params, pageSize, (page - 1) * pageSize),
-    total: db
-      .prepare(
-        `SELECT count(*) AS n FROM facility_violations v
+    total: (
+      await db
+        .prepare(
+          `SELECT count(*) AS n FROM facility_violations v
       JOIN facilities f ON f.id=v.facility_id WHERE ${where}`,
-      )
-      .get(...params).n,
+        )
+        .get(...params)
+    ).n,
     page,
     pageSize,
   };
 }
 
-export function listFacilityStatusHistory(db, user, id, url) {
-  getFacility(db, user, id);
+export async function listFacilityStatusHistory(db, user, id, url) {
+  await getFacility(db, user, id);
   const filters = parseFilters(url);
   const where = historyWhere(filters, "h.occurred_at");
   const params = [id, ...where.params];
   return {
-    items: db
+    items: await db
       .prepare(
         `SELECT h.*, a.full_name AS actor_name, a.username AS actor_username
       FROM facility_status_history h JOIN accounts a ON a.id=h.actor_id
       WHERE h.facility_id=?${where.sql} ORDER BY h.occurred_at DESC,h.id DESC LIMIT ? OFFSET ?`,
       )
       .all(...params, filters.pageSize, (filters.page - 1) * filters.pageSize),
-    total: db
-      .prepare(
-        `SELECT count(*) AS n FROM facility_status_history h WHERE h.facility_id=?${where.sql}`,
-      )
-      .get(...params).n,
+    total: (
+      await db
+        .prepare(
+          `SELECT count(*) AS n FROM facility_status_history h WHERE h.facility_id=?${where.sql}`,
+        )
+        .get(...params)
+    ).n,
     page: filters.page,
     pageSize: filters.pageSize,
   };
 }
 
-export function listFacilityChanges(db, user, id, url) {
-  getFacility(db, user, id);
+export async function listFacilityChanges(db, user, id, url) {
+  await getFacility(db, user, id);
   const filters = parseFilters(url);
   const where = historyWhere(filters, "l.occurred_at");
   const params = [id, ...where.params];
   return {
-    items: db
+    items: await db
       .prepare(
         `SELECT l.id,l.action,l.before_json,l.after_json,l.occurred_at,
         a.full_name AS actor_name,a.username AS actor_username
@@ -135,19 +139,21 @@ export function listFacilityChanges(db, user, id, url) {
       ORDER BY l.occurred_at DESC,l.id DESC LIMIT ? OFFSET ?`,
       )
       .all(...params, filters.pageSize, (filters.page - 1) * filters.pageSize),
-    total: db
-      .prepare(
-        `SELECT count(*) AS n FROM audit_logs l WHERE l.object_type='facility'
+    total: (
+      await db
+        .prepare(
+          `SELECT count(*) AS n FROM audit_logs l WHERE l.object_type='facility'
       AND l.object_id=? AND l.action='facility.details_updated'${where.sql}`,
-      )
-      .get(...params).n,
+        )
+        .get(...params)
+    ).n,
     page: filters.page,
     pageSize: filters.pageSize,
   };
 }
 
-export function listFacilityTimeline(db, user, id, url) {
-  getFacility(db, user, id);
+export async function listFacilityTimeline(db, user, id, url) {
+  await getFacility(db, user, id);
   const filters = parseFilters(url);
   const statusWhere = historyWhere(filters, "h.occurred_at");
   const detailWhere = historyWhere(filters, "l.occurred_at");
@@ -172,20 +178,20 @@ export function listFacilityTimeline(db, user, id, url) {
   }
   const union = segments.join(" UNION ALL ");
   return {
-    items: db
+    items: await db
       .prepare(
         `SELECT * FROM (${union}) ORDER BY occurred_at DESC,type DESC,id DESC LIMIT ? OFFSET ?`,
       )
       .all(...params, filters.pageSize, (filters.page - 1) * filters.pageSize),
-    total: db.prepare(`SELECT count(*) AS n FROM (${union})`).get(...params).n,
+    total: (await db.prepare(`SELECT count(*) AS n FROM (${union})`).get(...params)).n,
     page: filters.page,
     pageSize: filters.pageSize,
   };
 }
 
-export function updateFacilityDetails(db, user, id, input, ip) {
+export async function updateFacilityDetails(db, user, id, input, ip) {
   requirePermission(user, "M03.edit");
-  const before = getFacility(db, user, id).facility;
+  const before = (await getFacility(db, user, id)).facility;
   object(input, ["name", "address"]);
   assert(Object.keys(input).length > 0, 400, "INVALID_INPUT", "Cần có thông tin thay đổi.");
   const name = input.name === undefined ? before.name : trimmedText(input.name, "Tên cơ sở", 200);
@@ -197,11 +203,11 @@ export function updateFacilityDetails(db, user, id, input, ip) {
     "NO_CHANGE",
     "Thông tin cơ sở không thay đổi.",
   );
-  return transaction(db, () => {
-    assertUniqueNameAndAddress(db, name, address, id);
-    db.prepare("UPDATE facilities SET name=?,address=? WHERE id=?").run(name, address, id);
+  return await transaction(db, async () => {
+    await assertUniqueNameAndAddress(db, name, address, id);
+    await db.prepare("UPDATE facilities SET name=?,address=? WHERE id=?").run(name, address, id);
     const after = { ...before, name, address };
-    writeAudit(db, {
+    await writeAudit(db, {
       actorId: user.id,
       feature: "M03",
       objectType: "facility",
@@ -215,8 +221,8 @@ export function updateFacilityDetails(db, user, id, input, ip) {
   });
 }
 
-export function updateFacilityStatus(db, user, id, input, ip) {
-  const before = getFacility(db, user, id).facility;
+export async function updateFacilityStatus(db, user, id, input, ip) {
+  const before = (await getFacility(db, user, id)).facility;
   object(input, [
     "status",
     "reason",
@@ -266,10 +272,10 @@ export function updateFacilityStatus(db, user, id, input, ip) {
       "Thông tin quyết định/phê duyệt chỉ dùng cho đình chỉ hoặc hoạt động lại.",
     );
   }
-  return transaction(db, () => {
+  return await transaction(db, async () => {
     const openCase =
       before.status === "suspended"
-        ? db
+        ? await db
             .prepare(
               "SELECT id FROM facility_violations WHERE facility_id=? AND status='suspended'",
             )
@@ -277,12 +283,12 @@ export function updateFacilityStatus(db, user, id, input, ip) {
         : null;
     if (before.status === "suspended")
       assert(openCase, 409, "MISSING_VIOLATION", "Không tìm thấy hồ sơ đình chỉ để phê duyệt.");
-    const changed = db
+    const changed = await db
       .prepare("UPDATE facilities SET status=? WHERE id=? AND status=?")
       .run(status, id, before.status);
     assert(changed.changes === 1, 409, "STALE_STATUS", "Trạng thái đã thay đổi. Vui lòng tải lại.");
     const now = Date.now();
-    const auditId = writeAudit(db, {
+    const auditId = await writeAudit(db, {
       actorId: user.id,
       feature: "M03",
       objectType: "facility",
@@ -298,37 +304,43 @@ export function updateFacilityStatus(db, user, id, input, ip) {
       },
       ip,
     });
-    db.prepare(
-      `INSERT INTO facility_status_history
+    await db
+      .prepare(
+        `INSERT INTO facility_status_history
       (facility_id,previous_status,new_status,reason,decision_reference,actor_id,occurred_at,audit_log_id)
       VALUES (?,?,?,?,?,?,?,?)`,
-    ).run(
-      id,
-      before.status,
-      status,
-      reason,
-      input.decisionReference?.trim() ?? null,
-      user.id,
-      now,
-      auditId,
-    );
-    if (status === "suspended")
-      db.prepare(
-        `INSERT INTO facility_violations
-        (facility_id,description,suspension_decision_reference,suspension_at,suspended_by)
-        VALUES (?,?,?,?,?)`,
-      ).run(id, reason, input.decisionReference.trim(), now, user.id);
-    if (before.status === "suspended")
-      db.prepare(
-        `UPDATE facility_violations SET status='restored',remediation_evidence=?,
-        restoration_decision_reference=?,approved_by=?,approved_at=? WHERE id=?`,
-      ).run(
-        input.remediationEvidence.trim(),
-        input.decisionReference.trim(),
+      )
+      .run(
+        id,
+        before.status,
+        status,
+        reason,
+        input.decisionReference?.trim() ?? null,
         user.id,
         now,
-        openCase.id,
+        auditId,
       );
+    if (status === "suspended")
+      await db
+        .prepare(
+          `INSERT INTO facility_violations
+        (facility_id,description,suspension_decision_reference,suspension_at,suspended_by)
+        VALUES (?,?,?,?,?)`,
+        )
+        .run(id, reason, input.decisionReference.trim(), now, user.id);
+    if (before.status === "suspended")
+      await db
+        .prepare(
+          `UPDATE facility_violations SET status='restored',remediation_evidence=?,
+        restoration_decision_reference=?,approved_by=?,approved_at=? WHERE id=?`,
+        )
+        .run(
+          input.remediationEvidence.trim(),
+          input.decisionReference.trim(),
+          user.id,
+          now,
+          openCase.id,
+        );
     return { facilityId: id, status, previousStatus: before.status, occurredAt: now };
   });
 }

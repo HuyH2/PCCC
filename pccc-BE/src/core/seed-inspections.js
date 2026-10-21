@@ -32,16 +32,19 @@ const checklists = [
   },
 ];
 
-export function seedInspections(db) {
+export async function seedInspections(db) {
   const now = Date.now();
   for (const checklist of checklists) {
-    if (db.prepare("SELECT 1 FROM inspection_checklists WHERE id=?").get(checklist.id)) continue;
-    db.prepare(
-      `INSERT INTO inspection_checklists(id,name,facility_type,description,created_at)
+    if (await db.prepare("SELECT 1 FROM inspection_checklists WHERE id=?").get(checklist.id))
+      continue;
+    await db
+      .prepare(
+        `INSERT INTO inspection_checklists(id,name,facility_type,description,created_at)
       VALUES (?,?,?,?,?)`,
-    ).run(checklist.id, checklist.name, checklist.facilityType, checklist.description, now);
-    checklist.items.forEach(([content, guidance, required = true], index) =>
-      db
+      )
+      .run(checklist.id, checklist.name, checklist.facilityType, checklist.description, now);
+    for (const [index, [content, guidance, required = true]] of checklist.items.entries())
+      await db
         .prepare(
           `INSERT INTO inspection_checklist_items(id,checklist_id,position,content,guidance,legal_reference,is_required)
           VALUES (?,?,?,?,?,?,?)`,
@@ -54,8 +57,7 @@ export function seedInspections(db) {
           guidance,
           "Văn bản mẫu (không có giá trị pháp lý)",
           required ? 1 : 0,
-        ),
-    );
+        );
   }
   const samples = [
     [
@@ -76,26 +78,28 @@ export function seedInspections(db) {
     ],
   ];
   for (const [id, code, facilityId, kind, topic, reason] of samples) {
-    if (db.prepare("SELECT 1 FROM inspections WHERE id=?").get(id)) continue;
-    db.prepare(
-      `INSERT INTO inspections(id,code,facility_id,kind,topic,reason,scheduled_date,lead_officer_id,
+    if (await db.prepare("SELECT 1 FROM inspections WHERE id=?").get(id)) continue;
+    await db
+      .prepare(
+        `INSERT INTO inspections(id,code,facility_id,kind,topic,reason,scheduled_date,lead_officer_id,
         checklist_id,created_by,updated_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    ).run(
-      id,
-      code,
-      facilityId,
-      kind,
-      topic,
-      reason,
-      "2026-10-20",
-      "CB-A03",
-      "CL-CHUNG",
-      "DEMO-A03",
-      "DEMO-A03",
-      now,
-      now,
-    );
-    writeAudit(db, {
+      )
+      .run(
+        id,
+        code,
+        facilityId,
+        kind,
+        topic,
+        reason,
+        "2026-10-20",
+        "CB-A03",
+        "CL-CHUNG",
+        "DEMO-A03",
+        "DEMO-A03",
+        now,
+        now,
+      );
+    await writeAudit(db, {
       actorId: "DEMO-A03",
       feature: "M06",
       objectType: "inspection",

@@ -25,8 +25,8 @@ Monorepo pnpm (`pnpm-workspace.yaml`) gồm hai ứng dụng; backend theo modul
 
 - Frontend `pccc-FE`: Next.js 16 App Router, React 19, TypeScript strict.
 - UI: Tailwind CSS v4, shadcn/ui + Radix, lucide-react, Recharts; form dùng react-hook-form + Zod.
-- Backend `pccc-BE`: JavaScript ESM, `node:http`, `node:sqlite` với `DatabaseSync`; Node.js >= 22.13.0.
-  Backend hiện không có dependency riêng, ORM hoặc Express.
+- Backend `pccc-BE`: JavaScript ESM, `node:http`, PostgreSQL qua `pg` (server) hoặc PGlite (PostgreSQL
+  nhúng cho local/test); Node.js >= 22.13.0. Không dùng ORM hoặc Express.
 - Package manager: pnpm (phiên bản ghim ở `packageManager` của `package.json` root), `pnpm-lock.yaml`.
 - Các đường dẫn `src/...` dưới đây (frontend) nằm trong `pccc-FE/`:
 - `src/app/(app)/`: các trang trong khung sidebar/header. Route group không xuất hiện trong URL.
@@ -40,7 +40,7 @@ Monorepo pnpm (`pnpm-workspace.yaml`) gồm hai ứng dụng; backend theo modul
 - `src/data/types.ts`, `schemas.ts`: type nghiệp vụ và validation form; `mock.ts`, `thong-ke.ts`
   chứa dữ liệu/tổng hợp demo, không phải nguồn dữ liệu production.
 - `pccc-BE/src/app.js`: HTTP server, middleware chung (CORS, Origin, session, lỗi) và bảng routes.
-- `pccc-BE/src/core/`: `database.js` (SQLite, transaction, migration), `errors.js`, `validation.js`,
+- `pccc-BE/src/core/`: `database.js` (PostgreSQL, transaction, migration), `errors.js`, `validation.js`,
   `password.js`, `http.js` (`readJson`, `findRoute`), seed demo.
 - `pccc-BE/src/modules/<module>/`: `<module>.service.js` (logic, SQL, quyền/scope) và
   `<module>.routes.js` (route HTTP). Module hiện có: `auth`, `authorization` (RBAC + scope dùng
@@ -51,14 +51,14 @@ Monorepo pnpm (`pnpm-workspace.yaml`) gồm hai ứng dụng; backend theo modul
 - `pccc-BE/migrations/*.sql`: migration theo thứ tự tên file.
 - Chuyển giao tài khoản/phạm vi UC-ADM-04 dùng module `administration/account-transfer.service.js`,
   `region_assignments`, `account_transfers` và `account_transfer_items`; xem `pccc-BE/ACCOUNT_TRANSFERS.md`.
-- `pccc-BE/test/*.test.js`: kiểm thử bằng `node:test`, HTTP và SQLite; `tests/auth-integration.test.mjs`:
+- `pccc-BE/test/*.test.js`: kiểm thử bằng `node:test`, HTTP và PostgreSQL (PGlite); `tests/auth-integration.test.mjs`:
   tích hợp frontend production với backend.
 
 ## Luồng dữ liệu và ranh giới triển khai
 
 - Browser gọi `/api/*`; `next.config.ts` rewrite tới `BACKEND_URL` (mặc định cổng 4000).
   Server Components gọi backend qua `backendFetch`, chuyển cookie `pccc_session` và dùng `no-store`.
-- Backend xác thực session, kiểm quyền/phạm vi, validate input rồi truy vấn SQLite. Lỗi API có dạng
+- Backend xác thực session, kiểm quyền/phạm vi, validate input rồi truy vấn PostgreSQL. Lỗi API có dạng
   `{ error: { code, message } }`; giữ semantics 401/403/404 và không trả stack trace/secret.
 - Đăng nhập, đổi/bỏ qua đổi mật khẩu, cấu hình vai trò/phạm vi, dashboard `/` và tra cứu `/tra-cuu`
   đã có luồng API. `/co-so`, chi tiết cơ sở và lịch sử trạng thái đã nối API; `/vi-pham` đọc hồ sơ
@@ -79,19 +79,22 @@ Monorepo pnpm (`pnpm-workspace.yaml`) gồm hai ứng dụng; backend theo modul
 
 - Frontend đọc `.env*` trong `pccc-FE`; backend chạy với `--env-file-if-exists=.env` trong `pccc-BE`.
   Không ghi đè cấu hình có sẵn; chỉ tạo từ `.env.example` khi file đích chưa tồn tại.
-- Frontend dùng `BACKEND_URL`. Backend dùng `PORT`, `HOST`, `DATABASE_PATH`, `APP_ORIGIN`,
+- Frontend dùng `BACKEND_URL`. Backend dùng `PORT`, `HOST`, `DATABASE_URL`, `APP_ORIGIN`,
   `SESSION_TTL_SECONDS`, `COOKIE_SECURE`, `DEMO_PASSWORD`, `LEGAL_DOCUMENT_MAX_BYTES`,
   `INSPECTION_DOCUMENT_MAX_BYTES`; xem các file `.env.example`.
-- `DATABASE_URL`, `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`, `PGSSLMODE` đã có
-  trong template để chuẩn bị PostgreSQL, nhưng hiện chưa được backend đọc. Thêm biến không chuyển
-  database; nếu được giao chuyển PostgreSQL phải xử lý driver, query, migration, seed và test.
-- SQLite mặc định nằm ở `pccc-BE/data/pccc.sqlite` (script backend chạy trong thư mục `pccc-BE`).
-  Migration SQL được chạy theo tên đã sắp xếp, ghi nhận trong `schema_migrations`.
+- `DATABASE_URL` là `postgresql://...` (server: production, Neon, local) hoặc một thư mục cho
+  PostgreSQL nhúng PGlite; mặc định `./data/pccc-pg` (script backend chạy trong thư mục `pccc-BE`).
+  Migration SQL được chạy theo tên đã sắp xếp, ghi nhận trong `schema_migrations`;
+  `001-postgresql-baseline.sql` thay cho 28 migration SQLite cũ.
+- Mọi lệnh DB là async: `await db.prepare(sql).get/all/run(...)`, `await transaction(db, async () => ...)`.
+  Placeholder vẫn viết `?` (tự đổi sang `$1..$n`). Alias camelCase phải đặt trong ngoặc kép
+  (`AS "regionId"`); `INSERT ... ON CONFLICT DO NOTHING` thay cho `INSERT OR IGNORE`. Không gọi
+  hàm async trong `.map/.filter/.forEach` mà không `await Promise.all(...)`.
 - Thêm migration mới cho schema mới; không sửa migration đã phát hành. Dùng constraint,
   parameterized query và transaction cho nhiều thao tác ghi liên quan.
 - Seed demo yêu cầu `DEMO_PASSWORD` hợp lệ, bị chặn trong production và không reset mật khẩu/quyền
   đã có. Không chạy seed/migrate lên dữ liệu thật chỉ để kiểm thử.
-- Không commit `.env*` chứa credential, SQLite hoặc log nhạy cảm. Chỉ giữ placeholder trong
+- Không commit `.env*` chứa credential, database local hoặc log nhạy cảm. Chỉ giữ placeholder trong
   `.env.example`; không thêm tiền tố `NEXT_PUBLIC_` cho biến database hoặc secret.
 
 ## Lệnh làm việc
@@ -171,7 +174,8 @@ hướng dẫn áp dụng không yêu cầu làm việc song song bằng agent.
   và gate trong `AGENT.md`/`CHECKLIST.md`; build trước integration test. Không thêm coverage gate
   hoặc tuyên bố có bộ kiểm thử UI nếu repository chưa cấu hình.
 - Thêm test cho logic, lỗi và hồi quy quan trọng; feature có phân quyền cần case 401/403 và scope
-  rỗng/ngoài phạm vi. Dùng SQLite in-memory cho test theo pattern hiện có.
+  rỗng/ngoài phạm vi. Dùng `openDatabase(":memory:")` (PGlite) cho test theo pattern hiện có;
+  đặt `PCCC_TEST_DATABASE_URL=postgresql://.../postgres` để chạy cùng bộ test trên PostgreSQL server.
 - Với thay đổi chỉ tài liệu, kiểm format, đường dẫn/lệnh, tính đúng với source và `git diff --check`;
   các kiểm thử runtime không liên quan đánh dấu `N/A`, không ghi PASS nếu chưa chạy.
 - Tự rà lại `RULES.md`, các mục liên quan trong `CHECKLIST.md` và diff cuối. Báo kết quả ngắn:

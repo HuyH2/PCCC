@@ -9,15 +9,15 @@ const password = "Transfer-test-password-2026";
 const origin = "http://localhost:3000";
 
 async function fixture(t) {
-  const db = openDatabase(":memory:");
+  const db = await openDatabase(":memory:");
   await seedDemo(db, password);
-  db.exec("UPDATE accounts SET must_change_password=0");
+  await db.exec("UPDATE accounts SET must_change_password=0");
   const server = createApp(db);
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   t.after(async () => {
     await new Promise((resolve) => server.close(resolve));
-    db.close();
+    await db.close();
   });
   const base = `http://127.0.0.1:${server.address().port}`;
   async function request(path, { method = "GET", cookie, body } = {}) {
@@ -59,25 +59,29 @@ const transfer = (extra = {}) => ({
 test("account transfer migration and seed retain one current region owner with history constraints", async (t) => {
   const { db } = await fixture(t);
   assert.equal(
-    db.prepare("SELECT account_id FROM region_assignments WHERE region_id='KP01'").get().account_id,
+    (await db.prepare("SELECT account_id FROM region_assignments WHERE region_id='KP01'").get())
+      .account_id,
     "DEMO-A03",
   );
   assert.equal(
-    db.prepare("SELECT account_id FROM region_assignments WHERE region_id='KP02'").get().account_id,
+    (await db.prepare("SELECT account_id FROM region_assignments WHERE region_id='KP02'").get())
+      .account_id,
     "DEMO-A01",
   );
-  assert.throws(() =>
-    db.prepare("INSERT INTO region_assignments VALUES ('KP01','DEMO-A04',1)").run(),
+  await assert.rejects(
+    async () =>
+      await db.prepare("INSERT INTO region_assignments VALUES ('KP01','DEMO-A04',1)").run(),
   );
-  assert.throws(() =>
-    db
-      .prepare(
-        "INSERT INTO account_transfer_items(transfer_id,region_id,facility_id,source_officer_id,target_officer_id) VALUES ('missing','KP01','CS001','old','new')",
-      )
-      .run(),
+  await assert.rejects(
+    async () =>
+      await db
+        .prepare(
+          "INSERT INTO account_transfer_items(transfer_id,region_id,facility_id,source_officer_id,target_officer_id) VALUES ('missing','KP01','CS001','old','new')",
+        )
+        .run(),
   );
   await seedDemo(db, password);
-  assert.equal(db.prepare("SELECT count(*) AS n FROM region_assignments").get().n, 2);
+  assert.equal((await db.prepare("SELECT count(*) AS n FROM region_assignments").get()).n, 2);
 });
 
 test("administrator locks and unlocks accounts, revokes sessions and preserves last admin", async (t) => {
@@ -89,7 +93,7 @@ test("administrator locks and unlocks accounts, revokes sessions and preserves l
   assert.equal((await request(`${path}/lock`, { method: "POST", cookie: officer })).status, 403);
   assert.equal((await request(`${path}/lock`, { method: "POST", cookie: admin })).status, 200);
   assert.equal(
-    db.prepare("SELECT status FROM accounts WHERE id='DEMO-A03'").get().status,
+    (await db.prepare("SELECT status FROM accounts WHERE id='DEMO-A03'").get()).status,
     "locked",
   );
   assert.equal((await request("/api/auth/me", { cookie: officer })).status, 401);
@@ -102,11 +106,13 @@ test("administrator locks and unlocks accounts, revokes sessions and preserves l
   assert.equal((await request(`${path}/unlock`, { method: "POST", cookie: admin })).status, 200);
   assert.equal((await request(`${path}/unlock`, { method: "POST", cookie: admin })).status, 409);
   assert.equal(
-    db
-      .prepare(
-        "SELECT count(*) AS n FROM audit_logs WHERE action IN ('account.locked','account.unlocked')",
-      )
-      .get().n,
+    (
+      await db
+        .prepare(
+          "SELECT count(*) AS n FROM audit_logs WHERE action IN ('account.locked','account.unlocked')",
+        )
+        .get()
+    ).n,
     2,
   );
 });
@@ -137,11 +143,12 @@ test("partial and full transfer update current owners, direct scope, sessions an
   });
   assert.equal(partial.status, 201, JSON.stringify(partial.data));
   assert.equal(
-    db.prepare("SELECT officer_id FROM facilities WHERE id='CS001'").get().officer_id,
+    (await db.prepare("SELECT officer_id FROM facilities WHERE id='CS001'").get()).officer_id,
     "CB-A04",
   );
   assert.equal(
-    db.prepare("SELECT account_id FROM region_assignments WHERE region_id='KP01'").get().account_id,
+    (await db.prepare("SELECT account_id FROM region_assignments WHERE region_id='KP01'").get())
+      .account_id,
     "DEMO-A03",
   );
   assert.equal((await request("/api/auth/me", { cookie: source })).status, 401);
@@ -163,23 +170,28 @@ test("partial and full transfer update current owners, direct scope, sessions an
   });
   assert.equal(full.status, 201, JSON.stringify(full.data));
   assert.equal(
-    db.prepare("SELECT account_id FROM region_assignments WHERE region_id='KP01'").get().account_id,
+    (await db.prepare("SELECT account_id FROM region_assignments WHERE region_id='KP01'").get())
+      .account_id,
     "DEMO-A04",
   );
   assert.equal(
-    db
-      .prepare(
-        "SELECT count(*) AS n FROM account_scopes WHERE account_id='DEMO-A03' AND kind='region'",
-      )
-      .get().n,
+    (
+      await db
+        .prepare(
+          "SELECT count(*) AS n FROM account_scopes WHERE account_id='DEMO-A03' AND kind='region'",
+        )
+        .get()
+    ).n,
     0,
   );
   assert.equal(
-    db
-      .prepare(
-        "SELECT count(*) AS n FROM account_scopes WHERE account_id='DEMO-A04' AND kind='region' AND region_id='KP01'",
-      )
-      .get().n,
+    (
+      await db
+        .prepare(
+          "SELECT count(*) AS n FROM account_scopes WHERE account_id='DEMO-A04' AND kind='region' AND region_id='KP01'",
+        )
+        .get()
+    ).n,
     1,
   );
   const history = await request("/api/account-transfers", { cookie: admin });
@@ -188,10 +200,12 @@ test("partial and full transfer update current owners, direct scope, sessions an
   assert.equal(history.data.items[1].items[0].id, "CS001");
   for (const item of history.data.items)
     assert.equal(
-      db.prepare("SELECT action FROM audit_logs WHERE id=?").get(item.audit_log_id).action,
+      (await db.prepare("SELECT action FROM audit_logs WHERE id=?").get(item.audit_log_id)).action,
       "account.transfer_completed",
     );
-  assert.throws(() => db.exec("DELETE FROM audit_logs WHERE action='account.transfer_completed'"));
+  await assert.rejects(
+    async () => await db.exec("DELETE FROM audit_logs WHERE action='account.transfer_completed'"),
+  );
 });
 
 test("transfer denies unauthorized and invalid selections; audit failure rolls back all changes", async (t) => {
@@ -215,8 +229,8 @@ test("transfer denies unauthorized and invalid selections; audit failure rolls b
     const result = await request("/api/account-transfers", { method: "POST", cookie: admin, body });
     assert.ok([400, 409].includes(result.status), JSON.stringify(result.data));
   }
-  db.exec(
-    "CREATE TRIGGER reject_transfer_audit BEFORE INSERT ON audit_logs WHEN NEW.action='account.transfer_completed' BEGIN SELECT RAISE(ABORT,'test'); END",
+  await db.exec(
+    "CREATE TRIGGER reject_transfer_audit BEFORE INSERT ON audit_logs FOR EACH ROW WHEN (NEW.action='account.transfer_completed') EXECUTE FUNCTION raise_abort('test')",
   );
   assert.equal(
     (await request("/api/account-transfers", { method: "POST", cookie: admin, body: transfer() }))
@@ -224,12 +238,13 @@ test("transfer denies unauthorized and invalid selections; audit failure rolls b
     500,
   );
   assert.equal(
-    db.prepare("SELECT officer_id FROM facilities WHERE id='CS001'").get().officer_id,
+    (await db.prepare("SELECT officer_id FROM facilities WHERE id='CS001'").get()).officer_id,
     "CB-A03",
   );
   assert.equal(
-    db.prepare("SELECT account_id FROM region_assignments WHERE region_id='KP01'").get().account_id,
+    (await db.prepare("SELECT account_id FROM region_assignments WHERE region_id='KP01'").get())
+      .account_id,
     "DEMO-A03",
   );
-  assert.equal(db.prepare("SELECT count(*) AS n FROM account_transfers").get().n, 0);
+  assert.equal((await db.prepare("SELECT count(*) AS n FROM account_transfers").get()).n, 0);
 });

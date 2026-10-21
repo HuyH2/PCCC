@@ -12,8 +12,8 @@ const handle = async (ctx) => {
       ctx.status = status;
       result = body;
     },
-    readBody: () => ctx.readJson(131072),
-    authenticateAgain: () => authenticate(ctx.db, ctx.token),
+    readBody: async () => await ctx.readJson(131072),
+    authenticateAgain: async () => await authenticate(ctx.db, ctx.token),
     uploadDirectory: ctx.uploadDirectory,
     now: ctx.incidentNow,
   });

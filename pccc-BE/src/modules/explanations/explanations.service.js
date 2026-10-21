@@ -14,14 +14,14 @@ function canRequest(user) {
   return ["A01", "A02", "A05"].includes(user.role) && user.permissions.includes("M07.edit");
 }
 
-function visibleAccounts(db, user) {
+async function visibleAccounts(db, user) {
   if (!canRequest(user)) {
-    return db
+    return await db
       .prepare("SELECT id,full_name,username FROM accounts WHERE id=? AND status='active'")
       .all(user.id);
   }
   const scope = accountScope(user);
-  return db
+  return await db
     .prepare(
       `SELECT a.id,a.full_name,a.username FROM accounts a
       JOIN role_permissions rp ON rp.role_code=a.role_code AND rp.permission_code='M07.view'
@@ -49,16 +49,16 @@ function visibleWhere(user) {
   return { sql: "(e.requested_by=? OR e.account_id=?)", params: [user.id, user.id] };
 }
 
-function findVisible(db, user, id) {
+async function findVisible(db, user, id) {
   const visibility = visibleWhere(user);
-  const row = db
+  const row = await db
     .prepare(`${explanationSelect()} WHERE e.id=? AND ${visibility.sql}`)
     .get(id, ...visibility.params);
   assert(row, 404, "NOT_FOUND", "Không tìm thấy yêu cầu giải trình.");
   return row;
 }
 
-export function listExplanations(db, user, url) {
+export async function listExplanations(db, user, url) {
   requireExplanationView(user);
   const { page, pageSize } = pagination(url);
   const visibility = visibleWhere(user);
@@ -83,25 +83,27 @@ export function listExplanations(db, user, url) {
   }
   const where = conditions.join(" AND ");
   return {
-    items: db
+    items: await db
       .prepare(
         `${explanationSelect()} WHERE ${where}
         ORDER BY e.requested_at DESC,e.id DESC LIMIT ? OFFSET ?`,
       )
       .all(...params, pageSize, (page - 1) * pageSize),
-    total: db.prepare(`SELECT count(*) AS n FROM explanations e WHERE ${where}`).get(...params).n,
+    total: (
+      await db.prepare(`SELECT count(*) AS n FROM explanations e WHERE ${where}`).get(...params)
+    ).n,
     page,
     pageSize,
-    accounts: canRequest(user) ? visibleAccounts(db, user) : [],
+    accounts: canRequest(user) ? await visibleAccounts(db, user) : [],
   };
 }
 
-export function getExplanation(db, user, id) {
+export async function getExplanation(db, user, id) {
   requireExplanationView(user);
-  return { explanation: findVisible(db, user, id) };
+  return { explanation: await findVisible(db, user, id) };
 }
 
-export function createExplanation(db, user, input, ip) {
+export async function createExplanation(db, user, input, ip) {
   requireExplanationView(user);
   assert(canRequest(user), 403, "FORBIDDEN", "Bạn không có quyền yêu cầu giải trình.");
   object(input, ["accountId", "taskId", "period", "reason"]);
@@ -117,10 +119,12 @@ export function createExplanation(db, user, input, ip) {
   const period = input.period ? text(input.period, "Kỳ KPI", 7, 7) : null;
   assert(taskId || period, 400, "INVALID_INPUT", "Cần chọn công việc hoặc kỳ KPI.");
   if (period) assert(validPeriod(period), 400, "INVALID_INPUT", "Kỳ KPI phải có dạng YYYY-MM.");
-  const account = visibleAccounts(db, user).find((item) => item.id === accountId);
+  const account = (await visibleAccounts(db, user)).find((item) => item.id === accountId);
   assert(account, 403, "FORBIDDEN", "Cán bộ ngoài phạm vi yêu cầu giải trình.");
   if (taskId) {
-    const task = db.prepare("SELECT id,assigned_by,assigned_to FROM tasks WHERE id=?").get(taskId);
+    const task = await db
+      .prepare("SELECT id,assigned_by,assigned_to FROM tasks WHERE id=?")
+      .get(taskId);
     assert(task, 404, "NOT_FOUND", "Không tìm thấy công việc.");
     assert(
       task.assigned_to === accountId,
@@ -135,17 +139,17 @@ export function createExplanation(db, user, input, ip) {
       "Chỉ người giao việc được yêu cầu giải trình.",
     );
   }
-  return transaction(db, () => {
+  return await transaction(db, async () => {
     const now = Date.now();
-    const result = db
+    const result = await db
       .prepare(
         `INSERT INTO explanations
         (task_id,account_id,period,requested_by,reason,status,requested_at)
-        VALUES (?,?,?,?,?,'requested',?)`,
+        VALUES (?,?,?,?,?,'requested',?) RETURNING id`,
       )
       .run(taskId, accountId, period, user.id, reason, now);
     const id = Number(result.lastInsertRowid);
-    writeAudit(db, {
+    await writeAudit(db, {
       actorId: user.id,
       feature: "M07",
       objectType: "explanation",
@@ -154,13 +158,13 @@ export function createExplanation(db, user, input, ip) {
       after: { accountId, taskId, period, reason },
       ip,
     });
-    return { explanation: findVisible(db, user, id) };
+    return { explanation: await findVisible(db, user, id) };
   });
 }
 
-export function submitExplanation(db, user, id, input, ip) {
+export async function submitExplanation(db, user, id, input, ip) {
   requireExplanationView(user);
-  const explanation = findVisible(db, user, id);
+  const explanation = await findVisible(db, user, id);
   assert(
     explanation.account_id === user.id,
     403,
@@ -180,16 +184,16 @@ export function submitExplanation(db, user, id, input, ip) {
     1,
     4000,
   );
-  return transaction(db, () => {
+  return await transaction(db, async () => {
     const now = Date.now();
-    const changed = db
+    const changed = await db
       .prepare(
         `UPDATE explanations SET response=?,status='submitted',submitted_at=?
         WHERE id=? AND account_id=? AND status='requested'`,
       )
       .run(response, now, id, user.id);
     assert(changed.changes === 1, 409, "EXPLANATION_CHANGED", "Yêu cầu đã thay đổi. Hãy tải lại.");
-    writeAudit(db, {
+    await writeAudit(db, {
       actorId: user.id,
       feature: "M07",
       objectType: "explanation",
@@ -198,14 +202,14 @@ export function submitExplanation(db, user, id, input, ip) {
       after: { response },
       ip,
     });
-    return { explanation: findVisible(db, user, id) };
+    return { explanation: await findVisible(db, user, id) };
   });
 }
 
-export function reviewExplanation(db, user, id, input, ip) {
+export async function reviewExplanation(db, user, id, input, ip) {
   requireExplanationView(user);
   assert(canRequest(user), 403, "FORBIDDEN", "Bạn không có quyền xử lý giải trình.");
-  const explanation = findVisible(db, user, id);
+  const explanation = await findVisible(db, user, id);
   assert(
     user.role === "A05" || explanation.requested_by === user.id,
     403,
@@ -230,9 +234,9 @@ export function reviewExplanation(db, user, id, input, ip) {
     input.note === undefined
       ? ""
       : text(typeof input.note === "string" ? input.note.trim() : input.note, "Ghi chú", 0, 1000);
-  return transaction(db, () => {
+  return await transaction(db, async () => {
     const now = Date.now();
-    const changed = db
+    const changed = await db
       .prepare(
         `UPDATE explanations
         SET status=?,reviewed_by=?,reviewed_at=?,review_note=?,debt_waived=?
@@ -240,7 +244,7 @@ export function reviewExplanation(db, user, id, input, ip) {
       )
       .run(decision, user.id, now, note, decision === "accepted" && explanation.period ? 1 : 0, id);
     assert(changed.changes === 1, 409, "EXPLANATION_CHANGED", "Yêu cầu đã thay đổi. Hãy tải lại.");
-    writeAudit(db, {
+    await writeAudit(db, {
       actorId: user.id,
       feature: "M07",
       objectType: "explanation",
@@ -249,6 +253,6 @@ export function reviewExplanation(db, user, id, input, ip) {
       after: { note, debtWaived: decision === "accepted" && Boolean(explanation.period) },
       ip,
     });
-    return { explanation: findVisible(db, user, id) };
+    return { explanation: await findVisible(db, user, id) };
   });
 }

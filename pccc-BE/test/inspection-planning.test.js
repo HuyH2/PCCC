@@ -11,15 +11,15 @@ const pdf = Buffer.from("%PDF-1.4\n%%EOF\n");
 const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0]);
 
 async function fixture(t) {
-  const db = openDatabase(":memory:");
+  const db = await openDatabase(":memory:");
   await seedDemo(db, password);
-  db.exec("UPDATE accounts SET must_change_password=0");
+  await db.exec("UPDATE accounts SET must_change_password=0");
   const server = createApp(db);
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   t.after(async () => {
     await new Promise((resolve) => server.close(resolve));
-    db.close();
+    await db.close();
   });
   const base = `http://127.0.0.1:${server.address().port}`;
   async function request(path, { method = "GET", body, cookie } = {}) {
@@ -114,10 +114,11 @@ async function createScheduledInspection(request, cookie, planId, overrides = {}
 test("UC-INS-01/02: create, publish and allocate annual/month/week/officer targets", async (t) => {
   const { db, request, login } = await fixture(t);
   assert.equal(
-    db.prepare("SELECT count(*) AS n FROM inspection_plans WHERE id='DEMO-PLAN-2026'").get().n,
+    (await db.prepare("SELECT count(*) AS n FROM inspection_plans WHERE id='DEMO-PLAN-2026'").get())
+      .n,
     1,
   );
-  assert.equal(db.prepare("SELECT count(*) AS n FROM inspection_schedules").get().n, 2);
+  assert.equal((await db.prepare("SELECT count(*) AS n FROM inspection_schedules").get()).n, 2);
   const deputy = await login("demo.to-truong");
   const plan = await createPublishedPlan(request, deputy);
 
@@ -164,11 +165,13 @@ test("UC-INS-01/02: create, publish and allocate annual/month/week/officer targe
     ["year", "month", "week", "week"],
   );
   assert.equal(
-    db
-      .prepare(
-        "SELECT count(*) AS n FROM audit_logs WHERE feature='M06.planning' AND action<>'inspection_plan.seeded'",
-      )
-      .get().n,
+    (
+      await db
+        .prepare(
+          "SELECT count(*) AS n FROM audit_logs WHERE feature='M06.planning' AND action<>'inspection_plan.seeded'",
+        )
+        .get()
+    ).n,
     5,
   );
 });
@@ -457,9 +460,13 @@ test("UC-INS-01: plan lifecycle rejects duplicates, stale writes and edits after
   assert.equal(allocateClosed.status, 409);
   assert.equal(allocateClosed.data.error.code, "INVALID_STATE");
   assert.equal(
-    db
-      .prepare("SELECT count(*) AS n FROM audit_logs WHERE feature='M06.planning' AND object_id=?")
-      .get(plan.id).n,
+    (
+      await db
+        .prepare(
+          "SELECT count(*) AS n FROM audit_logs WHERE feature='M06.planning' AND object_id=?",
+        )
+        .get(plan.id)
+    ).n,
     4,
   );
 });
@@ -564,7 +571,8 @@ test("UC-INS-02: allocation enforces parent hierarchy, uniqueness and parent tot
   assert.equal(childOverflow.status, 409);
   assert.equal(childOverflow.data.error.code, "TARGET_EXCEEDED");
   assert.equal(
-    db.prepare("SELECT count(*) AS n FROM inspection_targets WHERE plan_id=?").get(plan.id).n,
+    (await db.prepare("SELECT count(*) AS n FROM inspection_targets WHERE plan_id=?").get(plan.id))
+      .n,
     4,
   );
 });
@@ -783,13 +791,15 @@ test("UC-INS-04/05: notice and reschedule validation preserve versions and appen
   assert.equal(detail.data.notice.version, 3);
   assert.equal(detail.data.reschedules.length, 1);
   const historyId = detail.data.reschedules[0].id;
-  assert.throws(
-    () =>
-      db.prepare("UPDATE inspection_reschedules SET reason='tampered' WHERE id=?").run(historyId),
+  await assert.rejects(
+    async () =>
+      await db
+        .prepare("UPDATE inspection_reschedules SET reason='tampered' WHERE id=?")
+        .run(historyId),
     /append-only/,
   );
-  assert.throws(
-    () => db.prepare("DELETE FROM inspection_reschedules WHERE id=?").run(historyId),
+  await assert.rejects(
+    async () => await db.prepare("DELETE FROM inspection_reschedules WHERE id=?").run(historyId),
     /append-only/,
   );
 });

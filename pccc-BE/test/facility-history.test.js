@@ -1,54 +1,22 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { openDatabase } from "../src/core/database.js";
 import { seedDemo } from "../src/core/seed.js";
 import { createApp } from "../src/app.js";
 
 const password = "Facility-history-test-2026";
 
-test("legacy history table gains decision reference without losing rows", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "pccc-facility-upgrade-"));
-  const path = join(directory, "legacy.sqlite");
-  let db;
-  try {
-    db = openDatabase(path);
-    await seedDemo(db, password);
-    const previous = db.prepare("SELECT count(*) AS n FROM facility_status_history").get().n;
-    db.exec("ALTER TABLE facility_status_history DROP COLUMN decision_reference");
-    db.prepare("DELETE FROM schema_migrations WHERE name=?").run(
-      "013-facility-history-decision-reference.cjs",
-    );
-    db.close();
-    db = openDatabase(path);
-    assert(
-      db
-        .prepare("PRAGMA table_info(facility_status_history)")
-        .all()
-        .some((column) => column.name === "decision_reference"),
-    );
-    assert.equal(db.prepare("SELECT count(*) AS n FROM facility_status_history").get().n, previous);
-    await seedDemo(db, password);
-    assert.equal(db.prepare("SELECT count(*) AS n FROM facility_status_history").get().n, previous);
-  } finally {
-    db?.close();
-    rmSync(directory, { recursive: true, force: true });
-  }
-});
-
 async function fixture(t) {
-  const db = openDatabase(":memory:");
+  const db = await openDatabase(":memory:");
   await seedDemo(db, password);
-  db.exec("UPDATE accounts SET must_change_password=0");
+  await db.exec("UPDATE accounts SET must_change_password=0");
   const server = createApp(db);
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   t.after(async () => {
     await new Promise((resolve) => server.close(resolve));
-    db.close();
+    await db.close();
   });
   const base = `http://127.0.0.1:${server.address().port}`;
   async function request(path, { method = "GET", cookie, body } = {}) {
@@ -92,7 +60,10 @@ test("status transition writes immutable history and audit, and timeline filters
   });
   assert.equal(changed.status, 200);
   assert.equal(changed.data.previousStatus, "active");
-  assert.equal(db.prepare("SELECT status FROM facilities WHERE id='CS001'").get().status, "paused");
+  assert.equal(
+    (await db.prepare("SELECT status FROM facilities WHERE id='CS001'").get()).status,
+    "paused",
+  );
   const history = await request(`${base}/status-history`, { cookie: officer });
   assert.equal(history.data.total, 1);
   assert.equal(history.data.items[0].actor_username, "demo.can-bo");
@@ -133,18 +104,23 @@ test("status transition writes immutable history and audit, and timeline filters
     403,
   );
   assert.equal(
-    db.prepare("SELECT count(*) AS n FROM facility_status_history WHERE facility_id='CS001'").get()
-      .n,
+    (
+      await db
+        .prepare("SELECT count(*) AS n FROM facility_status_history WHERE facility_id='CS001'")
+        .get()
+    ).n,
     2,
   );
-  const auditId = db
-    .prepare("SELECT audit_log_id FROM facility_status_history ORDER BY id DESC LIMIT 1")
-    .get().audit_log_id;
+  const auditId = (
+    await db
+      .prepare("SELECT audit_log_id FROM facility_status_history ORDER BY id DESC LIMIT 1")
+      .get()
+  ).audit_log_id;
   assert.equal(
-    db.prepare("SELECT action FROM audit_logs WHERE id=?").get(auditId).action,
+    (await db.prepare("SELECT action FROM audit_logs WHERE id=?").get(auditId)).action,
     "facility.status_changed",
   );
-  assert.throws(() => db.prepare("DELETE FROM facility_status_history").run());
+  await assert.rejects(async () => await db.prepare("DELETE FROM facility_status_history").run());
 });
 
 test("scope, permission and validation protect reads and mutations without partial history", async (t) => {
@@ -193,11 +169,17 @@ test("scope, permission and validation protect reads and mutations without parti
     400,
   );
   assert.equal(
-    db.prepare("SELECT count(*) AS n FROM facility_status_history WHERE facility_id='CS001'").get()
-      .n,
+    (
+      await db
+        .prepare("SELECT count(*) AS n FROM facility_status_history WHERE facility_id='CS001'")
+        .get()
+    ).n,
     0,
   );
-  assert.equal(db.prepare("SELECT status FROM facilities WHERE id='CS001'").get().status, "active");
+  assert.equal(
+    (await db.prepare("SELECT status FROM facilities WHERE id='CS001'").get()).status,
+    "active",
+  );
 });
 
 test("admin approval restores suspended facility only with evidence, decision and explicit confirmation", async (t) => {
@@ -252,8 +234,13 @@ test("admin approval restores suspended facility only with evidence, decision an
     400,
   );
   assert.equal((await request(base, { method: "PUT", cookie: admin, body: restore })).status, 200);
-  assert.equal(db.prepare("SELECT status FROM facilities WHERE id='CS002'").get().status, "active");
-  const record = db.prepare("SELECT * FROM facility_violations WHERE facility_id='CS002'").get();
+  assert.equal(
+    (await db.prepare("SELECT status FROM facilities WHERE id='CS002'").get()).status,
+    "active",
+  );
+  const record = await db
+    .prepare("SELECT * FROM facility_violations WHERE facility_id='CS002'")
+    .get();
   assert.equal(record.status, "restored");
   assert.equal(record.approved_by, "DEMO-A05");
   assert.equal(record.restoration_decision_reference, "QD-QA-RESTORE-01");
@@ -261,7 +248,11 @@ test("admin approval restores suspended facility only with evidence, decision an
   assert.equal((await request("/api/facilities/CS002/timeline", { cookie: admin })).data.total, 2);
   await seedDemo(db, password);
   assert.equal(
-    db.prepare("SELECT count(*) AS n FROM facility_violations WHERE facility_id='CS002'").get().n,
+    (
+      await db
+        .prepare("SELECT count(*) AS n FROM facility_violations WHERE facility_id='CS002'")
+        .get()
+    ).n,
     1,
   );
 });
@@ -269,9 +260,9 @@ test("admin approval restores suspended facility only with evidence, decision an
 test("failed audit insert rolls back facility status and violation record", async (t) => {
   const { db, request, login } = await fixture(t);
   const commander = await login("demo.chi-huy");
-  db.exec(`CREATE TRIGGER reject_facility_status_audit BEFORE INSERT ON audit_logs
-    WHEN NEW.action='facility.status_changed'
-    BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END`);
+  await db.exec(
+    `CREATE TRIGGER reject_facility_status_audit BEFORE INSERT ON audit_logs FOR EACH ROW WHEN (NEW.action='facility.status_changed') EXECUTE FUNCTION raise_abort('audit unavailable')`,
+  );
   const result = await request("/api/facilities/CS001/status", {
     method: "PUT",
     cookie: commander,
@@ -282,14 +273,24 @@ test("failed audit insert rolls back facility status and violation record", asyn
     },
   });
   assert.equal(result.status, 500);
-  assert.equal(db.prepare("SELECT status FROM facilities WHERE id='CS001'").get().status, "active");
   assert.equal(
-    db.prepare("SELECT count(*) AS n FROM facility_status_history WHERE facility_id='CS001'").get()
-      .n,
+    (await db.prepare("SELECT status FROM facilities WHERE id='CS001'").get()).status,
+    "active",
+  );
+  assert.equal(
+    (
+      await db
+        .prepare("SELECT count(*) AS n FROM facility_status_history WHERE facility_id='CS001'")
+        .get()
+    ).n,
     0,
   );
   assert.equal(
-    db.prepare("SELECT count(*) AS n FROM facility_violations WHERE facility_id='CS001'").get().n,
+    (
+      await db
+        .prepare("SELECT count(*) AS n FROM facility_violations WHERE facility_id='CS001'")
+        .get()
+    ).n,
     0,
   );
 });

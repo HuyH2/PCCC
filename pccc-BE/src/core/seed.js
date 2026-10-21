@@ -26,69 +26,52 @@ export async function seedDemo(db, password) {
   if (typeof password !== "string" || password.length < 12 || password.length > 256)
     throw new Error("Set DEMO_PASSWORD to a temporary password with 12–256 characters.");
   const passwordHash = await hashPassword(password);
-  transaction(db, () => {
+  await transaction(db, async () => {
     for (const [code, name] of Object.entries(roleNames))
-      db.prepare("INSERT OR IGNORE INTO roles VALUES (?,?,?)").run(
-        code,
-        name,
-        code === "A07" ? 0 : 1,
-      );
+      await db
+        .prepare("INSERT INTO roles VALUES (?,?,?) ON CONFLICT DO NOTHING")
+        .run(code, name, code === "A07" ? 0 : 1);
     for (let i = 1; i <= 11; i++)
       for (const action of ["view", "create", "edit", "approve", "export"]) {
         const module = `M${String(i).padStart(2, "0")}`;
-        db.prepare("INSERT OR IGNORE INTO permissions VALUES (?,?,?)").run(
-          `${module}.${action}`,
-          module,
-          action,
-        );
+        await db
+          .prepare("INSERT INTO permissions VALUES (?,?,?) ON CONFLICT DO NOTHING")
+          .run(`${module}.${action}`, module, action);
       }
-    db.prepare("INSERT OR IGNORE INTO units(id,name,parent_id,code,level) VALUES (?,?,?,?,?)").run(
-      "DV-PC07",
-      "PC07 (mẫu)",
-      null,
-      "DV-PC07",
-      "ROOT",
-    );
-    db.prepare("INSERT OR IGNORE INTO units(id,name,parent_id,code,level) VALUES (?,?,?,?,?)").run(
-      "DV-KV10",
-      "Đội khu vực 10 (mẫu)",
-      "DV-PC07",
-      "DV-KV10",
-      "AREA",
-    );
-    db.prepare("INSERT OR IGNORE INTO units(id,name,parent_id,code,level) VALUES (?,?,?,?,?)").run(
-      "DV-KV11",
-      "Đội khu vực 11 (mẫu)",
-      "DV-PC07",
-      "DV-KV11",
-      "AREA",
-    );
-    db.prepare("INSERT OR IGNORE INTO regions(id,name,unit_id,code) VALUES (?,?,?,?)").run(
-      "KP01",
-      "Khu phố 01 (mẫu)",
-      "DV-KV10",
-      "KP01",
-    );
-    db.prepare("INSERT OR IGNORE INTO regions(id,name,unit_id,code) VALUES (?,?,?,?)").run(
-      "KP02",
-      "Khu phố 02 (mẫu)",
-      "DV-KV10",
-      "KP02",
-    );
-    db.prepare("INSERT OR IGNORE INTO regions(id,name,unit_id,code) VALUES (?,?,?,?)").run(
-      "KP03",
-      "Khu phố 03 (mẫu)",
-      "DV-KV11",
-      "KP03",
-    );
+    await db
+      .prepare(
+        "INSERT INTO units(id,name,parent_id,code,level) VALUES (?,?,?,?,?) ON CONFLICT DO NOTHING",
+      )
+      .run("DV-PC07", "PC07 (mẫu)", null, "DV-PC07", "ROOT");
+    await db
+      .prepare(
+        "INSERT INTO units(id,name,parent_id,code,level) VALUES (?,?,?,?,?) ON CONFLICT DO NOTHING",
+      )
+      .run("DV-KV10", "Đội khu vực 10 (mẫu)", "DV-PC07", "DV-KV10", "AREA");
+    await db
+      .prepare(
+        "INSERT INTO units(id,name,parent_id,code,level) VALUES (?,?,?,?,?) ON CONFLICT DO NOTHING",
+      )
+      .run("DV-KV11", "Đội khu vực 11 (mẫu)", "DV-PC07", "DV-KV11", "AREA");
+    await db
+      .prepare("INSERT INTO regions(id,name,unit_id,code) VALUES (?,?,?,?) ON CONFLICT DO NOTHING")
+      .run("KP01", "Khu phố 01 (mẫu)", "DV-KV10", "KP01");
+    await db
+      .prepare("INSERT INTO regions(id,name,unit_id,code) VALUES (?,?,?,?) ON CONFLICT DO NOTHING")
+      .run("KP02", "Khu phố 02 (mẫu)", "DV-KV10", "KP02");
+    await db
+      .prepare("INSERT INTO regions(id,name,unit_id,code) VALUES (?,?,?,?) ON CONFLICT DO NOTHING")
+      .run("KP03", "Khu phố 03 (mẫu)", "DV-KV11", "KP03");
     for (const [id, region, officer] of [
       ["CS001", "KP01", "CB-A03"],
       ["CS002", "KP02", "CB-OTHER"],
       ["CS003", "KP03", "CB-OTHER"],
     ]) {
-      db.prepare(
-        "INSERT OR IGNORE INTO facilities(id,name,address,region_id,officer_id) VALUES (?,?,?,?,?)",
-      ).run(id, `Cơ sở ${id} (dữ liệu mẫu)`, "Địa chỉ giả lập", region, officer);
+      await db
+        .prepare(
+          "INSERT INTO facilities(id,name,address,region_id,officer_id) VALUES (?,?,?,?,?) ON CONFLICT DO NOTHING",
+        )
+        .run(id, `Cơ sở ${id} (dữ liệu mẫu)`, "Địa chỉ giả lập", region, officer);
     }
     const grants = {
       A01: [
@@ -173,86 +156,109 @@ export async function seedDemo(db, password) {
     for (const [role, username] of Object.entries(usernames)) {
       const id = `DEMO-${role}`;
       // Existing account, password, permissions and scope must survive re-seeding.
-      if (db.prepare("SELECT 1 FROM accounts WHERE id=?").get(id)) continue;
-      const roleHasAccounts = db.prepare("SELECT 1 FROM accounts WHERE role_code=?").get(role);
+      if (await db.prepare("SELECT 1 FROM accounts WHERE id=?").get(id)) continue;
+      const roleHasAccounts = await db
+        .prepare("SELECT 1 FROM accounts WHERE role_code=?")
+        .get(role);
       if (!roleHasAccounts)
         for (const code of grants[role])
-          db.prepare("INSERT OR IGNORE INTO role_permissions VALUES (?,?)").run(role, code);
-      db.prepare(
-        "INSERT INTO accounts(id,username,password_hash,full_name,officer_id,role_code,created_at) VALUES (?,?,?,?,?,?,?)",
-      ).run(id, username, passwordHash, `${roleNames[role]} (mẫu)`, `CB-${role}`, role, Date.now());
+          await db
+            .prepare("INSERT INTO role_permissions VALUES (?,?) ON CONFLICT DO NOTHING")
+            .run(role, code);
+      await db
+        .prepare(
+          "INSERT INTO accounts(id,username,password_hash,full_name,officer_id,role_code,created_at) VALUES (?,?,?,?,?,?,?)",
+        )
+        .run(
+          id,
+          username,
+          passwordHash,
+          `${roleNames[role]} (mẫu)`,
+          `CB-${role}`,
+          role,
+          Date.now(),
+        );
       const kind = role === "A05" || role === "A06" ? "all" : role === "A03" ? "region" : "unit";
-      db.prepare(
-        "INSERT INTO account_scopes(account_id,kind,unit_id,region_id) VALUES (?,?,?,?)",
-      ).run(id, kind, kind === "unit" ? "DV-KV10" : null, kind === "region" ? "KP01" : null);
+      await db
+        .prepare("INSERT INTO account_scopes(account_id,kind,unit_id,region_id) VALUES (?,?,?,?)")
+        .run(id, kind, kind === "unit" ? "DV-KV10" : null, kind === "region" ? "KP01" : null);
     }
     // Explicit synthetic profiles for the account ids used by assignments and M09.
     for (const role of Object.keys(usernames))
-      db.prepare(
-        `INSERT OR IGNORE INTO officers
+      await db
+        .prepare(
+          `INSERT INTO officers
          (id,officer_code,full_name,rank,position,phone,email,notes,unit_id,business_role,created_at,updated_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-      ).run(
-        `CB-${role}`,
-        `CB-${role}`,
-        `${roleNames[role]} (dữ liệu mẫu)`,
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`,
+        )
+        .run(
+          `CB-${role}`,
+          `CB-${role}`,
+          `${roleNames[role]} (dữ liệu mẫu)`,
+          "Cấp bậc mẫu",
+          roleNames[role],
+          "0900000000",
+          `${role.toLowerCase()}@example.invalid`,
+          "Hồ sơ giả lập phục vụ kiểm thử.",
+          role === "A05" || role === "A06" ? "DV-PC07" : "DV-KV10",
+          role,
+          Date.now(),
+          Date.now(),
+        );
+    await db
+      .prepare(
+        `INSERT INTO officers
+       (id,officer_code,full_name,rank,position,phone,email,notes,unit_id,business_role,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`,
+      )
+      .run(
+        "CB-OTHER",
+        "CB-OTHER",
+        "Cán bộ khu vực 11 (dữ liệu mẫu)",
         "Cấp bậc mẫu",
-        roleNames[role],
-        "0900000000",
-        `${role.toLowerCase()}@example.invalid`,
-        "Hồ sơ giả lập phục vụ kiểm thử.",
-        role === "A05" || role === "A06" ? "DV-PC07" : "DV-KV10",
-        role,
+        "Cán bộ mẫu",
+        "0900000001",
+        "other@example.invalid",
+        "Hồ sơ giả lập liên kết cơ sở mẫu.",
+        "DV-KV11",
+        "A03",
         Date.now(),
         Date.now(),
       );
-    db.prepare(
-      `INSERT OR IGNORE INTO officers
-       (id,officer_code,full_name,rank,position,phone,email,notes,unit_id,business_role,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-    ).run(
-      "CB-OTHER",
-      "CB-OTHER",
-      "Cán bộ khu vực 11 (dữ liệu mẫu)",
-      "Cấp bậc mẫu",
-      "Cán bộ mẫu",
-      "0900000001",
-      "other@example.invalid",
-      "Hồ sơ giả lập liên kết cơ sở mẫu.",
-      "DV-KV11",
-      "A03",
-      Date.now(),
-      Date.now(),
-    );
-    seedOrganizationDemo(db);
+    await seedOrganizationDemo(db);
     // Existing demo installations had no M07 grants. Add sample grants only
     // when M07 has never been configured; preserve any administrator choices.
     if (
-      !db.prepare("SELECT 1 FROM role_permissions WHERE permission_code LIKE 'M07.%' LIMIT 1").get()
+      !(await db
+        .prepare("SELECT 1 FROM role_permissions WHERE permission_code LIKE 'M07.%' LIMIT 1")
+        .get())
     )
       for (const role of ["A01", "A02", "A03", "A04", "A05"])
         for (const action of ["view", "create", "edit"])
-          db.prepare("INSERT OR IGNORE INTO role_permissions VALUES (?,?)").run(
-            role,
-            `M07.${action}`,
-          );
+          await db
+            .prepare("INSERT INTO role_permissions VALUES (?,?) ON CONFLICT DO NOTHING")
+            .run(role, `M07.${action}`);
     // Demo assignments only. Preserve existing ownership after a transfer or later seed run.
     for (const [regionId, accountId] of [
       ["KP01", "DEMO-A03"],
       ["KP02", "DEMO-A01"],
     ])
-      db.prepare(
-        "INSERT OR IGNORE INTO region_assignments(region_id,account_id,assigned_at) VALUES (?,?,?)",
-      ).run(regionId, accountId, Date.now());
-    seedLegalDocuments(db);
-    seedInspections(db);
-    seedInspectionPlanning(db);
-    seedFacilityViolations(db);
-    seedTasks(db);
-    seedKpi(db);
+      await db
+        .prepare(
+          "INSERT INTO region_assignments(region_id,account_id,assigned_at) VALUES (?,?,?) ON CONFLICT DO NOTHING",
+        )
+        .run(regionId, accountId, Date.now());
+    await seedLegalDocuments(db);
+    await seedInspections(db);
+    await seedInspectionPlanning(db);
+    await seedFacilityViolations(db);
+    await seedTasks(db);
+    await seedKpi(db);
     // Q02 remains a demo matrix; add M08 only before an administrator configures it.
     if (
-      !db.prepare("SELECT 1 FROM role_permissions WHERE permission_code LIKE 'M08.%' LIMIT 1").get()
+      !(await db
+        .prepare("SELECT 1 FROM role_permissions WHERE permission_code LIKE 'M08.%' LIMIT 1")
+        .get())
     ) {
       for (const [role, actions] of Object.entries({
         A01: ["view", "create", "edit", "approve", "export"],
@@ -263,11 +269,10 @@ export async function seedDemo(db, password) {
         A06: ["view"],
       }))
         for (const action of actions)
-          db.prepare("INSERT OR IGNORE INTO role_permissions VALUES (?,?)").run(
-            role,
-            `M08.${action}`,
-          );
+          await db
+            .prepare("INSERT INTO role_permissions VALUES (?,?) ON CONFLICT DO NOTHING")
+            .run(role, `M08.${action}`);
     }
-    seedReports(db);
+    await seedReports(db);
   });
 }

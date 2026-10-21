@@ -9,15 +9,15 @@ const password = "Temporary-test-password-2026";
 const origin = "http://localhost:3000";
 
 async function fixture(t) {
-  const db = openDatabase(":memory:");
+  const db = await openDatabase(":memory:");
   await seedDemo(db, password);
-  db.exec("UPDATE accounts SET must_change_password=0");
+  await db.exec("UPDATE accounts SET must_change_password=0");
   const server = createApp(db, { appOrigin: origin });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   t.after(async () => {
     await new Promise((resolve) => server.close(resolve));
-    db.close();
+    await db.close();
   });
   const base = `http://127.0.0.1:${server.address().port}`;
   async function request(path, { method = "GET", body, cookie, headers = {} } = {}) {
@@ -62,12 +62,12 @@ test("data-transfer endpoints require authentication", async (t) => {
 
 test("data exports enforce grants and scope, write audit history, and provide stable CSV headers", async (t) => {
   const { db, request, login, base } = await fixture(t);
-  db.exec(
+  await db.exec(
     "INSERT INTO role_permissions VALUES ('A03','M03.export'),('A03','M02.view'),('A03','M02.export')",
   );
-  db.prepare("UPDATE facilities SET address=? WHERE id='CS001'").run(
-    '=HYPERLINK("https://invalid")',
-  );
+  await db
+    .prepare("UPDATE facilities SET address=? WHERE id='CS001'")
+    .run('=HYPERLINK("https://invalid")');
   const cookie = await login("demo.can-bo");
   const datasets = await request("/api/data-transfers/datasets", { cookie });
   assert.equal(datasets.status, 200);
@@ -120,9 +120,13 @@ test("data exports enforce grants and scope, write audit history, and provide st
   const ownDetail = await request(`/api/data-transfers/${history.data.items[0].id}`, { cookie });
   assert.equal(ownDetail.status, 200);
   assert.equal(
-    db
-      .prepare("SELECT count(*) AS n FROM audit_logs WHERE action='data_transfer.export.succeeded'")
-      .get().n,
+    (
+      await db
+        .prepare(
+          "SELECT count(*) AS n FROM audit_logs WHERE action='data_transfer.export.succeeded'",
+        )
+        .get()
+    ).n,
     4,
   );
 
@@ -156,7 +160,7 @@ test("data exports enforce grants and scope, write audit history, and provide st
 test("officer export uses scoped personnel profiles, including staff without accounts", async (t) => {
   const { db, login, base } = await fixture(t);
   const cookie = await login();
-  const unlinked = db
+  const unlinked = await db
     .prepare(
       "SELECT o.officer_code FROM officers o LEFT JOIN accounts a ON a.officer_id=o.id WHERE a.id IS NULL LIMIT 1",
     )
@@ -175,7 +179,7 @@ test("officer export uses scoped personnel profiles, including staff without acc
   assert.ok(csv.includes(unlinked.officer_code));
   assert.equal(
     csv.split("\r\n").length - 2,
-    db.prepare("SELECT count(*) AS n FROM officers").get().n,
+    (await db.prepare("SELECT count(*) AS n FROM officers").get()).n,
   );
 
   const filtered = await exportOfficers({ search: unlinked.officer_code });
@@ -187,7 +191,7 @@ test("officer export uses scoped personnel profiles, including staff without acc
 
 test("data transfer job history is owner-limited unless system admin has global scope", async (t) => {
   const { db, request, login, base } = await fixture(t);
-  db.exec("INSERT INTO role_permissions VALUES ('A03','M03.export')");
+  await db.exec("INSERT INTO role_permissions VALUES ('A03','M03.export')");
   const owner = await login("demo.can-bo");
   const exported = await fetch(`${base}/api/data-transfers/export`, {
     method: "POST",
@@ -201,11 +205,15 @@ test("data transfer job history is owner-limited unless system admin has global 
   const admin = await login("demo.admin");
   assert.equal((await request("/api/data-transfers", { cookie: admin })).status, 200);
   assert.equal((await request("/api/data-transfers", { cookie: admin })).data.total, 1);
-  const jobId = db.prepare("SELECT id FROM data_transfer_jobs LIMIT 1").get().id;
-  db.prepare(
-    "INSERT INTO data_transfer_errors(job_id,row_number,message,created_at) VALUES (?,1,'sample',?)",
-  ).run(jobId, Date.now());
-  assert.throws(() => db.prepare("UPDATE data_transfer_errors SET message='changed'").run());
-  assert.throws(() => db.prepare("DELETE FROM data_transfer_errors").run());
-  assert.throws(() => db.prepare("DELETE FROM data_transfer_jobs").run());
+  const jobId = (await db.prepare("SELECT id FROM data_transfer_jobs LIMIT 1").get()).id;
+  await db
+    .prepare(
+      "INSERT INTO data_transfer_errors(job_id,row_number,message,created_at) VALUES (?,1,'sample',?)",
+    )
+    .run(jobId, Date.now());
+  await assert.rejects(
+    async () => await db.prepare("UPDATE data_transfer_errors SET message='changed'").run(),
+  );
+  await assert.rejects(async () => await db.prepare("DELETE FROM data_transfer_errors").run());
+  await assert.rejects(async () => await db.prepare("DELETE FROM data_transfer_jobs").run());
 });

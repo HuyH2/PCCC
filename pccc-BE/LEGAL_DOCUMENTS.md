@@ -1,6 +1,6 @@
 # Kho văn bản và nhật ký — UC-DOC-01, UC-DOC-02, UC-SYS-05
 
-Triển khai trên backend Node.js/SQLite hiện có. Không dùng biến PostgreSQL để chuyển database.
+Triển khai trên backend Node.js/PostgreSQL hiện có.
 Frontend: `/van-ban`, `/van-ban/them`, `/van-ban/[id]`, `/van-ban/[id]/sua`, `/quan-tri/nhat-ky`.
 
 ## Khởi chạy và quyền
@@ -46,7 +46,7 @@ ownership và bộ lọc scope tương ứng trước khi mở rộng.
 - `status`: `pending` (chưa hiệu lực), `effective` (còn hiệu lực), `expired` (hết hiệu lực).
   Người có quyền quản lý trạng thái; không suy diễn hay tự xác nhận hiệu lực pháp lý theo ngày.
 - Phải có link HTTP/HTTPS hoặc file PDF; có thể giữ cả hai. Link không được có credential;
-  backend không fetch URL bên ngoài. File được lưu BLOB trong SQLite, không đặt vào `public/`.
+  backend không fetch URL bên ngoài. File được lưu BYTEA trong PostgreSQL, không đặt vào `public/`.
 - File PDF mặc định tối đa 5 MB. `LEGAL_DOCUMENT_MAX_BYTES` trong `pccc-BE/.env` cho phép giảm giới hạn
   (1024–5242880 bytes); frontend lấy giới hạn từ API danh mục. Kiểm tên/đuôi, header `%PDF-`, dấu kết thúc `%%EOF`. Đây là kiểm tra
   định dạng cơ bản, không phải quét malware hay xác nhận nội dung pháp lý. API tải dạng attachment,

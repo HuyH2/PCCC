@@ -6,10 +6,10 @@ import { planScope, requirePlanning } from "./planning.helpers.js";
 // Scoped row fetchers — always 404 (never reveal out-of-scope records)
 // ---------------------------------------------------------------------------
 
-export function scopedPlan(db, user, id) {
+export async function scopedPlan(db, user, id) {
   requirePlanning(user);
   const scope = planScope(user);
-  const plan = db
+  const plan = await db
     .prepare(
       `SELECT p.*,u.name AS unit_name,a.full_name AS created_by_name
       FROM inspection_plans p JOIN units u ON u.id=p.unit_id
@@ -20,9 +20,9 @@ export function scopedPlan(db, user, id) {
   return plan;
 }
 
-export function scopedFacility(db, user, facilityId) {
+export async function scopedFacility(db, user, facilityId) {
   const scope = facilityScope(user);
-  const facility = db
+  const facility = await db
     .prepare(
       `SELECT f.*,r.name AS region_name,r.unit_id,u.name AS unit_name
       FROM facilities f JOIN regions r ON r.id=f.region_id JOIN units u ON u.id=r.unit_id
@@ -33,10 +33,10 @@ export function scopedFacility(db, user, facilityId) {
   return facility;
 }
 
-export function scopedPeriodicInspection(db, user, id) {
+export async function scopedPeriodicInspection(db, user, id) {
   requirePlanning(user);
   const scope = facilityScope(user);
-  const row = db
+  const row = await db
     .prepare(
       `SELECT i.*,f.name AS facility_name,f.address AS facility_address,r.name AS region_name,
         r.unit_id,o.full_name AS lead_officer_name,s.id AS schedule_id,s.start_time,s.end_time,
@@ -55,8 +55,8 @@ export function scopedPeriodicInspection(db, user, id) {
 // Officer validation — must be active and belong to the plan's unit
 // ---------------------------------------------------------------------------
 
-export function ensureOfficer(db, officerId, unitId) {
-  const officer = db
+export async function ensureOfficer(db, officerId, unitId) {
+  const officer = await db
     .prepare("SELECT id,full_name,unit_id,status FROM officers WHERE id=?")
     .get(officerId);
   assert(

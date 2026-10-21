@@ -19,7 +19,7 @@ const CASE_ROLES = ["A03", "A04"];
 // UC-INS-03 — create or update the pre-inspection notice (thông báo)
 // ---------------------------------------------------------------------------
 
-export function upsertNotice(db, user, id, payload, ip) {
+export async function upsertNotice(db, user, id, payload, ip) {
   requirePlanning(user, "edit");
   requireRole(user, CASE_ROLES, "Chỉ Cán bộ kiểm tra hoặc Cán bộ tổng hợp được lập thông báo.");
   object(payload, [
@@ -33,7 +33,7 @@ export function upsertNotice(db, user, id, payload, ip) {
     "version",
     "file",
   ]);
-  const inspection = scopedPeriodicInspection(db, user, id);
+  const inspection = await scopedPeriodicInspection(db, user, id);
   assert(
     inspection.status === "planned",
     409,
@@ -41,7 +41,7 @@ export function upsertNotice(db, user, id, payload, ip) {
     "Chỉ hồ sơ đang chuẩn bị mới được lập thông báo.",
   );
   const before =
-    db.prepare("SELECT * FROM inspection_notices WHERE inspection_id=?").get(id) ?? null;
+    (await db.prepare("SELECT * FROM inspection_notices WHERE inspection_id=?").get(id)) ?? null;
   assert(
     !before || payload.version === before.version,
     409,
@@ -70,63 +70,67 @@ export function upsertNotice(db, user, id, payload, ip) {
   const file = parseFile(payload.file);
   const idValue = before?.id ?? randomUUID();
   const now = Date.now();
-  return transaction(db, () => {
+  return await transaction(db, async () => {
     if (before)
-      db.prepare(
-        `UPDATE inspection_notices SET notice_number=?,recipient_name=?,recipient_contact=?,
+      await db
+        .prepare(
+          `UPDATE inspection_notices SET notice_number=?,recipient_name=?,recipient_contact=?,
       notice_text=?,sent_date=?,inspection_date=?,status=?,file_name=coalesce(?,file_name),
       content_type=coalesce(?,content_type),file_size=coalesce(?,file_size),file_data=coalesce(?,file_data),
       version=version+1,updated_by=?,updated_at=? WHERE id=? AND version=?`,
-      ).run(
-        optionalText(payload.notice_number, "Số thông báo", 100),
-        trimmed(payload.recipient_name, "Người nhận", 1, 200),
-        optionalText(payload.recipient_contact, "Thông tin liên hệ", 300),
-        optionalText(payload.notice_text, "Nội dung", 5000),
-        sentDate,
-        inspectionDate,
-        status,
-        file?.name ?? null,
-        file?.contentType ?? null,
-        file?.data.length ?? null,
-        file?.data ?? null,
-        user.id,
-        now,
-        before.id,
-        before.version,
-      );
+        )
+        .run(
+          optionalText(payload.notice_number, "Số thông báo", 100),
+          trimmed(payload.recipient_name, "Người nhận", 1, 200),
+          optionalText(payload.recipient_contact, "Thông tin liên hệ", 300),
+          optionalText(payload.notice_text, "Nội dung", 5000),
+          sentDate,
+          inspectionDate,
+          status,
+          file?.name ?? null,
+          file?.contentType ?? null,
+          file?.data.length ?? null,
+          file?.data ?? null,
+          user.id,
+          now,
+          before.id,
+          before.version,
+        );
     else
-      db.prepare(
-        `INSERT INTO inspection_notices(
+      await db
+        .prepare(
+          `INSERT INTO inspection_notices(
       id,inspection_id,notice_number,recipient_name,recipient_contact,notice_text,sent_date,
       inspection_date,status,file_name,content_type,file_size,file_data,created_by,updated_by,created_at,updated_at
     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      ).run(
-        idValue,
-        id,
-        optionalText(payload.notice_number, "Số thông báo", 100),
-        trimmed(payload.recipient_name, "Người nhận", 1, 200),
-        optionalText(payload.recipient_contact, "Thông tin liên hệ", 300),
-        optionalText(payload.notice_text, "Nội dung", 5000),
-        sentDate,
-        inspectionDate,
-        status,
-        file?.name ?? null,
-        file?.contentType ?? null,
-        file?.data.length ?? null,
-        file?.data ?? null,
-        user.id,
-        user.id,
-        now,
-        now,
-      );
-    const after = db
+        )
+        .run(
+          idValue,
+          id,
+          optionalText(payload.notice_number, "Số thông báo", 100),
+          trimmed(payload.recipient_name, "Người nhận", 1, 200),
+          optionalText(payload.recipient_contact, "Thông tin liên hệ", 300),
+          optionalText(payload.notice_text, "Nội dung", 5000),
+          sentDate,
+          inspectionDate,
+          status,
+          file?.name ?? null,
+          file?.contentType ?? null,
+          file?.data.length ?? null,
+          file?.data ?? null,
+          user.id,
+          user.id,
+          now,
+          now,
+        );
+    const after = await db
       .prepare(
         `SELECT id,inspection_id,notice_number,recipient_name,recipient_contact,notice_text,
       sent_date,inspection_date,status,file_name,content_type,file_size,version,created_at,updated_at
       FROM inspection_notices WHERE id=?`,
       )
       .get(idValue);
-    writeAudit(db, {
+    await writeAudit(db, {
       actorId: user.id,
       feature: "M06.planning",
       objectType: "inspection_notice",

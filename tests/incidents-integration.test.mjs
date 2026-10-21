@@ -16,27 +16,24 @@ const frontendRequire = createRequire(new URL("../pccc-FE/package.json", import.
 const nextBinary = frontendRequire.resolve("next/dist/bin/next");
 
 test(
-  "Next same-origin rewrite + M09: real SQLite workflow, private uploads, route guards and immediate grants",
+  "Next same-origin rewrite + M09: real PostgreSQL workflow, private uploads, route guards and immediate grants",
   { timeout: 90000 },
   async (t) => {
     const directory = mkdtempSync(join(tmpdir(), "pccc-inc-next-test-"));
     assert.ok(resolve(directory).startsWith(resolve(tmpdir()) + sep));
-    const databasePath = join(directory, "test.sqlite");
     const uploadDirectory = join(directory, "private-uploads");
-    const db = openDatabase(databasePath);
+    const db = await openDatabase(":memory:");
     const password = "Incidents-next-integration-password";
     await seedDemo(db, password);
     // Only the isolated test fixture receives M09 grants. No account gets implicit access.
     for (const permission of ["view", "create", "edit", "approve", "export"])
-      db.prepare("INSERT OR IGNORE INTO role_permissions VALUES (?,?)").run(
-        "A04",
-        `M09.${permission}`,
-      );
+      await db
+        .prepare("INSERT INTO role_permissions VALUES (?,?) ON CONFLICT DO NOTHING")
+        .run("A04", `M09.${permission}`);
     for (const permission of ["view", "edit"])
-      db.prepare("INSERT OR IGNORE INTO role_permissions VALUES (?,?)").run(
-        "A03",
-        `M09.${permission}`,
-      );
+      await db
+        .prepare("INSERT INTO role_permissions VALUES (?,?) ON CONFLICT DO NOTHING")
+        .run("A03", `M09.${permission}`);
     const backendPort = Number(process.env.TEST_BACKEND_PORT || 4000);
     const frontendPort = Number(process.env.TEST_FRONTEND_PORT || 3100);
     const origin = `http://localhost:${frontendPort}`;
@@ -50,7 +47,7 @@ test(
         await ended;
       }
       if (backend.listening) await new Promise((done) => backend.close(done));
-      db.close();
+      await db.close();
       assert.ok(resolve(directory).startsWith(resolve(tmpdir()) + sep));
       rmSync(directory, { recursive: true, force: true });
     });
@@ -159,7 +156,8 @@ test(
     assert.equal(draft.recordStatus, "DRAFT");
     assert.ok(draft.incidentCode);
     assert.equal(
-      db.prepare("SELECT record_status FROM incidents WHERE id=?").get(draft.id).record_status,
+      (await db.prepare("SELECT record_status FROM incidents WHERE id=?").get(draft.id))
+        .record_status,
       "DRAFT",
     );
     const path = `/api/incidents/${draft.id}`;
@@ -301,7 +299,8 @@ test(
     assert.equal(detail.damages.length, 2);
     assert.equal(detail.documents[0].id, doc.id);
     assert.equal(
-      db.prepare("SELECT scene_details FROM incidents WHERE id=?").get(draft.id).scene_details,
+      (await db.prepare("SELECT scene_details FROM incidents WHERE id=?").get(draft.id))
+        .scene_details,
       detail.incident.sceneDetails,
     );
     await api(`${path}/complete`, {
@@ -319,14 +318,15 @@ test(
     const stats = await api("/api/incidents/statistics?from=2026-02-01&to=2026-02-28", { cookie });
     assert.equal(
       stats.total,
-      db.prepare("SELECT count(*) AS n FROM incidents WHERE record_status='OFFICIAL'").get().n,
+      (await db.prepare("SELECT count(*) AS n FROM incidents WHERE record_status='OFFICIAL'").get())
+        .n,
     );
     assert.equal(stats.total, 1);
     assert.equal(stats.byType.find((row) => row.key === "EXPLOSION").count, 1);
     assert.equal(stats.damages.human.find((row) => row.damageType === "INJURED").quantity, 3);
     assert.equal(
       stats.damages.propertyValue,
-      db.prepare("SELECT sum(property_value) AS n FROM incident_damages").get().n,
+      (await db.prepare("SELECT sum(property_value) AS n FROM incident_damages").get()).n,
     );
     assert.equal(stats.processing.completed, 1);
     assert.equal(stats.deadlines.overdue, 0);
@@ -336,25 +336,22 @@ test(
     await page("/su-co", cookie, /Sự cố cháy, nổ và CNCH/);
     await page(`/su-co/${draft.id}`, cookie, /Chi tiết sự cố/);
     assert.equal((await api(path, { cookie })).documents.length, 1);
-    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
-    assert.equal(db.prepare("PRAGMA integrity_check").get().integrity_check, "ok");
-    const reopened = openDatabase(databasePath);
-    try {
-      assert.equal(
-        reopened.prepare("SELECT processing_status FROM incidents WHERE id=?").get(draft.id)
-          .processing_status,
-        "COMPLETED",
-      );
-      assert.equal(
-        reopened
+    assert.equal(
+      (await db.prepare("SELECT processing_status FROM incidents WHERE id=?").get(draft.id))
+        .processing_status,
+      "COMPLETED",
+    );
+    assert.equal(
+      (
+        await db
           .prepare("SELECT count(*) AS n FROM incident_assignments WHERE incident_id=?")
-          .get(draft.id).n,
-        2,
-      );
-    } finally {
-      reopened.close();
-    }
-    db.exec("DELETE FROM role_permissions WHERE role_code='A04' AND permission_code='M09.view'");
+          .get(draft.id)
+      ).n,
+      2,
+    );
+    await db.exec(
+      "DELETE FROM role_permissions WHERE role_code='A04' AND permission_code='M09.view'",
+    );
     await denied("/su-co", cookie);
     await denied(`/su-co/${draft.id}`, cookie);
     assert.equal((await request(path, { cookie })).status, 403);
@@ -362,10 +359,12 @@ test(
     // Statistics remains independently accessible without record-view permission.
     await page("/su-co/thong-ke", cookie, /Thống kê sự cố/);
     assert.equal((await request("/api/incidents/statistics", { cookie })).status, 200);
-    db.exec("DELETE FROM role_permissions WHERE role_code='A04' AND permission_code='M09.export'");
+    await db.exec(
+      "DELETE FROM role_permissions WHERE role_code='A04' AND permission_code='M09.export'",
+    );
     await denied("/su-co/thong-ke", cookie);
     assert.equal((await request("/api/incidents/statistics", { cookie })).status, 403);
-    db.exec("INSERT INTO role_permissions VALUES ('A04','M09.view')");
+    await db.exec("INSERT INTO role_permissions VALUES ('A04','M09.view')");
     await page("/su-co", cookie, /Sự cố cháy, nổ và CNCH/);
     await api("/api/auth/logout", { method: "POST", cookie });
     await denied("/su-co", cookie, "/dang-nhap");

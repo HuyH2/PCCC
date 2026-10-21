@@ -14,16 +14,16 @@ function canManage(user) {
   return ["A01", "A02", "A05"].includes(user.role) && user.permissions.includes("M07.edit");
 }
 
-function visibleAccounts(db, user) {
+async function visibleAccounts(db, user) {
   if (!canManage(user)) {
-    return db
+    return await db
       .prepare(
         "SELECT id,full_name,username,role_code FROM accounts WHERE id=? AND status='active'",
       )
       .all(user.id);
   }
   const scope = accountScope(user);
-  return db
+  return await db
     .prepare(
       `SELECT a.id,a.full_name,a.username,a.role_code
       FROM accounts a
@@ -41,15 +41,15 @@ function periodFrom(url) {
   return value;
 }
 
-function targetFor(db, accountId, period) {
-  return db
+async function targetFor(db, accountId, period) {
+  return await db
     .prepare("SELECT * FROM kpi_targets WHERE account_id=? AND period=?")
     .get(accountId, period);
 }
 
-function debtWaived(db, accountId, period) {
+async function debtWaived(db, accountId, period) {
   return Boolean(
-    db
+    await db
       .prepare(
         `SELECT 1 FROM explanations
         WHERE account_id=? AND period=? AND status='accepted' AND debt_waived=1 LIMIT 1`,
@@ -58,11 +58,12 @@ function debtWaived(db, accountId, period) {
   );
 }
 
-function calculate(db, accountId, period) {
-  const periods = db
-    .prepare("SELECT period FROM kpi_targets WHERE account_id=? AND period<=? ORDER BY period")
-    .all(accountId, period)
-    .map((row) => row.period);
+async function calculate(db, accountId, period) {
+  const periods = (
+    await db
+      .prepare("SELECT period FROM kpi_targets WHERE account_id=? AND period<=? ORDER BY period")
+      .all(accountId, period)
+  ).map((row) => row.period);
   if (periods.length === 0) {
     return {
       account_id: accountId,
@@ -79,18 +80,20 @@ function calculate(db, accountId, period) {
   let previousDebt = 0;
   let last = null;
   for (const targetPeriod of periods) {
-    const target = targetFor(db, accountId, targetPeriod);
+    const target = await targetFor(db, accountId, targetPeriod);
     if (!target) continue;
     const range = periodRange(targetPeriod);
-    const completed = db
-      .prepare(
-        `SELECT count(*) AS n FROM tasks
+    const completed = (
+      await db
+        .prepare(
+          `SELECT count(*) AS n FROM tasks
         WHERE assigned_to=? AND status='completed' AND completed_at>=? AND completed_at<?`,
-      )
-      .get(accountId, range.start, range.end).n;
+        )
+        .get(accountId, range.start, range.end)
+    ).n;
     const available = target.target_tasks + previousDebt;
     const rawDebt = Math.max(0, available - completed);
-    const waived = debtWaived(db, accountId, targetPeriod);
+    const waived = await debtWaived(db, accountId, targetPeriod);
     const debt = waived ? 0 : rawDebt;
     const score = available === 0 ? 100 : Math.min(100, Math.round((completed / available) * 100));
     last = {
@@ -104,25 +107,27 @@ function calculate(db, accountId, period) {
       score,
       configured: true,
     };
-    db.prepare(
-      `INSERT INTO kpi_results
+    await db
+      .prepare(
+        `INSERT INTO kpi_results
       (account_id,period,target_tasks,completed_tasks,previous_debt,debt,waived_debt,score,computed_at)
       VALUES (?,?,?,?,?,?,?,?,?)
       ON CONFLICT(account_id,period) DO UPDATE SET
         target_tasks=excluded.target_tasks,completed_tasks=excluded.completed_tasks,
         previous_debt=excluded.previous_debt,debt=excluded.debt,
         waived_debt=excluded.waived_debt,score=excluded.score,computed_at=excluded.computed_at`,
-    ).run(
-      accountId,
-      targetPeriod,
-      target.target_tasks,
-      completed,
-      previousDebt,
-      debt,
-      waived ? rawDebt : 0,
-      score,
-      Date.now(),
-    );
+      )
+      .run(
+        accountId,
+        targetPeriod,
+        target.target_tasks,
+        completed,
+        previousDebt,
+        debt,
+        waived ? rawDebt : 0,
+        score,
+        Date.now(),
+      );
     previousDebt = debt;
     if (targetPeriod === period) return last;
   }
@@ -142,8 +147,8 @@ function calculate(db, accountId, period) {
   return last;
 }
 
-function accountFilter(db, user, requestedId) {
-  const accounts = visibleAccounts(db, user);
+async function accountFilter(db, user, requestedId) {
+  const accounts = await visibleAccounts(db, user);
   if (requestedId) {
     const account = accounts.find((item) => item.id === requestedId);
     assert(account, 403, "FORBIDDEN", "Tài khoản ngoài phạm vi KPI.");
@@ -152,28 +157,30 @@ function accountFilter(db, user, requestedId) {
   return accounts;
 }
 
-export function listKpiResults(db, user, url) {
+export async function listKpiResults(db, user, url) {
   requireKpiView(user);
   const period = periodFrom(url);
   const requestedId = url.searchParams.get("accountId") || "";
-  const accounts = accountFilter(db, user, requestedId);
-  const items = accounts.map((account) => ({
-    ...account,
-    ...calculate(db, account.id, period),
-    full_name: account.full_name,
-  }));
+  const accounts = await accountFilter(db, user, requestedId);
+  const items = await Promise.all(
+    accounts.map(async (account) => ({
+      ...account,
+      ...(await calculate(db, account.id, period)),
+      full_name: account.full_name,
+    })),
+  );
   return { period, items };
 }
 
-export function listKpiTargets(db, user, url) {
+export async function listKpiTargets(db, user, url) {
   requireKpiView(user);
   const period = periodFrom(url);
   const requestedId = url.searchParams.get("accountId") || "";
-  const accounts = accountFilter(db, user, requestedId);
+  const accounts = await accountFilter(db, user, requestedId);
   const ids = accounts.map((account) => account.id);
   if (ids.length === 0) return { period, items: [] };
   const placeholders = ids.map(() => "?").join(",");
-  const items = db
+  const items = await db
     .prepare(
       `SELECT k.*,a.full_name,a.username,a.role_code
       FROM kpi_targets k JOIN accounts a ON a.id=k.account_id
@@ -184,7 +191,7 @@ export function listKpiTargets(db, user, url) {
   return { period, items };
 }
 
-export function saveKpiTarget(db, user, input, ip) {
+export async function saveKpiTarget(db, user, input, ip) {
   requireKpiView(user);
   assert(canManage(user), 403, "FORBIDDEN", "Bạn không có quyền cấu hình chỉ tiêu KPI.");
   object(input, ["accountId", "period", "targetTasks", "note"]);
@@ -201,17 +208,19 @@ export function saveKpiTarget(db, user, input, ip) {
     input.note === undefined
       ? ""
       : text(typeof input.note === "string" ? input.note.trim() : input.note, "Ghi chú", 0, 1000);
-  const account = visibleAccounts(db, user).find((item) => item.id === accountId);
+  const account = (await visibleAccounts(db, user)).find((item) => item.id === accountId);
   assert(account, 403, "FORBIDDEN", "Tài khoản ngoài phạm vi KPI.");
-  return transaction(db, () => {
+  return await transaction(db, async () => {
     const now = Date.now();
-    db.prepare(
-      `INSERT INTO kpi_targets(account_id,period,target_tasks,note,created_by,created_at,updated_at)
+    await db
+      .prepare(
+        `INSERT INTO kpi_targets(account_id,period,target_tasks,note,created_by,created_at,updated_at)
       VALUES (?,?,?,?,?,?,?)
       ON CONFLICT(account_id,period) DO UPDATE SET
         target_tasks=excluded.target_tasks,note=excluded.note,updated_at=excluded.updated_at`,
-    ).run(accountId, period, input.targetTasks, note, user.id, now, now);
-    writeAudit(db, {
+      )
+      .run(accountId, period, input.targetTasks, note, user.id, now, now);
+    await writeAudit(db, {
       actorId: user.id,
       feature: "M07",
       objectType: "kpi_target",
@@ -221,15 +230,15 @@ export function saveKpiTarget(db, user, input, ip) {
       ip,
     });
     return {
-      target: db
+      target: await db
         .prepare("SELECT * FROM kpi_targets WHERE account_id=? AND period=?")
         .get(accountId, period),
     };
   });
 }
 
-export function kpiDebt(db, user, url) {
-  const result = listKpiResults(db, user, url);
+export async function kpiDebt(db, user, url) {
+  const result = await listKpiResults(db, user, url);
   return {
     period: result.period,
     items: result.items.map((item) => ({

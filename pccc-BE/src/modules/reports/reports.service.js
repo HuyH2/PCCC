@@ -68,10 +68,10 @@ function visibleWhere(user) {
   const scope = accountScope(user);
   return { sql: scope.sql, params: scope.params };
 }
-function row(db, user, id) {
+async function row(db, user, id) {
   access(user);
   const visible = visibleWhere(user);
-  const found = db
+  const found = await db
     .prepare(
       `SELECT r.*,t.name AS type_name,t.cycle,
     requester.full_name AS requester_name, a.full_name AS assignee_name
@@ -98,8 +98,8 @@ function withDerived(r, today = businessDate()) {
         : "closed",
   };
 }
-function log(db, user, ip, objectType, objectId, action, before, after) {
-  writeAudit(db, {
+async function log(db, user, ip, objectType, objectId, action, before, after) {
+  await writeAudit(db, {
     actorId: user.id,
     feature: "M08",
     objectType,
@@ -110,9 +110,9 @@ function log(db, user, ip, objectType, objectId, action, before, after) {
     ip,
   });
 }
-function target(db, user, id) {
+async function target(db, user, id) {
   const scope = accountScope(user);
-  const found = db
+  const found = await db
     .prepare(
       `SELECT a.id,a.full_name,a.status FROM accounts a
     JOIN role_permissions rp ON rp.role_code=a.role_code AND rp.permission_code='M08.edit'
@@ -127,11 +127,11 @@ function target(db, user, id) {
   );
   return found;
 }
-export function listReportAssignees(db, user) {
+export async function listReportAssignees(db, user) {
   manager(user, "create");
   const scope = accountScope(user);
   return {
-    items: db
+    items: await db
       .prepare(
         `SELECT DISTINCT a.id,a.full_name,a.username FROM accounts a
     JOIN role_permissions rp ON rp.role_code=a.role_code AND rp.permission_code='M08.edit'
@@ -140,17 +140,17 @@ export function listReportAssignees(db, user) {
       .all(...scope.params),
   };
 }
-export function listReportTypes(db, user) {
+export async function listReportTypes(db, user) {
   access(user);
   return {
-    items: db
+    items: await db
       .prepare(
         "SELECT id,name,description,cycle,warning_days,active,created_at FROM report_types ORDER BY name",
       )
       .all(),
   };
 }
-export function createReportType(db, user, input, ip) {
+export async function createReportType(db, user, input, ip) {
   manager(user, "create");
   assert(
     user.role === "A05" && user.scopes.some((s) => s.kind === "all"),
@@ -165,18 +165,11 @@ export function createReportType(db, user, input, ip) {
   const days = warningDays(input.warningDays ?? 5);
   const id = randomUUID(),
     now = Date.now();
-  transaction(db, () => {
-    db.prepare("INSERT INTO report_types VALUES (?,?,?,?,?,1,?,?,?)").run(
-      id,
-      name,
-      description,
-      input.cycle,
-      days,
-      user.id,
-      now,
-      now,
-    );
-    log(db, user, ip, "report_type", id, "report.type_created", null, {
+  await transaction(db, async () => {
+    await db
+      .prepare("INSERT INTO report_types VALUES (?,?,?,?,?,1,?,?,?)")
+      .run(id, name, description, input.cycle, days, user.id, now, now);
+    await log(db, user, ip, "report_type", id, "report.type_created", null, {
       name,
       cycle: input.cycle,
       warningDays: days,
@@ -184,7 +177,7 @@ export function createReportType(db, user, input, ip) {
   });
   return { id, name, description, cycle: input.cycle, warning_days: days };
 }
-export function updateReportType(db, user, id, input, ip) {
+export async function updateReportType(db, user, id, input, ip) {
   manager(user, "edit");
   assert(
     user.role === "A05" && user.scopes.some((s) => s.kind === "all"),
@@ -193,7 +186,7 @@ export function updateReportType(db, user, id, input, ip) {
     "Chỉ quản trị được sửa danh mục dùng chung.",
   );
   object(input, ["name", "description", "warningDays", "active"]);
-  const before = db.prepare("SELECT * FROM report_types WHERE id=?").get(id);
+  const before = await db.prepare("SELECT * FROM report_types WHERE id=?").get(id);
   assert(before, 404, "NOT_FOUND", "Không tìm thấy loại báo cáo.");
   const name =
     input.name === undefined ? before.name : text(input.name?.trim(), "Tên loại báo cáo", 1, 200);
@@ -212,11 +205,13 @@ export function updateReportType(db, user, id, input, ip) {
           ? 0
           : null;
   assert(active !== null, 400, "INVALID_INPUT", "Trạng thái không hợp lệ.");
-  transaction(db, () => {
-    db.prepare(
-      "UPDATE report_types SET name=?,description=?,warning_days=?,active=?,updated_at=? WHERE id=?",
-    ).run(name, description, days, active, Date.now(), id);
-    log(db, user, ip, "report_type", id, "report.type_updated", before, {
+  await transaction(db, async () => {
+    await db
+      .prepare(
+        "UPDATE report_types SET name=?,description=?,warning_days=?,active=?,updated_at=? WHERE id=?",
+      )
+      .run(name, description, days, active, Date.now(), id);
+    await log(db, user, ip, "report_type", id, "report.type_updated", before, {
       name,
       description,
       warning_days: days,
@@ -225,7 +220,7 @@ export function updateReportType(db, user, id, input, ip) {
   });
   return { id, name, description, warning_days: days, active };
 }
-function insertRequest(
+async function insertRequest(
   db,
   {
     id,
@@ -241,26 +236,28 @@ function insertRequest(
     now,
   },
 ) {
-  db.prepare(
-    `INSERT INTO report_requests
+  await db
+    .prepare(
+      `INSERT INTO report_requests
     (id,report_type_id,schedule_id,period_key,title,recipient,reference_number,requester_id,assignee_id,due_date,warning_days,created_at,updated_at)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-  ).run(
-    id,
-    type.id,
-    scheduleId,
-    periodKey,
-    title,
-    recipient,
-    referenceNumber,
-    requesterId,
-    assigneeId,
-    dueDate,
-    type.warning_days,
-    now,
-    now,
-  );
-  notifyUser(db, {
+    )
+    .run(
+      id,
+      type.id,
+      scheduleId,
+      periodKey,
+      title,
+      recipient,
+      referenceNumber,
+      requesterId,
+      assigneeId,
+      dueDate,
+      type.warning_days,
+      now,
+      now,
+    );
+  await notifyUser(db, {
     userId: assigneeId,
     feature: "M08",
     kind: "assigned",
@@ -271,14 +268,14 @@ function insertRequest(
     dedupeKey: `report:${id}:assigned`,
   });
 }
-export function createReportRequest(db, user, input, ip) {
+export async function createReportRequest(db, user, input, ip) {
   manager(user, "create");
   object(input, ["reportTypeId", "title", "recipient", "referenceNumber", "assigneeId", "dueDate"]);
-  const type = db
+  const type = await db
     .prepare("SELECT * FROM report_types WHERE id=? AND active=1")
     .get(input.reportTypeId);
   assert(type, 400, "INVALID_INPUT", "Loại báo cáo không tồn tại hoặc đã ngừng sử dụng.");
-  target(db, user, text(input.assigneeId, "Người thực hiện", 1, 100));
+  await target(db, user, text(input.assigneeId, "Người thực hiện", 1, 100));
   const title = text((input.title ?? type.name)?.trim(), "Tên báo cáo", 1, 200);
   const recipient = text(input.recipient?.trim(), "Nơi nhận", 1, 200);
   const referenceNumber = input.referenceNumber
@@ -287,8 +284,8 @@ export function createReportRequest(db, user, input, ip) {
   const dueDate = date(input.dueDate, "Hạn nộp");
   const id = randomUUID(),
     now = Date.now();
-  transaction(db, () => {
-    insertRequest(db, {
+  await transaction(db, async () => {
+    await insertRequest(db, {
       id,
       type,
       title,
@@ -299,16 +296,16 @@ export function createReportRequest(db, user, input, ip) {
       dueDate,
       now,
     });
-    log(db, user, ip, "report_request", id, "report.request_created", null, {
+    await log(db, user, ip, "report_request", id, "report.request_created", null, {
       title,
       dueDate,
       assigneeId: input.assigneeId,
       referenceNumber,
     });
   });
-  return { request: withDerived(row(db, user, id)) };
+  return { request: withDerived(await row(db, user, id)) };
 }
-export function listReportRequests(db, user, url) {
+export async function listReportRequests(db, user, url) {
   access(user);
   const { page, pageSize } = pagination(url);
   const visible = visibleWhere(user);
@@ -338,31 +335,30 @@ export function listReportRequests(db, user, url) {
     clauses.push("r.status='open' AND r.due_date<?");
     params.push(today);
   } else if (bucket === "due_soon") {
-    clauses.push(
-      "r.status='open' AND r.due_date>=? AND julianday(r.due_date)-julianday(?)<=r.warning_days",
-    );
+    clauses.push("r.status='open' AND r.due_date>=? AND r.due_date::date-?::date<=r.warning_days");
     params.push(today, today);
   } else assert(!bucket || bucket === "all", 400, "INVALID_INPUT", "Bộ lọc hạn không hợp lệ.");
   const where = clauses.join(" AND ");
   const from = `FROM report_requests r JOIN report_types t ON t.id=r.report_type_id
     JOIN accounts a ON a.id=r.assignee_id JOIN accounts requester ON requester.id=r.requester_id WHERE ${where}`;
-  const items = db
-    .prepare(
-      `SELECT r.*,t.name AS type_name,t.cycle,a.full_name AS assignee_name,
+  const items = (
+    await db
+      .prepare(
+        `SELECT r.*,t.name AS type_name,t.cycle,a.full_name AS assignee_name,
     requester.full_name AS requester_name ${from} ORDER BY r.due_date DESC,r.created_at DESC LIMIT ? OFFSET ?`,
-    )
-    .all(...params, pageSize, (page - 1) * pageSize)
-    .map((r) => withDerived(r, today));
+      )
+      .all(...params, pageSize, (page - 1) * pageSize)
+  ).map((r) => withDerived(r, today));
   return {
     items,
-    total: db.prepare(`SELECT count(*) AS n ${from}`).get(...params).n,
+    total: (await db.prepare(`SELECT count(*) AS n ${from}`).get(...params)).n,
     page,
     pageSize,
   };
 }
-export function reportDetail(db, user, id) {
-  const request = withDerived(row(db, user, id));
-  const submissions = db
+export async function reportDetail(db, user, id) {
+  const request = withDerived(await row(db, user, id));
+  const submissions = await db
     .prepare(
       `SELECT s.id,s.request_id,s.submitted_by,a.full_name AS submitter_name,
     s.note,s.file_name,s.content_type,s.file_size,s.submitted_at FROM report_submissions s
@@ -371,10 +367,10 @@ export function reportDetail(db, user, id) {
     .all(id);
   return { request, submissions };
 }
-export function updateReportRequest(db, user, id, input, ip) {
+export async function updateReportRequest(db, user, id, input, ip) {
   manager(user, "edit");
   object(input, ["assigneeId", "dueDate", "recipient", "referenceNumber"]);
-  const before = row(db, user, id);
+  const before = await row(db, user, id);
   assert(before.status === "open", 409, "INVALID_STATE", "Chỉ sửa được yêu cầu đang mở.");
   assert(
     before.requester_id === user.id || user.role === "A05",
@@ -383,7 +379,7 @@ export function updateReportRequest(db, user, id, input, ip) {
     "Chỉ người yêu cầu được điều chỉnh.",
   );
   const assignee = input.assigneeId ?? before.assignee_id;
-  target(db, user, assignee);
+  await target(db, user, assignee);
   const dueDate = input.dueDate ? date(input.dueDate, "Hạn nộp") : before.due_date;
   const recipient =
     input.recipient === undefined
@@ -395,12 +391,14 @@ export function updateReportRequest(db, user, id, input, ip) {
       : input.referenceNumber
         ? text(input.referenceNumber.trim(), "Số văn bản", 1, 100)
         : null;
-  transaction(db, () => {
-    db.prepare(
-      "UPDATE report_requests SET assignee_id=?,due_date=?,recipient=?,reference_number=?,updated_at=? WHERE id=?",
-    ).run(assignee, dueDate, recipient, reference, Date.now(), id);
+  await transaction(db, async () => {
+    await db
+      .prepare(
+        "UPDATE report_requests SET assignee_id=?,due_date=?,recipient=?,reference_number=?,updated_at=? WHERE id=?",
+      )
+      .run(assignee, dueDate, recipient, reference, Date.now(), id);
     if (assignee !== before.assignee_id)
-      notifyUser(db, {
+      await notifyUser(db, {
         userId: assignee,
         feature: "M08",
         kind: "assigned",
@@ -410,7 +408,7 @@ export function updateReportRequest(db, user, id, input, ip) {
         objectId: id,
         dedupeKey: `report:${id}:reassigned:${assignee}`,
       });
-    log(
+    await log(
       db,
       user,
       ip,
@@ -421,11 +419,11 @@ export function updateReportRequest(db, user, id, input, ip) {
       { assigneeId: assignee, dueDate },
     );
   });
-  return reportDetail(db, user, id);
+  return await reportDetail(db, user, id);
 }
-export function submitReport(db, user, id, upload, ip) {
+export async function submitReport(db, user, id, upload, ip) {
   access(user, "edit");
-  const request = row(db, user, id);
+  const request = await row(db, user, id);
   assert(
     request.assignee_id === user.id,
     403,
@@ -458,16 +456,20 @@ export function submitReport(db, user, id, upload, ip) {
   const note = text((upload.note ?? "").trim(), "Ghi chú", 0, 1000);
   const submissionId = randomUUID(),
     now = Date.now();
-  transaction(db, () => {
-    db.prepare(
-      `INSERT INTO report_submissions
+  await transaction(db, async () => {
+    await db
+      .prepare(
+        `INSERT INTO report_submissions
       (id,request_id,submitted_by,note,file_name,content_type,file_size,file_data,submitted_at)
       VALUES (?,?,?,?,?,?,?,?,?)`,
-    ).run(submissionId, id, user.id, note, fileName, contentType, data.length, data, now);
-    db.prepare(
-      "UPDATE report_requests SET status='submitted',updated_at=? WHERE id=? AND status='open'",
-    ).run(now, id);
-    notifyUser(db, {
+      )
+      .run(submissionId, id, user.id, note, fileName, contentType, data.length, data, now);
+    await db
+      .prepare(
+        "UPDATE report_requests SET status='submitted',updated_at=? WHERE id=? AND status='open'",
+      )
+      .run(now, id);
+    await notifyUser(db, {
       userId: request.requester_id,
       feature: "M08",
       kind: "submitted",
@@ -477,7 +479,7 @@ export function submitReport(db, user, id, upload, ip) {
       objectId: id,
       dedupeKey: `report:${id}:submitted`,
     });
-    log(
+    await log(
       db,
       user,
       ip,
@@ -488,11 +490,11 @@ export function submitReport(db, user, id, upload, ip) {
       { status: "submitted", fileName, note },
     );
   });
-  return reportDetail(db, user, id);
+  return await reportDetail(db, user, id);
 }
-export function reportFile(db, user, id, submissionId) {
-  row(db, user, id);
-  const file = db
+export async function reportFile(db, user, id, submissionId) {
+  await row(db, user, id);
+  const file = await db
     .prepare(
       "SELECT file_name,content_type,file_data FROM report_submissions WHERE id=? AND request_id=?",
     )
@@ -500,9 +502,9 @@ export function reportFile(db, user, id, submissionId) {
   assert(file, 404, "NOT_FOUND", "Không tìm thấy file báo cáo.");
   return file;
 }
-export function completeReport(db, user, id, ip) {
+export async function completeReport(db, user, id, ip) {
   access(user, "approve");
-  const request = row(db, user, id);
+  const request = await row(db, user, id);
   assert(
     request.requester_id === user.id || user.role === "A05",
     403,
@@ -515,11 +517,13 @@ export function completeReport(db, user, id, ip) {
     "INVALID_STATE",
     "Chỉ hoàn thành được báo cáo đã nộp.",
   );
-  transaction(db, () => {
-    db.prepare(
-      "UPDATE report_requests SET status='completed',completed_at=?,updated_at=? WHERE id=? AND status='submitted'",
-    ).run(Date.now(), Date.now(), id);
-    notifyUser(db, {
+  await transaction(db, async () => {
+    await db
+      .prepare(
+        "UPDATE report_requests SET status='completed',completed_at=?,updated_at=? WHERE id=? AND status='submitted'",
+      )
+      .run(Date.now(), Date.now(), id);
+    await notifyUser(db, {
       userId: request.assignee_id,
       feature: "M08",
       kind: "completed",
@@ -529,7 +533,7 @@ export function completeReport(db, user, id, ip) {
       objectId: id,
       dedupeKey: `report:${id}:completed`,
     });
-    log(
+    await log(
       db,
       user,
       ip,
@@ -540,7 +544,7 @@ export function completeReport(db, user, id, ip) {
       { status: "completed" },
     );
   });
-  return reportDetail(db, user, id);
+  return await reportDetail(db, user, id);
 }
 
 function nextDate(value, cycle) {
@@ -558,11 +562,11 @@ function nextDate(value, cycle) {
   }
   return d.toISOString().slice(0, 10);
 }
-export function listReportSchedules(db, user) {
+export async function listReportSchedules(db, user) {
   access(user);
   const scope = accountScope(user);
   return {
-    items: db
+    items: await db
       .prepare(
         `SELECT s.*,t.name AS type_name,t.cycle,a.full_name AS assignee_name
     FROM report_schedules s JOIN report_types t ON t.id=s.report_type_id
@@ -572,10 +576,10 @@ export function listReportSchedules(db, user) {
       .all(...scope.params),
   };
 }
-export function createReportSchedule(db, user, input, ip) {
+export async function createReportSchedule(db, user, input, ip) {
   manager(user, "create");
   object(input, ["reportTypeId", "assigneeId", "recipient", "referenceNumber", "firstDueDate"]);
-  const type = db
+  const type = await db
     .prepare("SELECT * FROM report_types WHERE id=? AND active=1")
     .get(input.reportTypeId);
   assert(
@@ -584,7 +588,7 @@ export function createReportSchedule(db, user, input, ip) {
     "INVALID_INPUT",
     "Cần chọn loại báo cáo định kỳ đang hoạt động.",
   );
-  target(db, user, text(input.assigneeId, "Người thực hiện", 1, 100));
+  await target(db, user, text(input.assigneeId, "Người thực hiện", 1, 100));
   const recipient = text(input.recipient?.trim(), "Nơi nhận", 1, 200);
   const reference = input.referenceNumber
     ? text(input.referenceNumber.trim(), "Số văn bản", 1, 100)
@@ -592,13 +596,15 @@ export function createReportSchedule(db, user, input, ip) {
   const due = date(input.firstDueDate, "Hạn kỳ đầu");
   const id = randomUUID(),
     now = Date.now();
-  transaction(db, () => {
-    db.prepare(
-      `INSERT INTO report_schedules
+  await transaction(db, async () => {
+    await db
+      .prepare(
+        `INSERT INTO report_schedules
       (id,report_type_id,assignee_id,requester_id,recipient,reference_number,next_due_date,created_at,updated_at)
       VALUES (?,?,?,?,?,?,?,?,?)`,
-    ).run(id, type.id, input.assigneeId, user.id, recipient, reference, due, now, now);
-    log(db, user, ip, "report_schedule", id, "report.schedule_created", null, {
+      )
+      .run(id, type.id, input.assigneeId, user.id, recipient, reference, due, now, now);
+    await log(db, user, ip, "report_schedule", id, "report.schedule_created", null, {
       reportTypeId: type.id,
       dueDate: due,
     });
@@ -606,11 +612,11 @@ export function createReportSchedule(db, user, input, ip) {
   return { id, next_due_date: due };
 }
 
-export function updateReportSchedule(db, user, id, input, ip) {
+export async function updateReportSchedule(db, user, id, input, ip) {
   manager(user, "edit");
   object(input, ["active"]);
   assert(typeof input.active === "boolean", 400, "INVALID_INPUT", "Trạng thái lịch không hợp lệ.");
-  const schedule = db.prepare("SELECT * FROM report_schedules WHERE id=?").get(id);
+  const schedule = await db.prepare("SELECT * FROM report_schedules WHERE id=?").get(id);
   assert(schedule, 404, "NOT_FOUND", "Không tìm thấy lịch báo cáo.");
   assert(
     schedule.requester_id === user.id || user.role === "A05",
@@ -618,14 +624,12 @@ export function updateReportSchedule(db, user, id, input, ip) {
     "FORBIDDEN",
     "Chỉ người lập lịch được cập nhật.",
   );
-  target(db, user, schedule.assignee_id);
-  return transaction(db, () => {
-    db.prepare("UPDATE report_schedules SET active=?,updated_at=? WHERE id=?").run(
-      input.active ? 1 : 0,
-      Date.now(),
-      id,
-    );
-    log(
+  await target(db, user, schedule.assignee_id);
+  return await transaction(db, async () => {
+    await db
+      .prepare("UPDATE report_schedules SET active=?,updated_at=? WHERE id=?")
+      .run(input.active ? 1 : 0, Date.now(), id);
+    await log(
       db,
       user,
       ip,
@@ -638,9 +642,9 @@ export function updateReportSchedule(db, user, id, input, ip) {
     return { id, active: input.active ? 1 : 0 };
   });
 }
-export function generateReportPeriod(db, user, id, ip) {
+export async function generateReportPeriod(db, user, id, ip) {
   manager(user, "create");
-  const schedule = db
+  const schedule = await db
     .prepare(
       `SELECT s.*,t.name AS type_name,t.cycle,t.warning_days,t.active AS type_active
     FROM report_schedules s JOIN report_types t ON t.id=s.report_type_id WHERE s.id=?`,
@@ -658,20 +662,20 @@ export function generateReportPeriod(db, user, id, ip) {
     "FORBIDDEN",
     "Chỉ người lập lịch được sinh kỳ.",
   );
-  target(db, user, schedule.assignee_id);
+  await target(db, user, schedule.assignee_id);
   const requestId = randomUUID(),
     now = Date.now(),
     dueDate = schedule.next_due_date;
   assert(
-    !db
+    !(await db
       .prepare("SELECT 1 FROM report_requests WHERE schedule_id=? AND period_key=?")
-      .get(id, dueDate),
+      .get(id, dueDate)),
     409,
     "PERIOD_EXISTS",
     "Kỳ báo cáo này đã được tạo.",
   );
-  const result = transaction(db, () => {
-    insertRequest(db, {
+  const result = await transaction(db, async () => {
+    await insertRequest(db, {
       id: requestId,
       type: { id: schedule.report_type_id, warning_days: schedule.warning_days },
       title: `${schedule.type_name} - kỳ ${dueDate}`,
@@ -684,10 +688,12 @@ export function generateReportPeriod(db, user, id, ip) {
       periodKey: dueDate,
       now,
     });
-    db.prepare(
-      "UPDATE report_schedules SET next_due_date=?,updated_at=? WHERE id=? AND next_due_date=?",
-    ).run(nextDate(dueDate, schedule.cycle), now, id, dueDate);
-    log(db, user, ip, "report_schedule", id, "report.period_generated", null, {
+    await db
+      .prepare(
+        "UPDATE report_schedules SET next_due_date=?,updated_at=? WHERE id=? AND next_due_date=?",
+      )
+      .run(nextDate(dueDate, schedule.cycle), now, id, dueDate);
+    await log(db, user, ip, "report_schedule", id, "report.period_generated", null, {
       requestId,
       dueDate,
     });
@@ -695,21 +701,21 @@ export function generateReportPeriod(db, user, id, ip) {
   });
   return result;
 }
-export function refreshReportReminders(db, user, now = Date.now()) {
+export async function refreshReportReminders(db, user, now = Date.now()) {
   // Invoked by bell/list polling. Unique keys avoid duplicate reminders across requests.
   if (!user.scopes.length || !user.permissions.includes("M08.view")) return;
   const today = businessDate(now);
   const scope = accountScope(user);
-  const rows = db
+  const rows = await db
     .prepare(
       `SELECT r.id,r.title,r.due_date,r.warning_days FROM report_requests r
     JOIN accounts a ON a.id=r.assignee_id WHERE r.assignee_id=? AND r.status='open'
-    AND ${scope.sql} AND julianday(r.due_date)-julianday(?)<=r.warning_days`,
+    AND ${scope.sql} AND r.due_date::date-?::date<=r.warning_days`,
     )
     .all(user.id, ...scope.params, today);
   for (const r of rows) {
     const overdue = r.due_date < today;
-    notifyUser(db, {
+    await notifyUser(db, {
       userId: user.id,
       feature: "M08",
       kind: overdue ? "overdue" : "due_soon",

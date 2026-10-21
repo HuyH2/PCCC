@@ -14,7 +14,7 @@ function redact(value) {
   return value;
 }
 
-export function writeAudit(
+export async function writeAudit(
   db,
   {
     actorId = null,
@@ -30,10 +30,10 @@ export function writeAudit(
   text(feature, "Chức năng", 1, 100);
   text(objectType, "Loại đối tượng", 1, 100);
   text(action, "Thao tác", 1, 100);
-  const result = db
+  const result = await db
     .prepare(
       `INSERT INTO audit_logs(actor_id,action,object_id,before_json,after_json,occurred_at,ip,feature,object_type)
-    VALUES (?,?,?,?,?,?,?,?,?)`,
+    VALUES (?,?,?,?,?,?,?,?,?) RETURNING id`,
     )
     .run(
       actorId,
@@ -50,8 +50,8 @@ export function writeAudit(
 }
 
 // Backward-compatible signature for authentication and authorization features.
-export function audit(db, actor, action, object, before, after, ip) {
-  writeAudit(db, {
+export async function audit(db, actor, action, object, before, after, ip) {
+  await writeAudit(db, {
     actorId: actor,
     feature: action.startsWith("auth.") ? "M01.auth" : "M01.authorization",
     objectType: action.includes("role_permissions") ? "role" : "account",
@@ -63,7 +63,7 @@ export function audit(db, actor, action, object, before, after, ip) {
   });
 }
 
-export function listAuditLogs(db, user, url) {
+export async function listAuditLogs(db, user, url) {
   requireAdministrator(user, "M01.view");
   const { page, pageSize } = pagination(url);
   const clauses = [];
@@ -114,14 +114,16 @@ export function listAuditLogs(db, user, url) {
   );
   const where = clauses.length ? clauses.join(" AND ") : "1=1";
   return {
-    items: db
+    items: await db
       .prepare(
         `SELECT l.*, (${featureSql}) AS feature, a.full_name AS actor_name, a.username AS actor_username
       FROM audit_logs l LEFT JOIN accounts a ON a.id=l.actor_id WHERE ${where}
       ORDER BY l.occurred_at DESC,l.id DESC LIMIT ? OFFSET ?`,
       )
       .all(...params, pageSize, (page - 1) * pageSize),
-    total: db.prepare(`SELECT count(*) AS n FROM audit_logs l WHERE ${where}`).get(...params).n,
+    total: (
+      await db.prepare(`SELECT count(*) AS n FROM audit_logs l WHERE ${where}`).get(...params)
+    ).n,
     page,
     pageSize,
   };

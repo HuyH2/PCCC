@@ -15,5 +15,9 @@
     "seed:incidents:local": "node --env-file-if-exists=.env scripts/seed-incidents-bulk.js --demo",
     "test": "node --test test/*.test.js",
     "check": "node scripts/check.js"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.11",
+    "pg": "^8.23.1"
   }
 }

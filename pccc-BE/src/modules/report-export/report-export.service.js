@@ -40,8 +40,8 @@ function requireReportAccess(user, action = "view") {
   assert(user.scopes.length > 0, 403, "FORBIDDEN", "Tài khoản chưa có phạm vi quản lý.");
 }
 
-function activeReportType(db, idOrCode) {
-  const row = db
+async function activeReportType(db, idOrCode) {
+  const row = await db
     .prepare("SELECT * FROM report_export_types WHERE is_active=1 AND (id=? OR code=?)")
     .get(idOrCode, idOrCode);
   assert(row, 404, "NOT_FOUND", "Loại báo cáo không tồn tại hoặc đã ngừng sử dụng.");
@@ -66,26 +66,26 @@ function typeResponse(row, templateCount = 0, officialCount = 0) {
   };
 }
 
-export function listReportTypes(db, user) {
+export async function listReportTypes(db, user) {
   requireReportAccess(user);
   const counts = new Map(
-    db
-      .prepare(
-        `SELECT report_type_id,count(*) AS total,
+    (
+      await db
+        .prepare(
+          `SELECT report_type_id,count(*) AS total,
           sum(is_official) AS official
         FROM report_templates WHERE is_active=1 GROUP BY report_type_id`,
-      )
-      .all()
-      .map((row) => [row.report_type_id, row]),
+        )
+        .all()
+    ).map((row) => [row.report_type_id, row]),
   );
   return {
-    items: db
-      .prepare("SELECT * FROM report_export_types WHERE is_active=1 ORDER BY code")
-      .all()
-      .map((row) => {
-        const count = counts.get(row.id);
-        return typeResponse(row, count?.total ?? 0, count?.official ?? 0);
-      }),
+    items: (
+      await db.prepare("SELECT * FROM report_export_types WHERE is_active=1 ORDER BY code").all()
+    ).map((row) => {
+      const count = counts.get(row.id);
+      return typeResponse(row, count?.total ?? 0, count?.official ?? 0);
+    }),
     maxRows: MAX_REPORT_ROWS,
   };
 }
@@ -113,7 +113,7 @@ function templateResponse(row) {
   };
 }
 
-export function listReportTemplates(db, user, url) {
+export async function listReportTemplates(db, user, url) {
   requireReportAccess(user);
   const reportTypeId = url.searchParams.get("reportTypeId");
   const clauses = ["t.is_active=1"];
@@ -124,19 +124,20 @@ export function listReportTemplates(db, user, url) {
     params.push(reportTypeId);
   }
   return {
-    items: db
-      .prepare(
-        `SELECT t.*,r.code AS report_type_code
+    items: (
+      await db
+        .prepare(
+          `SELECT t.*,r.code AS report_type_code
         FROM report_templates t JOIN report_export_types r ON r.id=t.report_type_id
         WHERE ${clauses.join(" AND ")}
         ORDER BY t.is_official DESC,t.created_at DESC,t.id`,
-      )
-      .all(...params)
-      .map(templateResponse),
+        )
+        .all(...params)
+    ).map(templateResponse),
   };
 }
 
-export function createReportTemplate(db, user, input, ip) {
+export async function createReportTemplate(db, user, input, ip) {
   requireReportAccess(user, "create");
   object(input, [
     "reportTypeId",
@@ -148,7 +149,7 @@ export function createReportTemplate(db, user, input, ip) {
     "columnLabels",
     "isOfficial",
   ]);
-  const type = activeReportType(db, text(input.reportTypeId, "Loại báo cáo", 1, 100));
+  const type = await activeReportType(db, text(input.reportTypeId, "Loại báo cáo", 1, 100));
   const name = text(
     typeof input.name === "string" ? input.name.trim() : input.name,
     "Tên biểu mẫu",
@@ -203,27 +204,29 @@ export function createReportTemplate(db, user, input, ip) {
   }
   const now = Date.now();
   const id = randomUUID();
-  transaction(db, () => {
-    db.prepare(
-      `INSERT INTO report_templates
+  await transaction(db, async () => {
+    await db
+      .prepare(
+        `INSERT INTO report_templates
       (id,report_type_id,name,format,title,header_note,footer_note,column_labels_json,
        is_official,is_active,created_by,created_at,updated_at)
       VALUES (?,?,?,?,?,?,?,?,?,1,?,?,?)`,
-    ).run(
-      id,
-      type.row.id,
-      name,
-      input.format,
-      title,
-      headerNote,
-      footerNote,
-      JSON.stringify(labels),
-      input.isOfficial === true ? 1 : 0,
-      user.id,
-      now,
-      now,
-    );
-    writeAudit(db, {
+      )
+      .run(
+        id,
+        type.row.id,
+        name,
+        input.format,
+        title,
+        headerNote,
+        footerNote,
+        JSON.stringify(labels),
+        input.isOfficial === true ? 1 : 0,
+        user.id,
+        now,
+        now,
+      );
+    await writeAudit(db, {
       actorId: user.id,
       feature: "M08",
       objectType: "report_template",
@@ -239,7 +242,7 @@ export function createReportTemplate(db, user, input, ip) {
     });
   });
   return templateResponse(
-    db
+    await db
       .prepare(
         `SELECT t.*,r.code AS report_type_code
         FROM report_templates t JOIN report_export_types r ON r.id=t.report_type_id WHERE t.id=?`,
@@ -248,17 +251,17 @@ export function createReportTemplate(db, user, input, ip) {
   );
 }
 
-export function reportOptions(db, user) {
+export async function reportOptions(db, user) {
   requireReportAccess(user);
   const regionFilter = regionScope(user);
   const facilityFilter = facilityScope(user);
   const accountFilter = accountScope(user);
   const today = businessDate();
   return {
-    regions: db
+    regions: await db
       .prepare(`SELECT r.id,r.name FROM regions r WHERE ${regionFilter.sql} ORDER BY r.name,r.id`)
       .all(...regionFilter.params),
-    facility_officers: db
+    facility_officers: await db
       .prepare(
         `SELECT o.officer_id AS id,o.full_name AS name,count(*) AS facility_count
         FROM facility_overview f
@@ -268,7 +271,7 @@ export function reportOptions(db, user) {
         ORDER BY o.full_name,o.officer_id`,
       )
       .all(...facilityFilter.params),
-    account_officers: db
+    account_officers: await db
       .prepare(
         `SELECT a.id,a.full_name AS name,a.username
         FROM accounts a
@@ -319,8 +322,8 @@ function inputFromUrl(url) {
   };
 }
 
-function normalizeInput(db, user, input) {
-  const type = activeReportType(db, text(input.reportTypeId, "Loại báo cáo", 1, 100));
+async function normalizeInput(db, user, input) {
+  const type = await activeReportType(db, text(input.reportTypeId, "Loại báo cáo", 1, 100));
   const definition = type.definition;
   const format = input.format ?? type.row.default_format;
   assert(
@@ -371,7 +374,7 @@ function normalizeInput(db, user, input) {
 
   if (regionId) {
     const filter = regionScope(user);
-    const region = db
+    const region = await db
       .prepare(`SELECT r.name FROM regions r WHERE r.id=? AND ${filter.sql}`)
       .get(regionId, ...filter.params);
     assert(region, 403, "FORBIDDEN", "Khu vực không thuộc phạm vi dữ liệu được cấp.");
@@ -380,14 +383,14 @@ function normalizeInput(db, user, input) {
   if (officerId) {
     if (definition.scope === "account") {
       const filter = accountScope(user);
-      const officer = db
+      const officer = await db
         .prepare(`SELECT a.full_name AS name FROM accounts a WHERE a.id=? AND ${filter.sql}`)
         .get(officerId, ...filter.params);
       assert(officer, 403, "FORBIDDEN", "Cán bộ không thuộc phạm vi dữ liệu được cấp.");
       officerName = officer.name;
     } else {
       const filter = facilityScope(user);
-      const officer = db
+      const officer = await db
         .prepare(
           `SELECT o.full_name AS name FROM facility_overview f
           JOIN officer_directory o ON o.officer_id=f.officer_id
@@ -401,7 +404,7 @@ function normalizeInput(db, user, input) {
 
   let template = null;
   if (templateId) {
-    const row = db
+    const row = await db
       .prepare(
         `SELECT t.*,r.code AS report_type_code FROM report_templates t
         JOIN report_export_types r ON r.id=t.report_type_id
@@ -470,7 +473,7 @@ function buildWhere(user, normalized) {
   return { sql: clauses.join(" AND "), params };
 }
 
-function fetchRows(db, user, normalized) {
+async function fetchRows(db, user, normalized) {
   const { definition } = normalized;
   const where = buildWhere(user, normalized);
   const limit = MAX_REPORT_ROWS + 1;
@@ -520,7 +523,7 @@ function fetchRows(db, user, normalized) {
       ORDER BY a.full_name,a.id LIMIT ?`;
     params = [Date.now(), ...where.params, limit];
   }
-  const rows = db.prepare(sql).all(...params);
+  const rows = await db.prepare(sql).all(...params);
   assert(
     rows.length <= MAX_REPORT_ROWS,
     413,
@@ -637,8 +640,8 @@ function displayRows(rows, columns) {
   );
 }
 
-function buildReport(db, user, normalized) {
-  const rows = fetchRows(db, user, normalized);
+async function buildReport(db, user, normalized) {
+  const rows = await fetchRows(db, user, normalized);
   const columns = columnsFor(normalized.definition, normalized.template);
   return {
     rows,
@@ -662,11 +665,11 @@ function reportTypePayload(type, template) {
   };
 }
 
-export function previewReport(db, user, url) {
+export async function previewReport(db, user, url) {
   requireReportAccess(user);
   const { page, pageSize } = pagination(url);
-  const normalized = normalizeInput(db, user, inputFromUrl(url));
-  const built = buildReport(db, user, normalized);
+  const normalized = await normalizeInput(db, user, inputFromUrl(url));
+  const built = await buildReport(db, user, normalized);
   const start = (page - 1) * pageSize;
   return {
     reportType: reportTypePayload(normalized.type, normalized.template),
@@ -693,8 +696,8 @@ function exportFileName(type, format) {
   return `BC-${type.row.code}-${date}-${randomUUID().slice(0, 8).toUpperCase()}.${format}`;
 }
 
-function exportHistoryRow(db, id) {
-  return db
+async function exportHistoryRow(db, id) {
+  return await db
     .prepare(
       `SELECT h.*,r.code AS report_type_code,r.name AS report_type_name,
         a.full_name AS exporter_name,a.username AS exporter_username
@@ -744,8 +747,8 @@ function historyResponse(row) {
 export async function createReportExport(db, user, input, ip) {
   requireReportAccess(user, "export");
   object(input, ["reportTypeId", "from", "to", "regionId", "officerId", "templateId", "format"]);
-  const normalized = normalizeInput(db, user, input);
-  const built = buildReport(db, user, normalized);
+  const normalized = await normalizeInput(db, user, input);
+  const built = await buildReport(db, user, normalized);
   assert(built.rows.length > 0, 409, "EMPTY_REPORT", "Không có dữ liệu phù hợp để xuất báo cáo.");
   const { type, definition, format, template } = normalized;
   const now = Date.now();
@@ -758,21 +761,23 @@ export async function createReportExport(db, user, input, ip) {
     ...normalized.filters,
     templateName: template?.name ?? null,
   };
-  transaction(db, () => {
-    db.prepare(
-      `INSERT INTO report_export_requests
+  await transaction(db, async () => {
+    await db
+      .prepare(
+        `INSERT INTO report_export_requests
       (id,code,report_type_id,requested_by,period_start,period_end,filters_json,status,created_at)
       VALUES (?,?,?,?,?,?,?,'processing',?)`,
-    ).run(
-      requestId,
-      requestCode,
-      type.row.id,
-      user.id,
-      normalized.from,
-      normalized.to,
-      JSON.stringify(filters),
-      now,
-    );
+      )
+      .run(
+        requestId,
+        requestCode,
+        type.row.id,
+        user.id,
+        normalized.from,
+        normalized.to,
+        JSON.stringify(filters),
+        now,
+      );
   });
 
   try {
@@ -808,49 +813,53 @@ export async function createReportExport(db, user, input, ip) {
           });
     const submissionId = randomUUID();
     const historyId = randomUUID();
-    transaction(db, () => {
-      db.prepare(
-        `INSERT INTO report_export_submissions
+    await transaction(db, async () => {
+      await db
+        .prepare(
+          `INSERT INTO report_export_submissions
         (id,request_id,file_name,content_type,file_size,file_data,created_at)
         VALUES (?,?,?,?,?,?,?)`,
-      ).run(
-        submissionId,
-        requestId,
-        fileName,
-        format === "xlsx"
-          ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          : "application/pdf",
-        file.length,
-        file,
-        now,
-      );
-      db.prepare(
-        "UPDATE report_export_requests SET status='completed',completed_at=? WHERE id=?",
-      ).run(now, requestId);
-      db.prepare(
-        `INSERT INTO report_export_history
+        )
+        .run(
+          submissionId,
+          requestId,
+          fileName,
+          format === "xlsx"
+            ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            : "application/pdf",
+          file.length,
+          file,
+          now,
+        );
+      await db
+        .prepare("UPDATE report_export_requests SET status='completed',completed_at=? WHERE id=?")
+        .run(now, requestId);
+      await db
+        .prepare(
+          `INSERT INTO report_export_history
         (id,request_id,submission_id,report_type_id,template_id,template_name,format,file_name,
          file_size,row_count,filters_json,period_start,period_end,exported_by,exported_at,
          status,error_message)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'completed',NULL)`,
-      ).run(
-        historyId,
-        requestId,
-        submissionId,
-        type.row.id,
-        template?.id ?? null,
-        template?.name ?? null,
-        format,
-        fileName,
-        file.length,
-        built.rows.length,
-        JSON.stringify(filters),
-        normalized.from,
-        normalized.to,
-        user.id,
-        now,
-      );
-      writeAudit(db, {
+        )
+        .run(
+          historyId,
+          requestId,
+          submissionId,
+          type.row.id,
+          template?.id ?? null,
+          template?.name ?? null,
+          format,
+          fileName,
+          file.length,
+          built.rows.length,
+          JSON.stringify(filters),
+          normalized.from,
+          normalized.to,
+          user.id,
+          now,
+        );
+      await writeAudit(db, {
         actorId: user.id,
         feature: "M08",
         objectType: "report_export",
@@ -866,35 +875,36 @@ export async function createReportExport(db, user, input, ip) {
         ip,
       });
     });
-    return { item: historyResponse(exportHistoryRow(db, historyId)) };
+    return { item: historyResponse(await exportHistoryRow(db, historyId)) };
   } catch (error) {
     const historyId = randomUUID();
-    transaction(db, () => {
-      db.prepare("UPDATE report_export_requests SET status='failed',completed_at=? WHERE id=?").run(
-        Date.now(),
-        requestId,
-      );
-      db.prepare(
-        `INSERT INTO report_export_history
+    await transaction(db, async () => {
+      await db
+        .prepare("UPDATE report_export_requests SET status='failed',completed_at=? WHERE id=?")
+        .run(Date.now(), requestId);
+      await db
+        .prepare(
+          `INSERT INTO report_export_history
         (id,request_id,submission_id,report_type_id,template_id,template_name,format,file_name,
          file_size,row_count,filters_json,period_start,period_end,exported_by,exported_at,
          status,error_message)
         VALUES (?,?,NULL,?,?,?,?,NULL,NULL,0,?,?,?,?,?,'failed',?)`,
-      ).run(
-        historyId,
-        requestId,
-        type.row.id,
-        template?.id ?? null,
-        template?.name ?? null,
-        format,
-        JSON.stringify(filters),
-        normalized.from,
-        normalized.to,
-        user.id,
-        Date.now(),
-        "Không thể tạo file báo cáo.",
-      );
-      writeAudit(db, {
+        )
+        .run(
+          historyId,
+          requestId,
+          type.row.id,
+          template?.id ?? null,
+          template?.name ?? null,
+          format,
+          JSON.stringify(filters),
+          normalized.from,
+          normalized.to,
+          user.id,
+          Date.now(),
+          "Không thể tạo file báo cáo.",
+        );
+      await writeAudit(db, {
         actorId: user.id,
         feature: "M08",
         objectType: "report_export",
@@ -908,7 +918,7 @@ export async function createReportExport(db, user, input, ip) {
   }
 }
 
-export function listReportExports(db, user, url) {
+export async function listReportExports(db, user, url) {
   requireReportAccess(user);
   const { page, pageSize } = pagination(url);
   const clauses = [];
@@ -940,29 +950,32 @@ export function listReportExports(db, user, url) {
   }
   const where = clauses.length ? clauses.join(" AND ") : "1=1";
   return {
-    items: db
-      .prepare(
-        `SELECT h.*,r.code AS report_type_code,r.name AS report_type_name,
+    items: (
+      await db
+        .prepare(
+          `SELECT h.*,r.code AS report_type_code,r.name AS report_type_name,
           a.full_name AS exporter_name,a.username AS exporter_username
         FROM report_export_history h
         JOIN report_export_types r ON r.id=h.report_type_id
         JOIN accounts a ON a.id=h.exported_by
         WHERE ${where}
         ORDER BY h.exported_at DESC,h.id DESC LIMIT ? OFFSET ?`,
-      )
-      .all(...params, pageSize, (page - 1) * pageSize)
-      .map(historyResponse),
-    total: db
-      .prepare(`SELECT count(*) AS n FROM report_export_history h WHERE ${where}`)
-      .get(...params).n,
+        )
+        .all(...params, pageSize, (page - 1) * pageSize)
+    ).map(historyResponse),
+    total: (
+      await db
+        .prepare(`SELECT count(*) AS n FROM report_export_history h WHERE ${where}`)
+        .get(...params)
+    ).n,
     page,
     pageSize,
   };
 }
 
-export function downloadReportFile(db, user, id) {
+export async function downloadReportFile(db, user, id) {
   requireReportAccess(user, "export");
-  const row = db
+  const row = await db
     .prepare(
       `SELECT h.*,s.file_name AS stored_file_name,s.content_type,s.file_data
       FROM report_export_history h

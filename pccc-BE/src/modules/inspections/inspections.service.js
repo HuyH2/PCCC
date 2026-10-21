@@ -34,7 +34,7 @@ export { requireInspectionAccess, scopedInspection, inspectionDetail };
 // UC-INS-06 — list inspections
 // ---------------------------------------------------------------------------
 
-export function listInspections(db, user, url) {
+export async function listInspections(db, user, url) {
   requireInspectionAccess(user);
   const { page, pageSize } = pagination(url);
   const scope = facilityScope(user);
@@ -53,14 +53,15 @@ export function listInspections(db, user, url) {
   }
   const where = clauses.join(" AND ");
   return {
-    items: db
+    items: await db
       .prepare(
         `SELECT ${inspectionColumns} FROM ${inspectionJoins} WHERE ${where}
         ORDER BY i.scheduled_date DESC,i.code DESC LIMIT ? OFFSET ?`,
       )
       .all(...params, pageSize, (page - 1) * pageSize),
-    total: db.prepare(`SELECT count(*) AS n FROM ${inspectionJoins} WHERE ${where}`).get(...params)
-      .n,
+    total: (
+      await db.prepare(`SELECT count(*) AS n FROM ${inspectionJoins} WHERE ${where}`).get(...params)
+    ).n,
     page,
     pageSize,
   };
@@ -71,7 +72,7 @@ export function listInspections(db, user, url) {
 // (periodic inspections come from the plan via inspection-planning module)
 // ---------------------------------------------------------------------------
 
-export function createInspection(db, user, payload, ip) {
+export async function createInspection(db, user, payload, ip) {
   requireInspectionAccess(user, "create");
   object(payload, [
     "facility_id",
@@ -103,7 +104,7 @@ export function createInspection(db, user, payload, ip) {
       ? user.officerId
       : trimmed(payload.lead_officer_id, "Trưởng đoàn", 1, 100);
   assert(
-    db.prepare("SELECT 1 FROM officer_directory WHERE officer_id=?").get(leadOfficerId),
+    await db.prepare("SELECT 1 FROM officer_directory WHERE officer_id=?").get(leadOfficerId),
     400,
     "INVALID_INPUT",
     "Cán bộ trưởng đoàn không tồn tại.",
@@ -111,39 +112,41 @@ export function createInspection(db, user, payload, ip) {
   const checklistId =
     payload.checklist_id == null || payload.checklist_id === ""
       ? null
-      : activeChecklist(db, payload.checklist_id);
+      : await activeChecklist(db, payload.checklist_id);
   const scope = facilityScope(user);
   assert(
-    db
+    await db
       .prepare(`SELECT 1 FROM facilities f WHERE ${scope.sql} AND f.id=?`)
       .get(...scope.params, facilityId),
     404,
     "NOT_FOUND",
     "Không tìm thấy cơ sở trong phạm vi được cấp.",
   );
-  return transaction(db, () => {
+  return await transaction(db, async () => {
     const now = Date.now();
     const id = randomUUID();
-    db.prepare(
-      `INSERT INTO inspections(id,code,facility_id,kind,topic,reason,scheduled_date,lead_officer_id,
+    await db
+      .prepare(
+        `INSERT INTO inspections(id,code,facility_id,kind,topic,reason,scheduled_date,lead_officer_id,
         checklist_id,created_by,updated_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    ).run(
-      id,
-      nextCode(db, now),
-      facilityId,
-      payload.kind,
-      topic,
-      reason,
-      scheduledDate,
-      leadOfficerId,
-      checklistId,
-      user.id,
-      user.id,
-      now,
-      now,
-    );
-    const after = scopedInspection(db, user, id);
-    writeInspectionAudit(db, user, ip, id, "inspection.created", null, after);
+      )
+      .run(
+        id,
+        await nextCode(db, now),
+        facilityId,
+        payload.kind,
+        topic,
+        reason,
+        scheduledDate,
+        leadOfficerId,
+        checklistId,
+        user.id,
+        user.id,
+        now,
+        now,
+      );
+    const after = await scopedInspection(db, user, id);
+    await writeInspectionAudit(db, user, ip, id, "inspection.created", null, after);
     return after;
   });
 }
@@ -152,7 +155,7 @@ export function createInspection(db, user, payload, ip) {
 // UC-INS-07/08 — save checklist results and optionally lock them
 // ---------------------------------------------------------------------------
 
-export function saveResults(db, user, id, payload, ip) {
+export async function saveResults(db, user, id, payload, ip) {
   requireInspectionAccess(user, "edit");
   object(payload, ["version", "checklist_id", "officer_note", "items", "submit"]);
   assert(
@@ -187,8 +190,8 @@ export function saveResults(db, user, id, payload, ip) {
     "INVALID_INPUT",
     "Nội dung kiểm tra bị lặp.",
   );
-  return transaction(db, () => {
-    const before = inspectionDetail(db, user, id);
+  return await transaction(db, async () => {
+    const before = await inspectionDetail(db, user, id);
     const inspection = before.inspection;
     expectVersion(inspection, payload.version);
     expectStatus(
@@ -198,7 +201,7 @@ export function saveResults(db, user, id, payload, ip) {
     );
     let checklistId = inspection.checklist_id;
     if (payload.checklist_id != null && payload.checklist_id !== checklistId) {
-      const hasResults = db
+      const hasResults = await db
         .prepare("SELECT 1 FROM inspection_results WHERE inspection_id=?")
         .get(id);
       assert(
@@ -207,7 +210,7 @@ export function saveResults(db, user, id, payload, ip) {
         "INVALID_STATE",
         "Đã có kết quả theo checklist hiện tại, không thể đổi checklist.",
       );
-      checklistId = activeChecklist(db, payload.checklist_id);
+      checklistId = await activeChecklist(db, payload.checklist_id);
     }
     assert(checklistId, 400, "INVALID_INPUT", "Vui lòng chọn checklist kiểm tra.");
     const belongs = db.prepare(
@@ -221,22 +224,24 @@ export function saveResults(db, user, id, payload, ip) {
     const now = Date.now();
     for (const item of items) {
       assert(
-        belongs.get(item.item_id, checklistId),
+        await belongs.get(item.item_id, checklistId),
         400,
         "INVALID_INPUT",
         "Nội dung kiểm tra không thuộc checklist đã chọn.",
       );
-      upsert.run(id, item.item_id, item.status, (item.note ?? "").trim(), user.id, now);
+      await upsert.run(id, item.item_id, item.status, (item.note ?? "").trim(), user.id, now);
     }
     if (payload.submit) {
       // Lock only when every required item of the chosen checklist has been evaluated.
-      const missing = db
-        .prepare(
-          `SELECT count(*) AS n FROM inspection_checklist_items it
+      const missing = (
+        await db
+          .prepare(
+            `SELECT count(*) AS n FROM inspection_checklist_items it
           LEFT JOIN inspection_results res ON res.item_id=it.id AND res.inspection_id=?
           WHERE it.checklist_id=? AND it.is_required=1 AND coalesce(res.status,'pending')='pending'`,
-        )
-        .get(id, checklistId).n;
+          )
+          .get(id, checklistId)
+      ).n;
       assert(
         missing === 0,
         409,
@@ -244,21 +249,23 @@ export function saveResults(db, user, id, payload, ip) {
         `Còn ${missing} nội dung bắt buộc chưa được đánh giá, chưa thể chốt kết quả.`,
       );
     }
-    db.prepare(
-      `UPDATE inspections SET checklist_id=?,officer_note=coalesce(?,officer_note),status='in_progress',
+    await db
+      .prepare(
+        `UPDATE inspections SET checklist_id=?,officer_note=coalesce(?,officer_note),status='in_progress',
         results_submitted_at=?,results_submitted_by=?,version=version+1,updated_by=?,updated_at=?
       WHERE id=?`,
-    ).run(
-      checklistId,
-      officerNote,
-      payload.submit ? now : null,
-      payload.submit ? user.id : null,
-      user.id,
-      now,
-      id,
-    );
-    const after = inspectionDetail(db, user, id);
-    writeInspectionAudit(
+      )
+      .run(
+        checklistId,
+        officerNote,
+        payload.submit ? now : null,
+        payload.submit ? user.id : null,
+        user.id,
+        now,
+        id,
+      );
+    const after = await inspectionDetail(db, user, id);
+    await writeInspectionAudit(
       db,
       user,
       ip,
@@ -281,7 +288,7 @@ export function saveResults(db, user, id, payload, ip) {
 // UC-INS-08 — overall outcome and conclusion
 // ---------------------------------------------------------------------------
 
-export function saveConclusion(db, user, id, payload, ip) {
+export async function saveConclusion(db, user, id, payload, ip) {
   requireInspectionAccess(user, "edit");
   object(payload, ["version", "outcome", "conclusion"]);
   assert(
@@ -291,19 +298,21 @@ export function saveConclusion(db, user, id, payload, ip) {
     "Kết quả kiểm tra không hợp lệ.",
   );
   const conclusion = trimmed(payload.conclusion, "Kết luận", 1, 4000);
-  return transaction(db, () => {
-    const before = scopedInspection(db, user, id);
+  return await transaction(db, async () => {
+    const before = await scopedInspection(db, user, id);
     expectVersion(before, payload.version);
     expectStatus(
       before,
       ["in_progress", "evaluated"],
       "Chỉ cập nhật kết luận khi cuộc kiểm tra đang thực hiện.",
     );
-    db.prepare(
-      "UPDATE inspections SET outcome=?,conclusion=?,version=version+1,updated_by=?,updated_at=? WHERE id=?",
-    ).run(payload.outcome, conclusion, user.id, Date.now(), id);
-    const after = scopedInspection(db, user, id);
-    writeInspectionAudit(db, user, ip, id, "inspection.conclusion_updated", before, after);
+    await db
+      .prepare(
+        "UPDATE inspections SET outcome=?,conclusion=?,version=version+1,updated_by=?,updated_at=? WHERE id=?",
+      )
+      .run(payload.outcome, conclusion, user.id, Date.now(), id);
+    const after = await scopedInspection(db, user, id);
+    await writeInspectionAudit(db, user, ip, id, "inspection.conclusion_updated", before, after);
     return after;
   });
 }
@@ -312,11 +321,11 @@ export function saveConclusion(db, user, id, payload, ip) {
 // Completion — requires locked checklist, conclusion, and an uploaded record (BR-02)
 // ---------------------------------------------------------------------------
 
-export function completeInspection(db, user, id, payload, ip) {
+export async function completeInspection(db, user, id, payload, ip) {
   requireInspectionAccess(user, "edit");
   object(payload, ["version"]);
-  return transaction(db, () => {
-    const { inspection: before, items } = inspectionDetail(db, user, id);
+  return await transaction(db, async () => {
+    const { inspection: before, items } = await inspectionDetail(db, user, id);
     expectVersion(before, payload.version);
     expectStatus(
       before,
@@ -343,7 +352,7 @@ export function completeInspection(db, user, id, payload, ip) {
       "Vui lòng cập nhật kết quả và kết luận trước khi hoàn thành.",
     );
     assert(
-      db
+      await db
         .prepare("SELECT 1 FROM inspection_documents WHERE inspection_id=? AND kind='record'")
         .get(id),
       409,
@@ -351,12 +360,14 @@ export function completeInspection(db, user, id, payload, ip) {
       "Vui lòng tải lên biên bản kiểm tra trước khi hoàn thành.",
     );
     const now = Date.now();
-    db.prepare(
-      `UPDATE inspections SET status='completed',completed_at=?,completed_by=?,version=version+1,
+    await db
+      .prepare(
+        `UPDATE inspections SET status='completed',completed_at=?,completed_by=?,version=version+1,
         updated_by=?,updated_at=? WHERE id=?`,
-    ).run(now, user.id, user.id, now, id);
-    const after = scopedInspection(db, user, id);
-    writeInspectionAudit(db, user, ip, id, "inspection.completed", before, after);
+      )
+      .run(now, user.id, user.id, now, id);
+    const after = await scopedInspection(db, user, id);
+    await writeInspectionAudit(db, user, ip, id, "inspection.completed", before, after);
     return after;
   });
 }

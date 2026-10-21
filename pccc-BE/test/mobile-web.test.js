@@ -9,15 +9,15 @@ const password = "Temporary-mobile-test-password-2026";
 const appOrigin = "https://pccc.example.test";
 
 test("mobile same-origin login keeps a secure session and APIs enforce scope", async (t) => {
-  const db = openDatabase(":memory:");
+  const db = await openDatabase(":memory:");
   await seedDemo(db, password);
-  db.exec("UPDATE accounts SET must_change_password=0");
+  await db.exec("UPDATE accounts SET must_change_password=0");
   const server = createApp(db, { appOrigin, secureCookie: true });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   t.after(async () => {
     await new Promise((resolve) => server.close(resolve));
-    db.close();
+    await db.close();
   });
 
   const base = `http://127.0.0.1:${server.address().port}`;
