@@ -3,7 +3,13 @@ import { cn } from "@/lib/utils";
 
 function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
-    <div data-slot="table-container" className="relative w-full overflow-x-auto">
+    <div
+      data-slot="table-container"
+      role="region"
+      aria-label="Bảng dữ liệu, cuộn ngang nếu cần"
+      tabIndex={0}
+      className="relative w-full overflow-x-auto overscroll-x-contain focus-visible:ring-ring/40 focus-visible:ring-2 focus-visible:outline-none"
+    >
       <table
         data-slot="table"
         className={cn("w-full caption-bottom text-sm", className)}

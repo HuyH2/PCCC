@@ -270,8 +270,8 @@ const sidebarMenuButtonVariants = cva(
           "text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground data-[active=true]:font-semibold data-[active=true]:shadow-sm",
       },
       size: {
-        default: "h-9 text-sm",
-        sm: "h-8 text-[13px]",
+        default: "h-11 text-sm md:h-9",
+        sm: "h-10 text-[13px] md:h-8",
         lg: "h-11 text-sm",
       },
     },
@@ -363,7 +363,7 @@ function SidebarMenuSubButton({
       data-sidebar="menu-sub-button"
       data-active={isActive}
       className={cn(
-        "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground flex h-8 min-w-0 cursor-pointer items-center gap-2 overflow-hidden rounded-md px-2 text-[13px] transition-colors",
+        "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground flex h-10 min-w-0 cursor-pointer items-center gap-2 overflow-hidden rounded-md px-2 text-[13px] transition-colors md:h-8",
         "data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground data-[active=true]:font-medium",
         "[&>svg]:size-4 [&>svg]:shrink-0 [&>span:last-child]:truncate",
         className,

@@ -3,7 +3,13 @@ import { canVisit, type AuthUser } from "./lib/auth-contract";
 
 export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
-  if (path.startsWith("/api/") || path === "/dang-nhap") return NextResponse.next();
+  if (
+    path.startsWith("/api/") ||
+    path === "/dang-nhap" ||
+    path === "/manifest.webmanifest" ||
+    path === "/icon.svg"
+  )
+    return NextResponse.next();
   const token = request.cookies.get("pccc_session")?.value;
   if (!token) return NextResponse.redirect(new URL("/dang-nhap", request.url));
   try {

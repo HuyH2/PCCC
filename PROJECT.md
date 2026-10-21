@@ -319,6 +319,21 @@ Thêm mục mới **ở cuối** danh sách, theo mẫu ở §7.
 - **UI:** trang `/cong-viec/giao-viec` có form giao việc và danh sách tiến độ từ DB; trang chi tiết
   hiển thị hạn, tiến độ và lịch sử cập nhật cùng người thao tác.
 
+### F11 — Mobile Web & Progressive Web App (UC-SYS-06, P2)
+
+- **Người làm / branch:** Codex — `feature/mobile-web-pwa`.
+- **Mô tả:** bổ sung manifest và biểu tượng cài đặt ứng dụng; tối ưu vùng an toàn, menu, form, nút chạm
+  và bảng dữ liệu cho điện thoại. Không cache dữ liệu hoặc bật offline.
+- **Backend:** dùng lại session cookie hiện có; production yêu cầu HTTPS và `COOKIE_SECURE=true`.
+  API giữ nguyên authentication, RBAC và data scope; upload tài liệu vẫn qua API có kiểm tra quyền,
+  định dạng và dung lượng.
+- **Frontend:** `src/app/manifest.ts`, biểu tượng `public/icon.svg`, metadata iOS; sidebar sheet tự đóng
+  sau điều hướng, input dùng cỡ chữ tránh auto-zoom iOS, vùng chạm lớn hơn và bảng cuộn ngang có thể focus.
+- **Test:** `pccc-BE/test/mobile-web.test.js` kiểm unauthenticated 401, cookie bảo mật, login/API cùng origin,
+  data scope và từ chối mutation khác origin.
+- **Ghi chú:** PWA online-only; không có service worker vì không yêu cầu offline và không nên lưu cache
+  dữ liệu nghiệp vụ. HTTPS phải được cấu hình tại môi trường triển khai.
+
 ## 7. Quy tắc khi làm feature
 
 Bắt buộc với mọi feature mới (người hoặc AI agent):
