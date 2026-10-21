@@ -11,11 +11,11 @@ import { TransferHistory } from "../transfer-history";
 type Option = { value: string; label: string };
 type Dataset = { id: string; label: string; formats: string[]; filters: { regions?: Option[]; units?: Option[]; statuses?: Option[] } };
 
-async function responseBody(response: Response): Promise<{ message?: string; items?: unknown }> {
+async function responseBody(response: Response): Promise<{ error?: { message?: string }; items?: unknown }> {
   try {
     const body: unknown = await response.json();
     if (body && typeof body === "object" && !Array.isArray(body))
-      return body as { message?: string; items?: unknown };
+      return body as { error?: { message?: string }; items?: unknown };
   } catch {
     // Non-JSON responses use the existing generic error message.
   }
@@ -40,7 +40,7 @@ export function DataTransferManager() {
     fetch("/api/data-transfers/datasets", { cache: "no-store" })
       .then(async (response) => {
         const body = await responseBody(response);
-        if (!response.ok) throw new Error(body.message ?? "Không tải được danh mục dữ liệu.");
+        if (!response.ok) throw new Error(body.error?.message ?? "Không tải được danh mục dữ liệu.");
         const items = Array.isArray(body.items) ? (body.items as Dataset[]) : [];
         if (active) {
           setDatasets(items);
@@ -62,7 +62,7 @@ export function DataTransferManager() {
       });
       if (!response.ok) {
         const body = await responseBody(response);
-        throw new Error(body.message ?? "Không thể xuất dữ liệu.");
+        throw new Error(body.error?.message ?? "Không thể xuất dữ liệu.");
       }
       const blob = await response.blob();
       const disposition = response.headers.get("Content-Disposition") ?? "";

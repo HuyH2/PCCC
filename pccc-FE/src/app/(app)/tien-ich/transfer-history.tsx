@@ -40,8 +40,8 @@ export function TransferHistory({ direction }: { direction?: "import" | "export"
       const query = direction ? `?direction=${direction}&pageSize=20` : "?pageSize=20";
       const response = await fetch(`/api/data-transfers${query}`, { cache: "no-store", signal });
       const parsed = await response.json().catch(() => ({}));
-      const body = parsed && typeof parsed === "object" ? parsed : {};
-      if (!response.ok) throw new Error(body.message ?? "Không tải được lịch sử.");
+      const body = (parsed && typeof parsed === "object" ? parsed : {}) as { error?: { message?: string }; items?: TransferJob[] };
+      if (!response.ok) throw new Error(body.error?.message ?? "Không tải được lịch sử.");
       if (signal.aborted) return;
       setJobs(Array.isArray(body.items) ? body.items : []);
       setError("");
