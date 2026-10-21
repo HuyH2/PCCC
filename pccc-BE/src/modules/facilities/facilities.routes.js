@@ -1,6 +1,11 @@
 import { pagination } from "../../core/validation.js";
 import { authenticate } from "../auth/auth.service.js";
-import { getFacility, listFacilities } from "./facilities.service.js";
+import {
+  createFacility,
+  getFacility,
+  listFacilities,
+  listFacilityOptions,
+} from "./facilities.service.js";
 import {
   getFacilityStatus,
   listFacilityStatusHistory,
@@ -125,6 +130,20 @@ export const facilitiesRoutes = [
   },
   {
     method: "GET",
+    path: "/api/facilities/options",
+    handle: (ctx) => listFacilityOptions(ctx.db, ctx.user),
+  },
+  {
+    method: "POST",
+    path: "/api/facilities",
+    async handle(ctx) {
+      const input = await ctx.readJson();
+      ctx.status = 201;
+      return createFacility(ctx.db, ctx.user, input, ctx.ip);
+    },
+  },
+  {
+    method: "GET",
     path: /^\/api\/facilities\/([^/]+)\/status$/,
     handle: (ctx, match) => getFacilityStatus(ctx.db, ctx.user, decodeURIComponent(match[1])),
   },
@@ -177,6 +196,9 @@ export const facilitiesRoutes = [
       listFacilities(ctx.db, ctx.user, {
         ...pagination(ctx.url),
         search: ctx.url.searchParams.get("search") ?? "",
+        regionId: ctx.url.searchParams.get("regionId") ?? "",
+        officerId: ctx.url.searchParams.get("officerId") ?? "",
+        status: ctx.url.searchParams.get("status") ?? "",
       }),
   },
   {

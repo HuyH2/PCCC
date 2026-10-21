@@ -2,7 +2,7 @@ import { transaction } from "../../core/database.js";
 import { assert } from "../../core/errors.js";
 import { object, pagination, text } from "../../core/validation.js";
 import { writeAudit } from "../audit/audit.service.js";
-import { getFacility } from "./facilities.service.js";
+import { assertUniqueNameAndAddress, getFacility } from "./facilities.service.js";
 import { facilityScope, requirePermission } from "../authorization/authorization.service.js";
 import { requireAdministrator } from "../authorization/authorization.service.js";
 
@@ -198,6 +198,7 @@ export function updateFacilityDetails(db, user, id, input, ip) {
     "Thông tin cơ sở không thay đổi.",
   );
   return transaction(db, () => {
+    assertUniqueNameAndAddress(db, name, address, id);
     db.prepare("UPDATE facilities SET name=?,address=? WHERE id=?").run(name, address, id);
     const after = { ...before, name, address };
     writeAudit(db, {

@@ -3,8 +3,29 @@ export interface FacilityRecord {
   name: string;
   address: string;
   region_id: string;
+  region_name: string;
   officer_id: string;
+  officer_name: string | null;
   status: string;
+}
+
+export interface FacilityRegionOption {
+  id: string;
+  name: string;
+  unit_id: string;
+  unit_name: string;
+}
+
+export interface FacilityOfficerOption {
+  id: string;
+  full_name: string;
+  officer_code: string;
+  unit_id: string;
+}
+
+export interface FacilityOptions {
+  regions: FacilityRegionOption[];
+  officers: FacilityOfficerOption[];
 }
 
 export interface FacilityTimelineItem {

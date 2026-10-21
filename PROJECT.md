@@ -353,6 +353,15 @@ Thêm mục mới **ở cuối** danh sách, theo mẫu ở §7.
 - **Ghi chú:** bộ trường hồ sơ và tên loại tài liệu vẫn để nhập linh hoạt vì Q04 chưa được chốt;
   không hard-code thời hạn chứng nhận. Chưa cung cấp xóa vật lý để bảo toàn lịch sử.
 
+### F13 — Facility Management (UC-FAC-01, UC-FAC-02)
+
+- **Người làm / branch:** Codex - `feature/facility-management`.
+- **Mô tả:** Tái sử dụng bảng `facilities` và dữ liệu mẫu hiện có; tạo mới, cập nhật tên/địa chỉ, xem chi tiết, tìm kiếm và lọc theo khu vực/trạng thái. Phát hiện trùng theo tên + địa chỉ không phân biệt dấu; không hard-delete.
+- **Backend:** Migration `019-facility-management.sql` bổ sung index; `GET /api/facilities/options`, `POST /api/facilities`, `GET /api/facilities` (lọc khu vực/cán bộ/trạng thái) và `GET`/`PUT /api/facilities/:id`. Create yêu cầu `M03.create`, list/detail yêu cầu `M03.view`; scope được áp dụng ở truy vấn. Tạo mới/cập nhật ghi audit; trạng thái tiếp tục dùng luồng lịch sử hiện có.
+- **Frontend:** `/co-so` dùng API thật với bộ lọc/phân trang; `/co-so/them` gửi form tới API; chi tiết và sửa tiếp tục dùng dữ liệu backend.
+- **Test:** `pccc-BE/test/facilities.test.js` kiểm tra tạo mới, validation, duplicate, audit, scope, filter và quyền.
+- **Ghi chú:** Schema hiện tại chỉ lưu tên, địa chỉ, khu vực, cán bộ và trạng thái. Các thuộc tính mock như diện tích, số tầng, thông tin liên hệ và lịch kiểm tra không được giả lập là đã lưu.
+
 ## 7. Quy tắc khi làm feature
 
 Bắt buộc với mọi feature mới (người hoặc AI agent):
