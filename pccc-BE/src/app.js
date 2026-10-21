@@ -17,6 +17,7 @@ import { kpiRoutes } from "./modules/kpi/kpi.routes.js";
 import { explanationsRoutes } from "./modules/explanations/explanations.routes.js";
 import { incidentRoutes } from "./modules/incidents/incidents.routes.js";
 import { organizationRoutes } from "./modules/organization/organization.routes.js";
+import { dataTransferRoutes } from "./modules/data-transfer/data-transfer.routes.js";
 
 // Modular monolith: each business module registers its routes here; all share one process and DB.
 const routes = [
@@ -36,6 +37,7 @@ const routes = [
   ...tasksRoutes,
   ...kpiRoutes,
   ...explanationsRoutes,
+  ...dataTransferRoutes,
 ];
 
 export function createApp(
