@@ -79,7 +79,7 @@ export function AppHeader({ user }: { user: AuthUser }) {
     .join("");
 
   return (
-    <header className="bg-background/85 sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b px-3 backdrop-blur-sm sm:px-5">
+    <header className="bg-background/85 sticky top-0 z-20 flex min-h-14 shrink-0 items-center gap-2 border-b px-2 pt-[env(safe-area-inset-top)] backdrop-blur-sm sm:px-5">
       <SidebarTrigger />
       <Separator orientation="vertical" className="mr-1 h-5" />
 
@@ -142,7 +142,7 @@ export function AppHeader({ user }: { user: AuthUser }) {
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className="hover:bg-accent flex cursor-pointer items-center gap-2 rounded-md py-1 pr-2 pl-1 transition-colors">
+          <button className="hover:bg-accent flex min-h-11 min-w-11 cursor-pointer items-center gap-2 rounded-md py-1 pr-2 pl-1 transition-colors">
             <Avatar className="size-7">
               <AvatarFallback className="bg-primary text-primary-foreground">
                 {chuCaiDau}
