@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Download, Eye, FileText, Pencil, Plus, Upload, UserRound } from "lucide-react";
+import { Download, Eye, FileText, Pencil, Plus, Trash2, Upload, UserRound } from "lucide-react";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -341,8 +341,11 @@ function AttachmentsPanel({ facilityId, canEdit }: { facilityId: string; canEdit
   const [documentType, setDocumentType] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [personnelId, setPersonnelId] = React.useState("");
+  const [issueDate, setIssueDate] = React.useState("");
+  const [expiryDate, setExpiryDate] = React.useState("");
   const [permitted, setPermitted] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+  const [deletingId, setDeletingId] = React.useState<string | null>(null);
   const [error, setError] = React.useState("");
   const input = React.useRef<HTMLInputElement>(null);
 
@@ -353,9 +356,11 @@ function AttachmentsPanel({ facilityId, canEdit }: { facilityId: string; canEdit
       if (!file || !attachments.data) throw new Error("Vui lòng chọn tệp cần tải lên.");
       if (!documentType.trim()) throw new Error("Vui lòng nhập loại tài liệu.");
       if (!permitted) throw new Error("Cần xác nhận tài liệu được phép lưu trên hệ thống.");
+      if (issueDate && expiryDate && expiryDate < issueDate)
+        throw new Error("Ngày hết hạn phải sau hoặc bằng ngày cấp.");
       const extension = file.name.split(".").at(-1)?.toLowerCase() ?? "";
       if (!attachments.data.allowedExtensions.includes(extension))
-        throw new Error("Chỉ nhận file PDF, JPEG hoặc PNG.");
+        throw new Error("Chỉ nhận PDF, ảnh, Word hoặc Excel.");
       if (file.size <= 0 || file.size > attachments.data.maxFileBytes)
         throw new Error("Tệp rỗng hoặc vượt quá dung lượng cho phép.");
       const form = new FormData();
@@ -363,6 +368,8 @@ function AttachmentsPanel({ facilityId, canEdit }: { facilityId: string; canEdit
       form.set("documentType", documentType.trim());
       form.set("description", description.trim());
       form.set("personnelId", personnelId);
+      form.set("issueDate", issueDate);
+      form.set("expiryDate", expiryDate);
       form.set("permitted", "true");
       setSaving(true);
       await apiData(url, { method: "POST", body: form });
@@ -370,6 +377,8 @@ function AttachmentsPanel({ facilityId, canEdit }: { facilityId: string; canEdit
       setDocumentType("");
       setDescription("");
       setPersonnelId("");
+      setIssueDate("");
+      setExpiryDate("");
       setPermitted(false);
       if (input.current) input.current.value = "";
       attachments.reload();
@@ -377,6 +386,23 @@ function AttachmentsPanel({ facilityId, canEdit }: { facilityId: string; canEdit
       setError(failure instanceof Error ? failure.message : "Không thể tải tài liệu lên.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function removeAttachment(attachmentId: string) {
+    if (!window.confirm("Ngừng sử dụng tài liệu này? Hồ sơ sẽ được lưu trong lịch sử.")) return;
+    setError("");
+    setDeletingId(attachmentId);
+    try {
+      await apiData(
+        `/api/facilities/${encodeURIComponent(facilityId)}/attachments/${encodeURIComponent(attachmentId)}`,
+        { method: "DELETE" },
+      );
+      attachments.reload();
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Không thể ngừng sử dụng tài liệu.");
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -401,11 +427,11 @@ function AttachmentsPanel({ facilityId, canEdit }: { facilityId: string; canEdit
                 id="facility-document-file"
                 type="file"
                 required
-                accept=".pdf,.jpg,.jpeg,.png"
+                accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx,.xls,.xlsx"
                 onChange={(event) => setFile(event.target.files?.[0] ?? null)}
               />
               <p className="text-muted-foreground text-xs">
-                PDF, JPEG hoặc PNG · tối đa {formatBytes(attachments.data.maxFileBytes)}
+                PDF, ảnh, Word hoặc Excel · tối đa {formatBytes(attachments.data.maxFileBytes)}
               </p>
             </div>
             <div className="space-y-2">
@@ -449,6 +475,25 @@ function AttachmentsPanel({ facilityId, canEdit }: { facilityId: string; canEdit
                 value={description}
                 maxLength={1000}
                 onChange={(event) => setDescription(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="facility-document-issue-date">Ngày cấp</Label>
+              <Input
+                id="facility-document-issue-date"
+                type="date"
+                value={issueDate}
+                onChange={(event) => setIssueDate(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="facility-document-expiry-date">Ngày hết hạn</Label>
+              <Input
+                id="facility-document-expiry-date"
+                type="date"
+                min={issueDate || undefined}
+                value={expiryDate}
+                onChange={(event) => setExpiryDate(event.target.value)}
               />
             </div>
             <label className="flex items-start gap-2 text-sm sm:col-span-2">
@@ -504,6 +549,13 @@ function AttachmentsPanel({ facilityId, canEdit }: { facilityId: string; canEdit
                 <p className="text-muted-foreground mt-1 text-xs">
                   Tải lên {formatTime(attachment.uploaded_at)} bởi {attachment.uploaded_by_name}
                 </p>
+                {(attachment.issue_date || attachment.expiry_date) && (
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    {attachment.issue_date ? `Cấp ${attachment.issue_date}` : ""}
+                    {attachment.issue_date && attachment.expiry_date ? " · " : ""}
+                    {attachment.expiry_date ? `Hết hạn ${attachment.expiry_date}` : ""}
+                  </p>
+                )}
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" asChild>
@@ -515,6 +567,17 @@ function AttachmentsPanel({ facilityId, canEdit }: { facilityId: string; canEdit
                     <Eye /> Xem
                   </a>
                 </Button>
+                {canEdit && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={deletingId === attachment.id}
+                    onClick={() => void removeAttachment(attachment.id)}
+                    aria-label={`Ngừng sử dụng ${attachment.original_name}`}
+                  >
+                    <Trash2 /> {deletingId === attachment.id ? "Đang lưu…" : "Ngừng dùng"}
+                  </Button>
+                )}
                 <Button variant="outline" size="sm" asChild>
                   <a
                     href={`/api/facilities/${encodeURIComponent(facilityId)}/attachments/${encodeURIComponent(attachment.id)}/download`}

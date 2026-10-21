@@ -83,8 +83,11 @@ export interface FacilityAttachment {
   document_type: string;
   description: string;
   original_name: string;
-  content_type: "application/pdf" | "image/jpeg" | "image/png";
+  content_type: string;
   size_bytes: number;
+  checksum: string | null;
+  issue_date: string | null;
+  expiry_date: string | null;
   uploaded_by_name: string;
   uploaded_at: number;
 }

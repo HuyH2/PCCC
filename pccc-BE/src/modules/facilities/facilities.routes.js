@@ -21,6 +21,7 @@ import {
   listFacilityAttachments,
   listFacilityPersonnel,
   saveFacilityPersonnel,
+  softDeleteFacilityAttachment,
   uploadFacilityAttachment,
 } from "./facility-profile.service.js";
 
@@ -122,6 +123,18 @@ export const facilitiesRoutes = [
     path: /^\/api\/facilities\/([^/]+)\/attachments\/([^/]+)\/download$/,
     handle: (ctx, match) =>
       sendAttachment(ctx, decodeURIComponent(match[1]), decodeURIComponent(match[2]), "attachment"),
+  },
+  {
+    method: "DELETE",
+    path: /^\/api\/facilities\/([^/]+)\/attachments\/([^/]+)$/,
+    handle: (ctx, match) =>
+      softDeleteFacilityAttachment(
+        ctx.db,
+        ctx.user,
+        decodeURIComponent(match[1]),
+        decodeURIComponent(match[2]),
+        ctx.ip,
+      ),
   },
   {
     method: "GET",

@@ -11,7 +11,7 @@
  *
  * 2. Facility Attachments & Storage Service (./facility-attachments.service.js):
  *    - UC-FAC-06: Document upload, file inspection, and secure storage outside public directory.
- *    - Multipart stream parsing, file size limits, and binary magic byte verification (PDF/JPEG/PNG).
+ *    - Multipart stream parsing, file size limits, format verification, and private storage.
  *    - Atomic file storage with rollback on failure, inline viewing, and download handlers.
  */
 
@@ -29,4 +29,5 @@ export {
   listFacilityAttachments,
   uploadFacilityAttachment,
   facilityAttachmentFile,
+  softDeleteFacilityAttachment,
 } from "./facility-attachments.service.js";

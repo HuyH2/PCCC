@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   closeSync,
   fsyncSync,
@@ -29,7 +29,7 @@ const privateDirectory = fileURLToPath(
 );
 
 export const MAX_FACILITY_ATTACHMENT_BYTES = Number(
-  process.env.FACILITY_ATTACHMENT_MAX_BYTES ?? 5 * 1024 * 1024,
+  process.env.FACILITY_ATTACHMENT_MAX_BYTES ?? 10 * 1024 * 1024,
 );
 
 if (
@@ -49,6 +49,9 @@ const attachmentColumns = `
   a.original_name,
   a.content_type,
   a.size_bytes,
+  a.checksum,
+  a.issue_date,
+  a.expiry_date,
   a.uploaded_by,
   a.uploaded_at,
   p.full_name AS personnel_name,
@@ -150,14 +153,94 @@ function detectFile(name, bytes) {
     contentType = "image/jpeg";
   }
 
+  if (
+    extension === "gif" &&
+    ["GIF87a", "GIF89a"].includes(bytes.subarray(0, 6).toString()) &&
+    bytes.length >= 14 &&
+    bytes.at(-1) === 0x3b
+  ) {
+    contentType = "image/gif";
+  }
+
+  if (
+    extension === "webp" &&
+    bytes.length >= 16 &&
+    bytes.subarray(0, 4).toString() === "RIFF" &&
+    bytes.subarray(8, 12).toString() === "WEBP"
+  ) {
+    contentType = "image/webp";
+  }
+
+  const oleSignature = Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
+  if (
+    ["doc", "xls"].includes(extension) &&
+    bytes.subarray(0, oleSignature.length).equals(oleSignature)
+  ) {
+    contentType = extension === "doc" ? "application/msword" : "application/vnd.ms-excel";
+  }
+
+  if (["docx", "xlsx"].includes(extension)) {
+    const entries = bytes.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]))
+      ? zipEntryNames(bytes)
+      : [];
+    const hasContentTypes = entries.includes("[Content_Types].xml");
+    const isWordDocument = entries.includes("word/document.xml");
+    const isSpreadsheet = entries.includes("xl/workbook.xml");
+
+    if (hasContentTypes && extension === "docx" && isWordDocument) {
+      contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    }
+    if (hasContentTypes && extension === "xlsx" && isSpreadsheet) {
+      contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    }
+  }
+
   assert(
     contentType,
     415,
     "UNSUPPORTED_FILE_TYPE",
-    "Chỉ nhận file PDF, JPEG hoặc PNG có nội dung hợp lệ.",
+    "Chỉ nhận PDF, ảnh JPEG/PNG/GIF/WebP, Word hoặc Excel có nội dung hợp lệ.",
   );
 
   return { extension, contentType };
+}
+
+function zipEntryNames(bytes) {
+  const eocd = bytes.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+  if (eocd < 0 || eocd + 22 > bytes.length) return [];
+
+  const entries = bytes.readUInt16LE(eocd + 10);
+  const centralOffset = bytes.readUInt32LE(eocd + 16);
+  const centralSize = bytes.readUInt32LE(eocd + 12);
+  if (centralOffset + centralSize > eocd) return [];
+
+  const names = [];
+  let offset = centralOffset;
+  for (let index = 0; index < entries; index += 1) {
+    if (offset + 46 > eocd || bytes.readUInt32LE(offset) !== 0x02014b50) return [];
+    const nameLength = bytes.readUInt16LE(offset + 28);
+    const extraLength = bytes.readUInt16LE(offset + 30);
+    const commentLength = bytes.readUInt16LE(offset + 32);
+    const end = offset + 46 + nameLength + extraLength + commentLength;
+    if (end > eocd) return [];
+    names.push(bytes.subarray(offset + 46, offset + 46 + nameLength).toString("utf8"));
+    offset = end;
+  }
+  return offset === centralOffset + centralSize ? names : [];
+}
+
+function date(value, label) {
+  if (value == null || value === "") return null;
+  assert(
+    typeof value === "string" &&
+      /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+      Number.isFinite(Date.parse(value)) &&
+      new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value,
+    400,
+    "INVALID_INPUT",
+    `${label} không hợp lệ.`,
+  );
+  return value;
 }
 
 /**
@@ -199,7 +282,15 @@ async function readUpload(request) {
     throw new ApiError(400, "INVALID_UPLOAD", "Dữ liệu tải tệp không hợp lệ.");
   }
 
-  const allowed = ["file", "documentType", "description", "personnelId", "permitted"];
+  const allowed = [
+    "file",
+    "documentType",
+    "description",
+    "personnelId",
+    "issueDate",
+    "expiryDate",
+    "permitted",
+  ];
   assert(
     [...form.keys()].every((key) => allowed.includes(key)) && form.getAll("file").length === 1,
     400,
@@ -240,6 +331,8 @@ async function readUpload(request) {
     documentType: trimmed(form.get("documentType"), "Loại tài liệu", 1, 100),
     description: nullableText(form.get("description"), "Mô tả", 1000) ?? "",
     personnelId: nullableText(form.get("personnelId"), "Nhân sự", 128),
+    issueDate: date(form.get("issueDate"), "Ngày cấp"),
+    expiryDate: date(form.get("expiryDate"), "Ngày hết hạn"),
   };
 }
 
@@ -261,14 +354,14 @@ export function listFacilityAttachments(db, user, facilityId, url) {
        FROM attachments a
        LEFT JOIN facility_personnel p ON p.id = a.personnel_id
        JOIN accounts u ON u.id = a.uploaded_by
-       WHERE a.facility_id = ?
+       WHERE a.facility_id = ? AND a.deleted_at IS NULL
        ORDER BY a.uploaded_at DESC, a.id DESC
        LIMIT ? OFFSET ?`,
     )
     .all(facilityId, pageSize, (page - 1) * pageSize);
 
   const total = db
-    .prepare(`SELECT count(*) AS n FROM attachments WHERE facility_id = ?`)
+    .prepare(`SELECT count(*) AS n FROM attachments WHERE facility_id = ? AND deleted_at IS NULL`)
     .get(facilityId).n;
 
   return {
@@ -277,7 +370,7 @@ export function listFacilityAttachments(db, user, facilityId, url) {
     page,
     pageSize,
     maxFileBytes: MAX_FACILITY_ATTACHMENT_BYTES,
-    allowedExtensions: ["pdf", "jpg", "jpeg", "png"],
+    allowedExtensions: ["pdf", "jpg", "jpeg", "png", "gif", "webp", "doc", "docx", "xls", "xlsx"],
   };
 }
 
@@ -315,6 +408,12 @@ export async function uploadFacilityAttachment(
   getFacility(db, currentUser, facilityId);
 
   const detected = detectFile(upload.name, upload.bytes);
+  assert(
+    !upload.issueDate || !upload.expiryDate || upload.expiryDate >= upload.issueDate,
+    400,
+    "INVALID_INPUT",
+    "Ngày hết hạn phải sau hoặc bằng ngày cấp.",
+  );
   if (upload.personnelId) {
     assert(
       personnelRow(db, facilityId, upload.personnelId),
@@ -345,10 +444,10 @@ export async function uploadFacilityAttachment(
       db.prepare(
         `INSERT INTO attachments (
            id, facility_id, personnel_id, document_type, description,
-           original_name, stored_name, content_type, size_bytes,
-           storage_path, uploaded_by, uploaded_at
+           original_name, stored_name, content_type, size_bytes, checksum,
+           issue_date, expiry_date, storage_path, uploaded_by, uploaded_at
          )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         id,
         facilityId,
@@ -359,6 +458,9 @@ export async function uploadFacilityAttachment(
         storedName,
         detected.contentType,
         upload.bytes.length,
+        createHash("sha256").update(upload.bytes).digest("hex"),
+        upload.issueDate,
+        upload.expiryDate,
         storedName,
         currentUser.id,
         now,
@@ -410,8 +512,9 @@ export function facilityAttachmentFile(db, user, facilityId, attachmentId, direc
     .get(attachmentId, facilityId);
 
   assert(attachment, 404, "NOT_FOUND", "Không tìm thấy tài liệu trong cơ sở này.");
+  assert(attachment.deleted_at === null, 404, "NOT_FOUND", "Tài liệu không còn hoạt động.");
   assert(
-    /^[a-f0-9-]+\.(pdf|png|jpg|jpeg)$/.test(attachment.storage_path) &&
+    /^[a-f0-9-]+\.(pdf|png|jpg|jpeg|gif|webp|doc|docx|xls|xlsx)$/.test(attachment.storage_path) &&
       attachment.storage_path === attachment.stored_name,
     500,
     "STORAGE_ERROR",
@@ -443,6 +546,43 @@ export function facilityAttachmentFile(db, user, facilityId, attachmentId, direc
     "DOCUMENT_MISSING",
     "Dung lượng tệp không khớp metadata.",
   );
+  if (attachment.checksum) {
+    assert(
+      createHash("sha256").update(bytes).digest("hex") === attachment.checksum,
+      410,
+      "DOCUMENT_MISSING",
+      "Checksum của tệp không khớp metadata.",
+    );
+  }
 
   return { attachment, bytes };
+}
+
+export function softDeleteFacilityAttachment(db, user, facilityId, attachmentId, ip) {
+  requirePermission(user, "M03.edit");
+  getFacility(db, user, facilityId);
+  const attachment = db
+    .prepare("SELECT id FROM attachments WHERE id = ? AND facility_id = ? AND deleted_at IS NULL")
+    .get(attachmentId, facilityId);
+  assert(attachment, 404, "NOT_FOUND", "Không tìm thấy tài liệu trong cơ sở này.");
+
+  return transaction(db, () => {
+    const now = Date.now();
+    db.prepare("UPDATE attachments SET deleted_at = ?, deleted_by = ? WHERE id = ?").run(
+      now,
+      user.id,
+      attachmentId,
+    );
+    writeAudit(db, {
+      actorId: user.id,
+      feature: "M03",
+      objectType: "facility_attachment",
+      objectId: attachmentId,
+      action: "facility.attachment_deleted",
+      before: { deleted_at: null },
+      after: { deleted_at: now },
+      ip,
+    });
+    return { id: attachmentId, deletedAt: now };
+  });
 }
