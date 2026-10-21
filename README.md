@@ -13,6 +13,17 @@ Tổ chức và cán bộ khác xem [tài liệu backend](pccc-BE/README.md#tổ
 database tên `incidents-demo.sqlite` và thư mục upload riêng; script từ chối database đang
 chạy. Không chạy script này trên `pccc-BE/data/pccc.sqlite`.
 
+Nếu đang dùng database demo local mặc định và trang `/su-co` trống, chạy
+`pnpm seed:incidents:local` tại root rồi bấm **Tải lại** trên trang. Lệnh thêm 80 hồ sơ giả lập
+vào `pccc-BE/data/pccc.sqlite` (3 khu phố, 4 loại sự cố, hồ sơ nháp/chính thức, đủ trạng thái,
+deadline, thiệt hại, phân công, lịch sử và 4 tệp `.txt` mẫu). Chạy lại không tạo trùng hoặc
+ghi đè hồ sơ đã sửa. Lệnh chỉ chạy ngoài production khi database có các tài khoản `demo.*`;
+không cấp thêm quyền M09. Đăng nhập `demo.admin` hoặc cấp quyền/phạm vi thích hợp tại
+`/quan-tri/vai-tro` để xem và thao tác. Đây là dữ liệu hoàn toàn giả lập, không phải hồ sơ thực.
+Trong chi tiết sự cố đã hoàn thành hoặc đóng, người có `M09.edit` vẫn có thể chọn **Sửa hồ sơ**
+để hiệu chỉnh thông tin; phải nhập lý do và thay đổi được lưu vào nhật ký trước/sau. Trạng thái
+xử lý và deadline không đổi qua form này.
+
 ## Phân công địa bàn và quản lý tài khoản — UC-ORG-03, UC-ADM-02
 
 `/to-chuc/khu-vuc` đã nối API thật: danh sách khu vực theo phạm vi, tạo/sửa khu vực (A05), phân công

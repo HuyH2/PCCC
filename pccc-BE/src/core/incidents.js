@@ -284,6 +284,11 @@ function incidentInput(db, user, payload, previous, now) {
   }
   if (previous) {
     versionCheck(body, previous);
+    if (terminal(previous))
+      invalid(
+        typeof body.reason === "string" && body.reason.trim().length > 0,
+        "Cần nhập lý do khi sửa hồ sơ đã hoàn thành hoặc đóng.",
+      );
     invalid(
       !(previous.record_status === "OFFICIAL" && row.record_status === "DRAFT"),
       "Hồ sơ chính thức không thể chuyển về nháp.",
