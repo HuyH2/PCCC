@@ -158,7 +158,7 @@ export function IncidentDetails({
               <RefreshCw />
               Tải lại
             </Button>
-            {permissions.edit && !terminal && options && !optionsError && (
+            {permissions.edit && options && !optionsError && (
               <SuCoForm
                 key={`edit-${incident.version}`}
                 incident={incident}
@@ -282,7 +282,8 @@ export function IncidentDetails({
               </div>
             </dl>
             <p className="text-muted-foreground mt-4 text-xs">
-              Chọn “Sửa hồ sơ” để cập nhật phân loại và hiện trường khi có quyền sửa.
+              Chọn “Sửa hồ sơ” để cập nhật phân loại và hiện trường khi có quyền sửa. Hồ sơ đã hoàn
+              thành hoặc đóng cần ghi lý do thay đổi.
             </p>
           </SectionCard>
         </TabsContent>

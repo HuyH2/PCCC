@@ -65,6 +65,8 @@ export function SuCoForm({
   const facilities = options.facilities.filter(
     (facility) => !values.regionId || facility.regionId === values.regionId,
   );
+  const terminal =
+    incident?.processingStatus === "COMPLETED" || incident?.processingStatus === "CLOSED";
   async function save(recordStatus: RecordStatus) {
     setError(null);
     try {
@@ -74,6 +76,8 @@ export function SuCoForm({
         (!values.incidentType || occurredAt == null || !values.address.trim())
       )
         throw new Error("Hồ sơ chính thức phải có loại sự cố, ngày giờ xảy ra và địa điểm.");
+      if (terminal && !values.reason.trim())
+        throw new Error("Cần nhập lý do khi sửa hồ sơ đã hoàn thành hoặc đóng.");
       setSaving(true);
       const body = {
         ...values,
@@ -124,7 +128,9 @@ export function SuCoForm({
           <DialogHeader className="bg-background shrink-0 border-b px-6 py-4">
             <DialogTitle>{incident ? "Cập nhật hồ sơ sự cố" : "Ghi nhận sự cố"}</DialogTitle>
             <DialogDescription>
-              Lưu nháp để bổ sung thông tin sau. Ngày giờ sử dụng múi giờ Việt Nam (UTC+7).
+              {terminal
+                ? "Chỉnh sửa thông tin hồ sơ đã kết thúc phải ghi lý do; trạng thái và deadline không thay đổi."
+                : "Lưu nháp để bổ sung thông tin sau. Ngày giờ sử dụng múi giờ Việt Nam (UTC+7)."}
             </DialogDescription>
           </DialogHeader>
           <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-6 py-5">
@@ -285,7 +291,9 @@ export function SuCoForm({
                 </div>
                 {incident && (
                   <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor={`${id}-reason`}>Lý do / ghi chú thay đổi</Label>
+                    <Label htmlFor={`${id}-reason`}>
+                      Lý do / ghi chú thay đổi{terminal ? " *" : ""}
+                    </Label>
                     <Textarea
                       id={`${id}-reason`}
                       maxLength={2000}

@@ -270,6 +270,60 @@ test("INC-01/02 editing classification and scene retains omitted values and audi
   assert.equal(list.data.items[0].id, item.id);
 });
 
+test("closed incident details can be corrected with a reason and retain status and audit", async (t) => {
+  const f = await fixture(t);
+  const item = await f.incident();
+  const path = `/api/incidents/${item.id}`;
+  assert.equal(
+    (
+      await f.request(`${path}/complete`, {
+        method: "POST",
+        cookie: f.cookie,
+        body: { reason: "Đã xử lý" },
+      })
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await f.request(`${path}/status`, {
+        method: "PATCH",
+        cookie: f.cookie,
+        body: { processingStatus: "CLOSED", reason: "Đóng hồ sơ" },
+      })
+    ).status,
+    200,
+  );
+  const before = f.db.prepare("SELECT * FROM incidents WHERE id=?").get(item.id);
+  const missingReason = await f.request(path, {
+    method: "PATCH",
+    cookie: f.cookie,
+    body: { title: "Thông tin đã hiệu chỉnh", version: before.version },
+  });
+  assert.equal(missingReason.status, 400);
+  assert.equal(
+    f.db.prepare("SELECT version FROM incidents WHERE id=?").get(item.id).version,
+    before.version,
+  );
+
+  const corrected = await f.request(path, {
+    method: "PATCH",
+    cookie: f.cookie,
+    body: {
+      title: "Thông tin đã hiệu chỉnh",
+      reason: "Hiệu chỉnh tiêu đề sau khi rà soát",
+      version: before.version,
+    },
+  });
+  assert.equal(corrected.status, 200, JSON.stringify(corrected.data));
+  assert.equal(corrected.data.incident.processingStatus, "CLOSED");
+  assert.equal(corrected.data.incident.title, "Thông tin đã hiệu chỉnh");
+  const log = audits(f.db, item.id).at(-1);
+  assert.equal(log.action, "M09.incident.update");
+  assert.equal(JSON.parse(log.before_json).title, before.title);
+  assert.equal(JSON.parse(log.after_json).reason, "Hiệu chỉnh tiêu đề sau khi rà soát");
+});
+
 test("INC-03 human and property damages update without double counting and validate nonnegative values", async (t) => {
   const f = await fixture(t);
   const item = await f.incident();
