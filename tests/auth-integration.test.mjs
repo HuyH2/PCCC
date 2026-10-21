@@ -194,6 +194,19 @@ test(
     const adminPage = await request("/quan-tri/vai-tro", { cookie: adminCookie });
     assert.equal(adminPage.status, 200);
     assert.match(await adminPage.text(), /Vai trò &amp; phạm vi dữ liệu/);
+    const reportExportPage = await request("/bao-cao/ket-xuat", { cookie: adminCookie });
+    assert.equal(reportExportPage.status, 200);
+    assert.match(await reportExportPage.text(), /Cấu hình kết xuất/);
+    const m11ExportPage = await request("/tien-ich/export", { cookie: adminCookie });
+    assert.equal(m11ExportPage.status, 200);
+    assert.match(await m11ExportPage.text(), /Kết xuất dữ liệu nghiệp vụ/);
+    const reportTypes = await (
+      await request("/api/report-export/types", { cookie: adminCookie })
+    ).json();
+    assert.deepEqual(
+      reportTypes.items.map((item) => item.code),
+      ["R01", "R03", "R05", "R06"],
+    );
     const documentBody = {
       category_id: "law",
       title: "Văn bản tích hợp (mẫu)",

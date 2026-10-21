@@ -104,6 +104,40 @@ Chuông và `/canh-bao` đọc thông báo riêng của tài khoản, tự làm 
 Mục **Lịch định kỳ** có nút **Sinh kỳ mới**. Quyền và API chi tiết ở
 [pccc-BE/REPORTS.md](pccc-BE/REPORTS.md); ma trận Q02 và chế độ báo cáo Q10 vẫn là cấu hình mẫu.
 
+## Kết xuất báo cáo dữ liệu — UC-RPT-06
+
+`/bao-cao/ket-xuat` nối API thật để chọn báo cáo, lọc dữ liệu, xem trước và tải file Excel/PDF. Trang
+dùng `M08.view`; tạo file và tải file cần `M08.export`; tạo biểu mẫu cần `M08.create`. A01/A04/A05 có
+bộ quyền demo đầy đủ; A06 chỉ xem và không tạo file; A02/A03 không được cấp `M08.export` trong bộ
+demo. A05 toàn hệ thống xem được mọi lịch sử; các vai trò khác chỉ thấy lịch sử do chính mình tạo.
+Đây là chức năng M08 tách biệt với `/tien-ich/export` (M11 — kết xuất dữ liệu nghiệp vụ CSV); cả hai
+được giữ nguyên.
+
+Bốn báo cáo đang bật đều đọc từ bảng đã hoàn thành: `R01` tổng hợp cơ sở, `R03` vi phạm/đình chỉ,
+`R05` kết quả kiểm tra và `R06` công việc theo cán bộ. `R02` chưa bật vì chưa có dữ liệu hết hạn/
+chứng nhận đủ tin cậy. Bộ lọc thời gian mặc định từ đầu tháng đến hôm nay, tối đa 1.830 ngày; mỗi
+file tối đa 5.000 dòng. Khu vực/cán bộ ngoài scope bị từ chối. Báo cáo không có dữ liệu trả lỗi rõ
+ràng thay vì tạo file rỗng.
+
+File Excel có sheet **Tổng hợp** và **Dữ liệu**; PDF khổ ngang có metadata, phần tổng hợp, bảng chi
+tiết, lặp header và số trang. Font Noto Sans được nhúng sẵn để tiếng Việt hiển thị đúng. Không thêm
+dependency runtime. Mỗi lần xuất lưu một dòng `report_export_history` (template name, format, người
+xuất, thời gian, số dòng, file) và file trong `report_export_submissions` để tải lại.
+
+Biểu mẫu trong `report_templates` chỉ được đổi tiêu đề, nhãn các cột đã có, ghi chú đầu/cuối và định
+dạng; không thể sửa SQL, thêm cột hoặc mở rộng phạm vi dữ liệu. Biểu mẫu báo cáo chính thức vẫn chờ
+mẫu đã xác nhận của đơn vị (Q04/BR-12), nên giao diện hiện ghi rõ là mẫu dữ liệu chuẩn.
+
+**Thử trên UI với database demo:** chạy `pnpm migrate` rồi `pnpm seed`, khởi động lại backend/frontend,
+đăng nhập `demo.chi-huy` và mở **Báo cáo - Deadline → Kết xuất báo cáo** (hoặc nút **Kết xuất báo
+cáo** trên trang báo cáo). Chọn `R05`, giữ kỳ tháng hiện tại, chọn khu vực nếu cần rồi bấm **Xem
+trước**; kiểm tra các thẻ tổng hợp và bảng dữ liệu. Chọn **Excel (XLSX)** hoặc **PDF**, bấm **Xuất
+file** và mở file tải về. Làm lại với `R01` (không lọc thời gian) và `R06` (gom theo cán bộ). Lịch sử
+bên dưới cho tải lại file; đăng nhập `demo.nguoi-xem` để kiểm tra A06 chỉ xem, còn `demo.admin` thấy
+toàn bộ lịch sử. Dùng database thử nghiệm vì thao tác xuất lưu file và lịch sử.
+
+Chi tiết schema, API, quyền và giới hạn: [pccc-BE/REPORT_EXPORT.md](pccc-BE/REPORT_EXPORT.md).
+
 ## Khóa tài khoản và chuyển giao phạm vi — UC-ADM-04
 
 `/quan-tri/tai-khoan` đã nối API để khóa/mở khóa tài khoản; `/to-chuc/phan-cong` đã nối API
@@ -431,10 +465,11 @@ pccc-FE/src/
 | `/cong-viec/kpi`           | M07     | UC-WRK-04 — KPI & nợ chỉ tiêu                           |
 | `/cong-viec/giai-trinh`    | M07     | UC-WRK-05 — Yêu cầu/phản hồi giải trình                 |
 | `/bao-cao`                 | M08     | UC-RPT-01..05 — Báo cáo & deadline                      |
+| `/bao-cao/ket-xuat`        | M08     | UC-RPT-06 — Kết xuất báo cáo Excel/PDF                  |
 | `/canh-bao`                | M10     | UC-SYS-03 — Chuông và danh sách thông báo               |
 | `/su-co`                   | M09     | UC-INC-01..06 — Sự cố và thiệt hại                      |
 | `/tien-ich/import`         | M11     | UC-FAC-07, UC-SYS-04 — Import Excel có preview lỗi      |
-| `/tien-ich/export`         | M11     | UC-RPT-06 — Kết xuất R01–R12                            |
+| `/tien-ich/export`         | M11     | UC-RPT-06, UC-SYS-04 — Kết xuất dữ liệu nghiệp vụ CSV   |
 | `/quan-tri/tai-khoan`      | M01     | UC-ADM-02 — Tài khoản                                   |
 | `/quan-tri/vai-tro`        | M01     | UC-ADM-03 — Ma trận quyền 7 vai trò × 11 phân hệ        |
 | `/quan-tri/nhat-ky`        | M01     | UC-SYS-05 — Nhật ký thao tác                            |

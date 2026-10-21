@@ -102,6 +102,10 @@ export const navGroups: NavGroup[] = [
         icon: FileSpreadsheet,
         module: "M08",
         useCases: ["UC-RPT-01", "UC-RPT-03"],
+        items: [
+          { title: "Báo cáo & deadline", href: "/bao-cao", icon: FileSpreadsheet, useCases: ["UC-RPT-01", "UC-RPT-03"] },
+          { title: "Kết xuất báo cáo", href: "/bao-cao/ket-xuat", icon: FileText, useCases: ["UC-RPT-06"] },
+        ],
       },
       { title: "Sự cố cháy nổ - CNCH", href: "/su-co", icon: Siren, module: "M09", useCases: ["UC-INC-01"] },
       { title: "Văn bản - Quy chuẩn", href: "/van-ban", icon: Scale, module: "M05", useCases: ["UC-DOC-01"] },

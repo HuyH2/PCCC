@@ -255,11 +255,11 @@ export async function seedDemo(db, password) {
       !db.prepare("SELECT 1 FROM role_permissions WHERE permission_code LIKE 'M08.%' LIMIT 1").get()
     ) {
       for (const [role, actions] of Object.entries({
-        A01: ["view", "create", "edit", "approve"],
+        A01: ["view", "create", "edit", "approve", "export"],
         A02: ["view", "create", "edit", "approve"],
         A03: ["view", "edit"],
-        A04: ["view", "create", "edit"],
-        A05: ["view", "create", "edit", "approve"],
+        A04: ["view", "create", "edit", "export"],
+        A05: ["view", "create", "edit", "approve", "export"],
         A06: ["view"],
       }))
         for (const action of actions)

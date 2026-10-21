@@ -1,6 +1,7 @@
 # pccc-BE — Backend PCCC/CNCH
 
 Phân hệ báo cáo M08 và notification dùng chung: xem [REPORTS.md](REPORTS.md).
+Kết xuất báo cáo dữ liệu M08 (Excel/PDF, biểu mẫu, giới hạn): xem [REPORT_EXPORT.md](REPORT_EXPORT.md).
 
 ## Tổ chức và cán bộ — UC-ORG-01, UC-ORG-02
 
@@ -112,6 +113,14 @@ Response lỗi thống nhất: `{ "error": { "code": "FORBIDDEN", "message": "..
 | GET    | `/api/dashboard/facilities-by-region`            | M10.view + M03.view; số cơ sở theo khu vực, phân trang                         |
 | GET    | `/api/dashboard/facilities-by-officer`           | M10.view + M03.view; số cơ sở theo cán bộ, phân trang                          |
 | GET    | `/api/search?q=&limit=`                          | M10.view; tìm không dấu, nhóm kết quả theo loại và scope                       |
+| GET    | `/api/report-export/types`                       | M08.view + scope; danh mục báo cáo kết xuất                                    |
+| GET    | `/api/report-export/options`                     | M08.view + scope; khu vực, cán bộ, tài khoản, format, kỳ mặc định              |
+| GET    | `/api/report-export/templates?reportTypeId=`     | M08.view; biểu mẫu đang hoạt động                                              |
+| POST   | `/api/report-export/templates`                   | M08.create; tiêu đề/nhãn cột/ghi chú, không đổi SQL hoặc scope                 |
+| GET    | `/api/report-export/preview`                     | M08.view + scope; bộ lọc, phân trang và tổng hợp                               |
+| POST   | `/api/report-export/exports`                     | M08.export + scope; tạo XLSX/PDF và lưu lịch sử                                |
+| GET    | `/api/report-export/exports`                     | M08.view; lịch sử của mình, A05 toàn hệ thống thấy tất cả                      |
+| GET    | `/api/report-export/exports/:id/file`            | M08.export; chủ sở hữu hoặc A05 toàn hệ thống                                  |
 
 API thực hiện kiểm tra M06 (`/api/inspections*`, `/api/inspection-checklists*`): xem [INSPECTIONS.md](INSPECTIONS.md).
 Schema, payload và giới hạn chuyển giao: [ACCOUNT_TRANSFERS.md](ACCOUNT_TRANSFERS.md).
