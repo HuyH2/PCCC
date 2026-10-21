@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { once } from "node:events";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -63,6 +64,7 @@ function personnel(overrides = {}) {
     email: "an@example.invalid",
     isHead: true,
     trainingStatus: "Đã huấn luyện",
+    certificateNumber: "123/GCN-PCCC",
     certificateExpiry: "2027-12-31",
     notes: "Dữ liệu hoàn toàn giả lập.",
     isActive: true,
@@ -70,7 +72,14 @@ function personnel(overrides = {}) {
   };
 }
 
-function uploadForm({ name = "ho-so.pdf", bytes, personnelId = "", permitted = "true" } = {}) {
+function uploadForm({
+  name = "ho-so.pdf",
+  bytes,
+  personnelId = "",
+  permitted = "true",
+  issueDate = "",
+  expiryDate = "",
+} = {}) {
   const form = new FormData();
   form.set(
     "file",
@@ -82,8 +91,43 @@ function uploadForm({ name = "ho-so.pdf", bytes, personnelId = "", permitted = "
   form.set("documentType", "Hồ sơ quản lý PCCC");
   form.set("description", "Tài liệu kiểm thử được phép sử dụng");
   form.set("personnelId", personnelId);
+  form.set("issueDate", issueDate);
+  form.set("expiryDate", expiryDate);
   form.set("permitted", permitted);
   return form;
+}
+
+function zipContainer(entryNames) {
+  const localEntries = [];
+  const centralEntries = [];
+  let localOffset = 0;
+
+  for (const entryName of entryNames) {
+    const name = Buffer.from(entryName);
+    const localHeader = Buffer.alloc(30);
+    localHeader.writeUInt32LE(0x04034b50, 0);
+    localHeader.writeUInt16LE(20, 4);
+    localHeader.writeUInt16LE(name.length, 26);
+    localEntries.push(localHeader, name);
+
+    const centralHeader = Buffer.alloc(46);
+    centralHeader.writeUInt32LE(0x02014b50, 0);
+    centralHeader.writeUInt16LE(20, 4);
+    centralHeader.writeUInt16LE(20, 6);
+    centralHeader.writeUInt16LE(name.length, 28);
+    centralHeader.writeUInt32LE(localOffset, 42);
+    centralEntries.push(centralHeader, name);
+    localOffset += localHeader.length + name.length;
+  }
+
+  const centralDirectory = Buffer.concat(centralEntries);
+  const endRecord = Buffer.alloc(22);
+  endRecord.writeUInt32LE(0x06054b50, 0);
+  endRecord.writeUInt16LE(entryNames.length, 8);
+  endRecord.writeUInt16LE(entryNames.length, 10);
+  endRecord.writeUInt32LE(centralDirectory.length, 12);
+  endRecord.writeUInt32LE(localOffset, 16);
+  return Buffer.concat([...localEntries, centralDirectory, endRecord]);
 }
 
 test("facility personnel migration enforces relationships, history and one active head", async (t) => {
@@ -177,6 +221,7 @@ test("personnel APIs manage profiles, replace the head and preserve audit under 
   });
   assert.equal(first.status, 201);
   assert.equal(first.data.personnel.is_head, 1);
+  assert.equal(first.data.personnel.certificate_number, "123/GCN-PCCC");
   const second = await request(collection, {
     method: "POST",
     cookie: officer,
@@ -211,11 +256,36 @@ test("personnel APIs manage profiles, replace the head and preserve audit under 
     ).status,
     409,
   );
+  assert.equal(
+    (
+      await request(`${collection}/${first.data.personnel.id}`, {
+        method: "DELETE",
+        cookie: viewer,
+      })
+    ).status,
+    403,
+  );
+  const deactivated = await request(`${collection}/${first.data.personnel.id}`, {
+    method: "DELETE",
+    cookie: officer,
+  });
+  assert.equal(deactivated.status, 200);
+  assert.equal(deactivated.data.personnel.is_active, 0);
+  assert.equal(deactivated.data.personnel.is_head, 0);
+  assert.equal(
+    (
+      await request(`${collection}/${first.data.personnel.id}`, {
+        method: "DELETE",
+        cookie: officer,
+      })
+    ).status,
+    400,
+  );
   assert.equal((await request("/api/facilities/CS003/personnel", { cookie: officer })).status, 404);
   assert.equal(
     db.prepare("SELECT count(*) AS n FROM audit_logs WHERE object_type='facility_personnel'").get()
       .n,
-    4,
+    5,
   );
 });
 
@@ -258,10 +328,16 @@ test("facility attachments validate files and linked personnel, store private pa
   const uploaded = await request(endpoint, {
     method: "POST",
     cookie: officer,
-    form: uploadForm({ personnelId }),
+    form: uploadForm({
+      personnelId,
+      issueDate: "2026-01-10",
+      expiryDate: "2027-01-10",
+    }),
   });
   assert.equal(uploaded.status, 201);
   assert.equal(uploaded.data.attachment.personnel_name, "Nguyễn Văn An");
+  assert.equal(uploaded.data.attachment.issue_date, "2026-01-10");
+  assert.equal(uploaded.data.attachment.expiry_date, "2027-01-10");
   assert.ok(!JSON.stringify(uploaded.data).includes("storage_path"));
   const stored = db
     .prepare("SELECT * FROM attachments WHERE id=?")
@@ -270,11 +346,24 @@ test("facility attachments validate files and linked personnel, store private pa
   assert.ok(existsSync(join(directory, "facility-attachments", stored.storage_path)));
   const list = await request(endpoint, { cookie: viewer });
   assert.equal(list.data.total, 1);
-  assert.deepEqual(list.data.allowedExtensions, ["pdf", "jpg", "jpeg", "png"]);
+  assert.equal(list.data.maxFileBytes, 10 * 1024 * 1024);
+  assert.deepEqual(list.data.allowedExtensions, [
+    "pdf",
+    "jpg",
+    "jpeg",
+    "png",
+    "gif",
+    "webp",
+    "doc",
+    "docx",
+    "xls",
+    "xlsx",
+  ]);
   const view = await request(`${endpoint}/${stored.id}/view`, { cookie: viewer });
   assert.equal(view.status, 200);
   assert.equal(view.headers.get("content-disposition").startsWith("inline;"), true);
   assert.equal(view.data.subarray(0, 5).toString(), "%PDF-");
+  assert.equal(stored.checksum, createHash("sha256").update(view.data).digest("hex"));
   const download = await request(`${endpoint}/${stored.id}/download`, { cookie: viewer });
   assert.equal(download.status, 200);
   assert.equal(download.headers.get("content-disposition").startsWith("attachment;"), true);
@@ -288,5 +377,73 @@ test("facility attachments validate files and linked personnel, store private pa
       .prepare("SELECT count(*) AS n FROM audit_logs WHERE action='facility.attachment_uploaded'")
       .get().n,
     1,
+  );
+
+  assert.equal(
+    (
+      await request(endpoint, {
+        method: "POST",
+        cookie: officer,
+        form: uploadForm({ issueDate: "2027-01-10", expiryDate: "2026-01-10" }),
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (await request(`${endpoint}/${stored.id}`, { method: "DELETE", cookie: viewer })).status,
+    403,
+  );
+  assert.equal(
+    (await request(`${endpoint}/${stored.id}`, { method: "DELETE", cookie: officer })).status,
+    200,
+  );
+  assert.ok(db.prepare("SELECT deleted_at FROM attachments WHERE id=?").get(stored.id).deleted_at);
+  assert.equal((await request(endpoint, { cookie: viewer })).data.total, 0);
+  assert.equal(
+    (await request(`${endpoint}/${stored.id}/download`, { cookie: viewer })).status,
+    404,
+  );
+  assert.equal(
+    db
+      .prepare("SELECT count(*) AS n FROM audit_logs WHERE action='facility.attachment_deleted'")
+      .get().n,
+    1,
+  );
+});
+
+test("facility attachments accept verified Word and Excel files", async (t) => {
+  const { db, request, login } = await fixture(t);
+  const officer = await login("demo.can-bo");
+  const endpoint = "/api/facilities/CS001/attachments";
+  const files = [
+    {
+      name: "huan-luyen.docx",
+      entries: ["[Content_Types].xml", "word/document.xml"],
+      contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    },
+    {
+      name: "danh-sach.xlsx",
+      entries: ["[Content_Types].xml", "xl/workbook.xml"],
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    },
+  ];
+
+  for (const file of files) {
+    const result = await request(endpoint, {
+      method: "POST",
+      cookie: officer,
+      form: uploadForm({ name: file.name, bytes: zipContainer(file.entries) }),
+    });
+    assert.equal(result.status, 201);
+    assert.equal(result.data.attachment.content_type, file.contentType);
+    assert.match(result.data.attachment.checksum, /^[a-f0-9]{64}$/);
+    const download = await request(`${endpoint}/${result.data.attachment.id}/download`, {
+      cookie: officer,
+    });
+    assert.equal(download.status, 200);
+  }
+  assert.equal(
+    db.prepare("SELECT count(*) AS n FROM attachments WHERE deleted_at IS NULL").get().n,
+    2,
   );
 });

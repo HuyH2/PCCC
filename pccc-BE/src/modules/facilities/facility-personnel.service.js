@@ -22,6 +22,7 @@ const personnelColumns = `
   p.email,
   p.is_head,
   p.training_status,
+  p.certificate_number,
   p.certificate_expiry,
   p.notes,
   p.is_active,
@@ -79,6 +80,7 @@ function validatePersonnel(input, before = null) {
     "email",
     "isHead",
     "trainingStatus",
+    "certificateNumber",
     "certificateExpiry",
     "notes",
     "isActive",
@@ -119,6 +121,7 @@ function validatePersonnel(input, before = null) {
     email,
     isHead: Number(input.isHead),
     trainingStatus: nullableText(input.trainingStatus, "Tình trạng huấn luyện", 100),
+    certificateNumber: nullableText(input.certificateNumber, "Số chứng chỉ", 100),
     certificateExpiry: date(input.certificateExpiry, "Hạn chứng nhận"),
     notes: nullableText(input.notes, "Ghi chú", 2000) ?? "",
     isActive: Number(isActive),
@@ -248,7 +251,7 @@ export function saveFacilityPersonnel(db, user, facilityId, input, personnelId, 
       db.prepare(
         `UPDATE facility_personnel
          SET full_name = ?, position = ?, phone = ?, email = ?, is_head = ?,
-             training_status = ?, certificate_expiry = ?, notes = ?, is_active = ?,
+             training_status = ?, certificate_number = ?, certificate_expiry = ?, notes = ?, is_active = ?,
              version = version + 1, updated_by = ?, updated_at = ?
          WHERE id = ?`,
       ).run(
@@ -258,6 +261,7 @@ export function saveFacilityPersonnel(db, user, facilityId, input, personnelId, 
         values.email,
         values.isHead,
         values.trainingStatus,
+        values.certificateNumber,
         values.certificateExpiry,
         values.notes,
         values.isActive,
@@ -269,10 +273,10 @@ export function saveFacilityPersonnel(db, user, facilityId, input, personnelId, 
       db.prepare(
         `INSERT INTO facility_personnel (
            id, facility_id, full_name, position, phone, email, is_head,
-           training_status, certificate_expiry, notes, is_active,
+           training_status, certificate_number, certificate_expiry, notes, is_active,
            created_by, updated_by, created_at, updated_at
          )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         id,
         facilityId,
@@ -282,6 +286,7 @@ export function saveFacilityPersonnel(db, user, facilityId, input, personnelId, 
         values.email,
         values.isHead,
         values.trainingStatus,
+        values.certificateNumber,
         values.certificateExpiry,
         values.notes,
         values.isActive,
@@ -299,6 +304,38 @@ export function saveFacilityPersonnel(db, user, facilityId, input, personnelId, 
       objectType: "facility_personnel",
       objectId: id,
       action: before ? "facility.personnel_updated" : "facility.personnel_created",
+      before,
+      after,
+      ip,
+    });
+
+    return { personnel: after };
+  });
+}
+
+export function deactivateFacilityPersonnel(db, user, facilityId, personnelId, ip) {
+  requirePermission(user, "M03.edit");
+  getFacility(db, user, facilityId);
+
+  const before = personnelRow(db, facilityId, personnelId);
+  assert(before, 404, "NOT_FOUND", "Không tìm thấy nhân sự trong cơ sở này.");
+  assert(before.is_active === 1, 400, "INVALID_STATE", "Nhân sự này đã ngưng hoạt động.");
+
+  return transaction(db, () => {
+    const now = Date.now();
+    db.prepare(
+      `UPDATE facility_personnel
+       SET is_active = 0, is_head = 0, version = version + 1, updated_by = ?, updated_at = ?
+       WHERE id = ?`,
+    ).run(user.id, now, personnelId);
+
+    const after = personnelRow(db, facilityId, personnelId);
+    writeAudit(db, {
+      actorId: user.id,
+      feature: "M03",
+      objectType: "facility_personnel",
+      objectId: personnelId,
+      action: "facility.personnel_deactivated",
       before,
       after,
       ip,
