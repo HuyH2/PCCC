@@ -6,6 +6,7 @@ import { seedInspectionPlanning } from "./seed-inspection-planning.js";
 import { seedFacilityViolations } from "./seed-facility-violations.js";
 import { seedTasks } from "./seed-tasks.js";
 import { seedKpi } from "./seed-kpi.js";
+import { seedOrganizationDemo } from "./seed-organization-demo.js";
 
 export const roleNames = {
   A01: "Chỉ huy/Đội trưởng",
@@ -220,6 +221,7 @@ export async function seedDemo(db, password) {
       Date.now(),
       Date.now(),
     );
+    seedOrganizationDemo(db);
     // Existing demo installations had no M07 grants. Add sample grants only
     // when M07 has never been configured; preserve any administrator choices.
     if (

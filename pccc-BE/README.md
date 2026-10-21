@@ -7,6 +7,12 @@ session, M02 permission, scope và audit chung. `002-organization.sql` mở rộ
 `regions` và tạo `officers` mà vẫn giữ các ID cũ. ROOT chỉ đọc; cập nhật trạng thái và
 chuyển đơn vị được kiểm tra quan hệ và lưu audit.
 
+Trên database mới, `pnpm seed` tạo 15 đơn vị và 79 hồ sơ cán bộ để thử danh sách,
+tìm kiếm, lọc trạng thái và phân trang. Trong đó 12 đơn vị và 72 hồ sơ mở rộng có mã
+`DEMO-ORG-*`, tên ghi `(mẫu)` và thông tin liên hệ giả lập. Đây là bản ghi SQLite thực
+(không phải mock frontend), nhưng không phải danh tính cán bộ thật. Seed chạy lại không
+ghi đè hồ sơ đã chỉnh sửa; chỉ dùng trên môi trường demo/local.
+
 | Phương thức | Endpoint                                              | Mục đích                           |
 | ----------- | ----------------------------------------------------- | ---------------------------------- |
 | GET         | `/api/organization/tree`, `/api/organization/options` | Cây và tùy chọn theo scope         |
