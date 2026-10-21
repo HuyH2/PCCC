@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { backendFetch, requirePage } from "@/lib/backend";
 import type { FacilityRecord } from "@/lib/facility-contract";
 import { FacilityHistoryPanel } from "./facility-history-panel";
+import { FacilityProfileManager } from "./facility-profile-manager";
 
 export default async function TrangChiTietCoSo({ params }: { params: Promise<{ id: string }> }) {
   const user = await requirePage("M03.view");
@@ -21,7 +22,11 @@ export default async function TrangChiTietCoSo({ params }: { params: Promise<{ i
         title={facility.name}
         description={`${facility.id} · ${facility.address}`}
         module="M03"
-        useCases={["UC-FAC-02", "UC-FAC-08"]}
+        useCases={["UC-FAC-02", "UC-FAC-03", "UC-FAC-06", "UC-FAC-08"]}
+      />
+      <FacilityProfileManager
+        facilityId={facility.id}
+        canEdit={user.permissions.includes("M03.edit")}
       />
       <FacilityHistoryPanel
         facility={facility}

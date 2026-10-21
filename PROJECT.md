@@ -334,6 +334,25 @@ Thêm mục mới **ở cuối** danh sách, theo mẫu ở §7.
 - **Ghi chú:** PWA online-only; không có service worker vì không yêu cầu offline và không nên lưu cache
   dữ liệu nghiệp vụ. HTTPS phải được cấu hình tại môi trường triển khai.
 
+### F12 — Hồ sơ nhân sự và tài liệu cơ sở (UC-FAC-03, UC-FAC-06)
+
+- **Người làm / branch:** Codex — `feature/facility-profile-document-management`.
+- **Mô tả:** quản lý người đứng đầu và nhân sự theo từng cơ sở; một cơ sở chỉ có tối đa một người
+  đứng đầu đang hoạt động. Việc thay người đứng đầu giữ hồ sơ cũ và audit. Tài liệu chung hoặc tài
+  liệu gắn nhân sự được lưu ở kho riêng ngoài thư mục public; database chỉ giữ metadata và khóa
+  đường dẫn, mọi lượt xem/tải đều qua API kiểm quyền.
+- **Backend:** migration `018-facility-profile-documents.sql` tạo `facility_personnel` và
+  `attachments`; module `facilities` bổ sung API `/api/facilities/:id/personnel*` và
+  `/api/facilities/:id/attachments*`. Đọc cần `M03.view`, ghi/upload cần `M03.edit`, đồng thời lọc
+  data scope cơ sở. File PDF/JPEG/PNG được kiểm tra nội dung, giới hạn bởi
+  `FACILITY_ATTACHMENT_MAX_BYTES`, lưu tên ngẫu nhiên và không lộ đường dẫn vật lý.
+- **Frontend:** `/co-so/[id]` có tab “Nhân sự cơ sở” và “Hồ sơ & tài liệu”, hỗ trợ thêm/sửa hồ sơ,
+  đổi người đứng đầu, liên kết file với nhân sự, xem/tải file, cùng loading/error/empty state.
+- **Test:** `pccc-BE/test/facility-profile-documents.test.js` (3 test nhóm: migration/constraint;
+  CRUD nhân sự/version/audit/quyền/scope; upload/định dạng/kho riêng/xem-tải an toàn).
+- **Ghi chú:** bộ trường hồ sơ và tên loại tài liệu vẫn để nhập linh hoạt vì Q04 chưa được chốt;
+  không hard-code thời hạn chứng nhận. Chưa cung cấp xóa vật lý để bảo toàn lịch sử.
+
 ## 7. Quy tắc khi làm feature
 
 Bắt buộc với mọi feature mới (người hoặc AI agent):
