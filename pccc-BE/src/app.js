@@ -18,6 +18,7 @@ import { explanationsRoutes } from "./modules/explanations/explanations.routes.j
 import { incidentRoutes } from "./modules/incidents/incidents.routes.js";
 import { organizationRoutes } from "./modules/organization/organization.routes.js";
 import { dataTransferRoutes } from "./modules/data-transfer/data-transfer.routes.js";
+import { violationsRoutes } from "./modules/violations/violations.routes.js";
 import { reportsRoutes } from "./modules/reports/reports.routes.js";
 import { notificationRoutes } from "./modules/notifications/notifications.routes.js";
 
@@ -27,6 +28,7 @@ const routes = [
   ...authRoutes,
   ...incidentRoutes,
   ...organizationRoutes,
+  ...violationsRoutes,
   ...administrationRoutes,
   ...facilitiesRoutes,
   ...searchRoutes,

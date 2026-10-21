@@ -1,0 +1,170 @@
+import {
+  addEvidence,
+  addRemediation,
+  createSuspension,
+  createViolation,
+  decideApproval,
+  evidenceBodyMaxBytes,
+  listViolationFacilities,
+  listViolations,
+  readEvidence,
+  submitApproval,
+  updateSuspension,
+  updateViolation,
+  violationDetail,
+} from "../../core/violations.js";
+import { listFacilityViolations } from "../facilities/facility-history.service.js";
+
+export const violationsRoutes = [
+  {
+    method: "GET",
+    path: "/api/violations",
+    handle: (ctx) =>
+      ctx.user.permissions.includes("M04.view")
+        ? listViolations(ctx.db, ctx.user, ctx.url)
+        : listFacilityViolations(ctx.db, ctx.user, ctx.url),
+  },
+  {
+    method: "GET",
+    path: "/api/violations/facilities",
+    handle: (ctx) => listViolationFacilities(ctx.db, ctx.user, ctx.url),
+  },
+  {
+    method: "POST",
+    path: "/api/violations",
+    handle: async (ctx) => {
+      ctx.status = 201;
+      return { violation: createViolation(ctx.db, ctx.user, await ctx.readJson(), ctx.ip) };
+    },
+  },
+  {
+    method: "GET",
+    path: /^\/api\/violations\/([^/]+)$/,
+    handle: (ctx, match) => violationDetail(ctx.db, ctx.user, decodeURIComponent(match[1])),
+  },
+  {
+    method: "PUT",
+    path: /^\/api\/violations\/([^/]+)$/,
+    handle: async (ctx, match) => ({
+      violation: updateViolation(
+        ctx.db,
+        ctx.user,
+        decodeURIComponent(match[1]),
+        await ctx.readJson(),
+        ctx.ip,
+      ),
+    }),
+  },
+  {
+    method: "POST",
+    path: /^\/api\/violations\/([^/]+)\/suspension$/,
+    handle: async (ctx, match) => {
+      ctx.status = 201;
+      return {
+        suspension: createSuspension(
+          ctx.db,
+          ctx.user,
+          decodeURIComponent(match[1]),
+          await ctx.readJson(),
+          ctx.ip,
+        ),
+      };
+    },
+  },
+  {
+    method: "PUT",
+    path: /^\/api\/violations\/([^/]+)\/suspension$/,
+    handle: async (ctx, match) => ({
+      suspension: updateSuspension(
+        ctx.db,
+        ctx.user,
+        decodeURIComponent(match[1]),
+        await ctx.readJson(),
+        ctx.ip,
+      ),
+    }),
+  },
+  {
+    method: "POST",
+    path: /^\/api\/violations\/([^/]+)\/remediation$/,
+    handle: async (ctx, match) => {
+      ctx.status = 201;
+      return {
+        remediation: addRemediation(
+          ctx.db,
+          ctx.user,
+          decodeURIComponent(match[1]),
+          await ctx.readJson(),
+          ctx.ip,
+        ),
+      };
+    },
+  },
+  {
+    method: "POST",
+    path: /^\/api\/violations\/([^/]+)\/evidences$/,
+    handle: async (ctx, match) => {
+      ctx.status = 201;
+      return {
+        evidence: addEvidence(
+          ctx.db,
+          ctx.user,
+          decodeURIComponent(match[1]),
+          await ctx.readJson(evidenceBodyMaxBytes),
+          ctx.ip,
+        ),
+      };
+    },
+  },
+  {
+    method: "GET",
+    path: /^\/api\/violations\/([^/]+)\/evidences\/([^/]+)$/,
+    handle: (ctx, match) => {
+      const evidence = readEvidence(
+        ctx.db,
+        ctx.user,
+        decodeURIComponent(match[1]),
+        decodeURIComponent(match[2]),
+      );
+      ctx.response.setHeader("Content-Type", evidence.media_type);
+      ctx.response.setHeader("Content-Length", String(evidence.file_size));
+      ctx.response.end(evidence.content);
+      return undefined;
+    },
+  },
+  {
+    method: "POST",
+    path: /^\/api\/violations\/([^/]+)\/submit-approval$/,
+    handle: (ctx, match) => ({
+      violation: submitApproval(ctx.db, ctx.user, decodeURIComponent(match[1]), ctx.ip),
+    }),
+  },
+  {
+    method: "POST",
+    path: /^\/api\/violations\/([^/]+)\/approve$/,
+    handle: async (ctx, match) => ({
+      violation: decideApproval(
+        ctx.db,
+        ctx.user,
+        decodeURIComponent(match[1]),
+        await ctx.readJson(),
+        true,
+        ctx.ip,
+      ),
+    }),
+  },
+  {
+    method: "POST",
+    path: /^\/api\/violations\/([^/]+)\/reject$/,
+    handle: async (ctx, match) => ({
+      violation: decideApproval(
+        ctx.db,
+        ctx.user,
+        decodeURIComponent(match[1]),
+        await ctx.readJson(),
+        false,
+        ctx.ip,
+      ),
+    }),
+  },
+];
