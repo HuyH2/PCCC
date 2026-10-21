@@ -47,10 +47,10 @@ test("migration exposes read-only views joined to the shared catalog", async () 
     const row = db.prepare("SELECT * FROM facility_overview WHERE id='CS001'").get();
     assert.equal(row.region_name, "Khu phố 01 (mẫu)");
     assert.equal(row.unit_id, "DV-KV10");
-    assert.equal(row.officer_name, "Cán bộ kiểm tra/Quản lý địa bàn (mẫu)");
+    assert.equal(row.officer_name, "Cán bộ kiểm tra/Quản lý địa bàn (dữ liệu mẫu)");
     assert.equal(
       db.prepare("SELECT officer_name FROM facility_overview WHERE id='CS002'").get().officer_name,
-      null,
+      "Cán bộ khu vực 11 (dữ liệu mẫu)",
     );
   } finally {
     db.close();
@@ -72,13 +72,13 @@ test("dashboard totals and breakdowns agree for system-wide scope", async (t) =>
   assert.equal(sum(byOfficer.items), 3);
   assert.deepEqual(byOfficer.items[0], {
     officerId: "CB-OTHER",
-    officerName: null,
+    officerName: "Cán bộ khu vực 11 (dữ liệu mẫu)",
     facilityCount: 2,
     regionCount: 2,
   });
   assert.equal(
     byOfficer.items.find((item) => item.officerId === "CB-A03").officerName,
-    "Cán bộ kiểm tra/Quản lý địa bàn (mẫu)",
+    "Cán bộ kiểm tra/Quản lý địa bàn (dữ liệu mẫu)",
   );
 });
 
@@ -153,7 +153,7 @@ test("search is accent-insensitive and groups results by data type", async (t) =
   assert.equal(all.facilities.total, 4);
   assert.equal(all.regions.total, 3);
   assert.equal(all.units.total, 3);
-  assert.equal(all.officers.total, 1);
+  assert.equal(all.officers.total, 2);
   assert.equal(all.officers.items[0].facilityCount, 2);
   const limited = (await search(get, cookie, "mau", "&limit=1")).data.groups;
   assert.equal(limited.facilities.items.length, 1);

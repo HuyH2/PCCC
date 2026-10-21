@@ -10,6 +10,7 @@ import { dashboardRoutes } from "./modules/dashboard/dashboard.routes.js";
 import { auditRoutes } from "./modules/audit/audit.routes.js";
 import { legalDocumentsRoutes } from "./modules/legal-documents/legal-documents.routes.js";
 import { inspectionsRoutes } from "./modules/inspections/inspections.routes.js";
+import { inspectionPlanningRoutes } from "./modules/inspection-planning/inspection-planning.routes.js";
 import { regionsRoutes } from "./modules/regions/regions.routes.js";
 import { tasksRoutes } from "./modules/tasks/tasks.routes.js";
 import { kpiRoutes } from "./modules/kpi/kpi.routes.js";
@@ -29,6 +30,7 @@ const routes = [
   ...dashboardRoutes,
   ...auditRoutes,
   ...legalDocumentsRoutes,
+  ...inspectionPlanningRoutes,
   ...inspectionsRoutes,
   ...regionsRoutes,
   ...tasksRoutes,

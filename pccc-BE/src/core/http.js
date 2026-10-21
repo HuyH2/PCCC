@@ -47,3 +47,18 @@ export function findRoute(routes, method, path) {
   }
   return null;
 }
+
+/**
+ * Stream a binary file row (file_name, content_type, file_data) to the HTTP response.
+ * Handlers that call this must NOT return a JSON body — they end the response themselves.
+ */
+export function sendFile(response, file) {
+  response.statusCode = 200;
+  response.setHeader("Content-Type", file.content_type);
+  response.setHeader(
+    "Content-Disposition",
+    `attachment; filename="document"; filename*=UTF-8''${encodeURIComponent(file.file_name)}`,
+  );
+  response.setHeader("Content-Security-Policy", "sandbox; default-src 'none'");
+  response.end(Buffer.from(file.file_data));
+}

@@ -6,12 +6,14 @@ import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import { openDatabase } from "../pccc-BE/src/core/database.js";
 import { seedDemo } from "../pccc-BE/src/core/seed.js";
 import { createApp } from "../pccc-BE/src/app.js";
 
 const frontendDirectory = fileURLToPath(new URL("../pccc-FE/", import.meta.url));
-const nextBinary = fileURLToPath(new URL("../node_modules/next/dist/bin/next", import.meta.url));
+const frontendRequire = createRequire(new URL("../pccc-FE/package.json", import.meta.url));
+const nextBinary = frontendRequire.resolve("next/dist/bin/next");
 
 test(
   "Next same-origin rewrite + M09: real SQLite workflow, private uploads, route guards and immediate grants",
