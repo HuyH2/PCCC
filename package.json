@@ -18,6 +18,7 @@
     "lint": "eslint .",
     "typecheck": "pnpm --filter pccc-fe typecheck",
     "test": "pnpm --filter pccc-be test",
+    "test:inspection-planning": "pnpm --filter pccc-be exec node --test test/inspection-planning.test.js",
     "check": "pnpm --filter pccc-be check",
     "test:integration": "node --test tests/auth-integration.test.mjs",
     "format:check": "node scripts/format-auth.mjs",

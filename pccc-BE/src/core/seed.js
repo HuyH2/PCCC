@@ -2,6 +2,7 @@ import { hashPassword } from "./password.js";
 import { transaction } from "./database.js";
 import { seedLegalDocuments } from "./seed-legal-documents.js";
 import { seedInspections } from "./seed-inspections.js";
+import { seedInspectionPlanning } from "./seed-inspection-planning.js";
 import { seedFacilityViolations } from "./seed-facility-violations.js";
 import { seedTasks } from "./seed-tasks.js";
 import { seedKpi } from "./seed-kpi.js";
@@ -242,6 +243,7 @@ export async function seedDemo(db, password) {
       ).run(regionId, accountId, Date.now());
     seedLegalDocuments(db);
     seedInspections(db);
+    seedInspectionPlanning(db);
     seedFacilityViolations(db);
     seedTasks(db);
     seedKpi(db);

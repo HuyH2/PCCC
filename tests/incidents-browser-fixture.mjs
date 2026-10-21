@@ -2,12 +2,15 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import { openDatabase } from "../pccc-BE/src/core/database.js";
 import { createApp } from "../pccc-BE/src/app.js";
 import { runDemoSeed } from "../pccc-BE/scripts/seed-incidents-demo.js";
 
 // Explicit, persistent, synthetic browser verification fixture. No live database or .env is used.
 const repository = fileURLToPath(new URL("../", import.meta.url));
+const frontendRequire = createRequire(new URL("../pccc-FE/package.json", import.meta.url));
+const nextBinary = frontendRequire.resolve("next/dist/bin/next");
 const databasePath = resolve(
   repository,
   "pccc-BE/data/m09-browser-verification/incidents-demo.sqlite",
@@ -90,14 +93,7 @@ try {
   await once(backend, "listening");
   frontend = spawn(
     process.execPath,
-    [
-      fileURLToPath(new URL("../node_modules/next/dist/bin/next", import.meta.url)),
-      "start",
-      "--hostname",
-      "127.0.0.1",
-      "--port",
-      String(frontendPort),
-    ],
+    [nextBinary, "start", "--hostname", "127.0.0.1", "--port", String(frontendPort)],
     {
       cwd: fileURLToPath(new URL("../pccc-FE/", import.meta.url)),
       env: {

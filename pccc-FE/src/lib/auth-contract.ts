@@ -78,6 +78,14 @@ export function canVisit(user: AuthUser, path: string) {
   if (path === "/cong-viec/giao-viec" || path.startsWith("/cong-viec/giao-viec/"))
     return user.permissions.includes("M07.view") && user.scopes.length > 0;
   if (
+    path === "/kiem-tra/ke-hoach" ||
+    path === "/kiem-tra/cuoc-kiem-tra" ||
+    path.startsWith("/kiem-tra/cuoc-kiem-tra/") ||
+    path === "/kiem-tra/lich"
+  ) {
+    return user.permissions.includes("M06.view") && user.scopes.length > 0;
+  }
+  if (
     path === "/kiem-tra/checklist" ||
     path === "/kiem-tra/thuc-hien" ||
     path.startsWith("/kiem-tra/thuc-hien/")
