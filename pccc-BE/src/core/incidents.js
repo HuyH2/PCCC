@@ -14,7 +14,11 @@ import { resolve, extname, basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ApiError, assert } from "./errors.js";
 import { object, pagination, text } from "./validation.js";
-import { requirePermission, requireAdministrator, facilityScope } from "../modules/authorization/authorization.service.js";
+import {
+  requirePermission,
+  requireAdministrator,
+  facilityScope,
+} from "../modules/authorization/authorization.service.js";
 import { regionScope, unitReadScope, officerScope } from "./organization.js";
 import { audit } from "../modules/audit/audit.service.js";
 import { transaction } from "./database.js";

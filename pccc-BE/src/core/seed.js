@@ -39,7 +39,13 @@ export async function seedDemo(db, password) {
           action,
         );
       }
-    db.prepare("INSERT OR IGNORE INTO units(id,name,parent_id,code,level) VALUES (?,?,?,?,?)").run("DV-PC07", "PC07 (mẫu)", null, "DV-PC07", "ROOT");
+    db.prepare("INSERT OR IGNORE INTO units(id,name,parent_id,code,level) VALUES (?,?,?,?,?)").run(
+      "DV-PC07",
+      "PC07 (mẫu)",
+      null,
+      "DV-PC07",
+      "ROOT",
+    );
     db.prepare("INSERT OR IGNORE INTO units(id,name,parent_id,code,level) VALUES (?,?,?,?,?)").run(
       "DV-KV10",
       "Đội khu vực 10 (mẫu)",
@@ -200,9 +206,18 @@ export async function seedDemo(db, password) {
        (id,officer_code,full_name,rank,position,phone,email,notes,unit_id,business_role,created_at,updated_at)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
     ).run(
-      "CB-OTHER", "CB-OTHER", "Cán bộ khu vực 11 (dữ liệu mẫu)", "Cấp bậc mẫu",
-      "Cán bộ mẫu", "0900000001", "other@example.invalid", "Hồ sơ giả lập liên kết cơ sở mẫu.",
-      "DV-KV11", "A03", Date.now(), Date.now(),
+      "CB-OTHER",
+      "CB-OTHER",
+      "Cán bộ khu vực 11 (dữ liệu mẫu)",
+      "Cấp bậc mẫu",
+      "Cán bộ mẫu",
+      "0900000001",
+      "other@example.invalid",
+      "Hồ sơ giả lập liên kết cơ sở mẫu.",
+      "DV-KV11",
+      "A03",
+      Date.now(),
+      Date.now(),
     );
     // Existing demo installations had no M07 grants. Add sample grants only
     // when M07 has never been configured; preserve any administrator choices.

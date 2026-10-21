@@ -88,10 +88,13 @@ test("M09 upgrade preserves real shared tables, grants and audit; data survives 
     db.exec(
       "PRAGMA foreign_keys=ON; CREATE TABLE schema_migrations(name TEXT PRIMARY KEY,applied_at INTEGER NOT NULL)",
     );
-    for (const name of readdirSync(migrationDirectory).filter((entry) => entry !== "003-incidents.sql").sort()) {
+    for (const name of readdirSync(migrationDirectory)
+      .filter((entry) => entry !== "003-incidents.sql")
+      .sort()) {
       transaction(db, () => {
         if (name.endsWith(".sql")) db.exec(readFileSync(new URL(name, migrationDirectory), "utf8"));
-        else if (name.endsWith(".cjs")) require(fileURLToPath(new URL(name, migrationDirectory)))(db);
+        else if (name.endsWith(".cjs"))
+          require(fileURLToPath(new URL(name, migrationDirectory)))(db);
         else return;
         db.prepare("INSERT INTO schema_migrations VALUES (?,?)").run(name, now);
       });
@@ -140,7 +143,9 @@ test("M09 upgrade preserves real shared tables, grants and audit; data survives 
     );
     assert.equal(
       db.prepare("SELECT count(*) AS total FROM schema_migrations").get().total,
-      readdirSync(migrationDirectory).filter((name) => name.endsWith(".sql") || name.endsWith(".cjs")).length,
+      readdirSync(migrationDirectory).filter(
+        (name) => name.endsWith(".sql") || name.endsWith(".cjs"),
+      ).length,
     );
   } finally {
     db.close();
@@ -321,6 +326,9 @@ test("M09 demo seed cleans new private file when metadata transaction fails", as
   );
   assert.equal(db.prepare("SELECT count(*) AS total FROM incidents").get().total, 0);
   assert.equal(db.prepare("SELECT count(*) AS total FROM incident_status_history").get().total, 0);
-  assert.equal(db.prepare("SELECT count(*) AS total FROM audit_logs").get().total, existingAuditCount);
+  assert.equal(
+    db.prepare("SELECT count(*) AS total FROM audit_logs").get().total,
+    existingAuditCount,
+  );
   assert.deepEqual(readdirSync(directory), []);
 });

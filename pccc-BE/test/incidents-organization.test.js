@@ -213,7 +213,11 @@ test("M02 region status and ancestry stay unchanged when M09 holds a historical 
   const before = f.db.prepare("SELECT * FROM regions WHERE id=?").get(region.id);
   const auditBefore = f.db.prepare("SELECT count(*) AS total FROM audit_logs").get().total;
   for (const [path, body, code] of [
-    [`/api/organization/regions/${region.id}/status`, { status: "INACTIVE" }, "ACTIVE_DEPENDENCIES"],
+    [
+      `/api/organization/regions/${region.id}/status`,
+      { status: "INACTIVE" },
+      "ACTIVE_DEPENDENCIES",
+    ],
     [`/api/organization/regions/${region.id}`, { parentId: target.id }, "REPARENT_REFERENCED"],
   ]) {
     const result = await f.request(path, body);

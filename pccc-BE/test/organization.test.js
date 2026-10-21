@@ -134,7 +134,9 @@ test("ORG migration upgrades 001 without changing IDs, scope, accounts or facili
     assert.deepEqual(db.prepare("SELECT id,name,unit_id FROM regions").all(), snapshot.regions);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
     assert.equal(db.prepare("PRAGMA integrity_check").get().integrity_check, "ok");
-    const count = readdirSync(migrations).filter((file) => file.endsWith(".sql") || file.endsWith(".cjs")).length;
+    const count = readdirSync(migrations).filter(
+      (file) => file.endsWith(".sql") || file.endsWith(".cjs"),
+    ).length;
     assert.equal(db.prepare("SELECT count(*) AS n FROM schema_migrations").get().n, count);
     db.close();
     db = openDatabase(path);
@@ -179,7 +181,8 @@ test("ORG tree uses shared units/regions and readonly root; valid ward and neigh
   );
   assert.equal((await f.request(`/api/units/${ward.id}`, { cookie: f.cookie })).status, 200);
   assert.equal(
-    (await f.request(`/api/organization/regions/${result.data.region.id}`, { cookie: f.cookie })).status,
+    (await f.request(`/api/organization/regions/${result.data.region.id}`, { cookie: f.cookie }))
+      .status,
     200,
   );
 });
@@ -306,7 +309,9 @@ test("ORG empty units deactivate without physical delete; active children and re
 
 test("ORG M02 permissions, session, CSRF and forged actor are enforced on every endpoint", async (t) => {
   const f = await fixture(t);
-  f.db.prepare("DELETE FROM role_permissions WHERE role_code='A02' AND permission_code LIKE 'M02.%'").run();
+  f.db
+    .prepare("DELETE FROM role_permissions WHERE role_code='A02' AND permission_code LIKE 'M02.%'")
+    .run();
   for (const path of [
     "/api/organization/tree",
     "/api/organization/options",

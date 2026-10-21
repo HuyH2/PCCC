@@ -7,15 +7,15 @@ session, M02 permission, scope và audit chung. `002-organization.sql` mở rộ
 `regions` và tạo `officers` mà vẫn giữ các ID cũ. ROOT chỉ đọc; cập nhật trạng thái và
 chuyển đơn vị được kiểm tra quan hệ và lưu audit.
 
-| Phương thức | Endpoint | Mục đích |
-| --- | --- | --- |
-| GET | `/api/organization/tree`, `/api/organization/options` | Cây và tùy chọn theo scope |
-| GET, POST | `/api/units`, `/api/officers` | Danh sách hoặc tạo đơn vị/cán bộ |
-| GET, PATCH | `/api/units/:id`, `/api/officers/:id` | Chi tiết hoặc cập nhật |
-| PATCH | `/api/units/:id/status`, `/api/officers/:id/status` | Đổi trạng thái có lý do và audit |
-| POST | `/api/organization/regions` | Tạo khu phố M02 |
-| GET, PATCH | `/api/organization/regions/:id` | Chi tiết hoặc cập nhật khu phố M02 |
-| PATCH | `/api/organization/regions/:id/status` | Đổi trạng thái khu phố M02 |
+| Phương thức | Endpoint                                              | Mục đích                           |
+| ----------- | ----------------------------------------------------- | ---------------------------------- |
+| GET         | `/api/organization/tree`, `/api/organization/options` | Cây và tùy chọn theo scope         |
+| GET, POST   | `/api/units`, `/api/officers`                         | Danh sách hoặc tạo đơn vị/cán bộ   |
+| GET, PATCH  | `/api/units/:id`, `/api/officers/:id`                 | Chi tiết hoặc cập nhật             |
+| PATCH       | `/api/units/:id/status`, `/api/officers/:id/status`   | Đổi trạng thái có lý do và audit   |
+| POST        | `/api/organization/regions`                           | Tạo khu phố M02                    |
+| GET, PATCH  | `/api/organization/regions/:id`                       | Chi tiết hoặc cập nhật khu phố M02 |
+| PATCH       | `/api/organization/regions/:id/status`                | Đổi trạng thái khu phố M02         |
 
 `/api/regions` thuộc UC-ORG-03 để quản lý phân công hiện tại và lịch sử phụ trách. M09
 đăng ký routes trong `src/modules/incidents/incidents.routes.js`; chính sách phân loại,

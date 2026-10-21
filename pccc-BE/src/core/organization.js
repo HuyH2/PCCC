@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { ApiError, assert } from "./errors.js";
 import { object, pagination, text } from "./validation.js";
-import { requirePermission, facilityScope } from "../modules/authorization/authorization.service.js";
+import {
+  requirePermission,
+  facilityScope,
+} from "../modules/authorization/authorization.service.js";
 import { audit } from "../modules/audit/audit.service.js";
 import { transaction } from "./database.js";
 

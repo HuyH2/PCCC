@@ -56,14 +56,7 @@ test(
     await once(backend, "listening");
     frontend = spawn(
       process.execPath,
-      [
-        nextBinary,
-        "start",
-        "--hostname",
-        "127.0.0.1",
-        "--port",
-        String(frontendPort),
-      ],
+      [nextBinary, "start", "--hostname", "127.0.0.1", "--port", String(frontendPort)],
       {
         cwd: frontendDirectory,
         env: { ...process.env, BACKEND_URL: `http://127.0.0.1:${backendPort}` },

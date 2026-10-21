@@ -45,6 +45,8 @@ const result = spawnSync(
   [
     "node_modules/prettier/bin/prettier.cjs",
     process.argv.includes("--write") ? "--write" : "--check",
+    "--end-of-line",
+    "auto",
     ...files,
   ],
   { stdio: "inherit" },
