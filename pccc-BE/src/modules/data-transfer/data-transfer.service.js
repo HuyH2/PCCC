@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { assert } from "../../core/errors.js";
 import { foldSearchText, transaction } from "../../core/database.js";
+import { officerScope } from "../../core/organization.js";
 import { object, pagination, text } from "../../core/validation.js";
 import {
-  accountScope,
   facilityScope,
   regionScope,
   requirePermission,
@@ -25,7 +25,7 @@ const TRANSFER_STATUSES = new Set([
   "failed",
 ]);
 const FACILITY_STATUSES = new Set(["active", "paused", "suspended", "unlicensed"]);
-const ACCOUNT_STATUSES = new Set(["active", "locked", "inactive"]);
+const OFFICER_STATUSES = new Set(["ACTIVE", "INACTIVE", "TRANSFERRED"]);
 const CSV_COLUMNS = {
   facilities: [
     "Mã cơ sở",
@@ -41,6 +41,9 @@ const CSV_COLUMNS = {
   officers: [
     "Mã cán bộ",
     "Họ và tên",
+    "Cấp bậc",
+    "Chức vụ",
+    "Đơn vị",
     "Vai trò",
     "Trạng thái",
     "Khu vực phụ trách",
@@ -105,7 +108,7 @@ function filterMetadata(db, user, datasetId) {
   if (datasetId === "officers")
     return {
       regions: regionOptions(db, user),
-      statuses: [...ACCOUNT_STATUSES].map((value) => ({ value, label: value })),
+      statuses: [...OFFICER_STATUSES].map((value) => ({ value, label: value })),
     };
   return { units: unitOptions(db, user) };
 }
@@ -154,7 +157,7 @@ function validateFilters(datasetId, rawFilters) {
     "Bộ lọc trạng thái không áp dụng cho danh sách khu vực/khu phố.",
   );
   if (filters.status) {
-    const values = datasetId === "facilities" ? FACILITY_STATUSES : ACCOUNT_STATUSES;
+    const values = datasetId === "facilities" ? FACILITY_STATUSES : OFFICER_STATUSES;
     assert(values.has(filters.status), 400, "INVALID_INPUT", "Trạng thái lọc không hợp lệ.");
   }
   return filters;
@@ -193,36 +196,38 @@ function facilityRows(db, user, filters) {
 }
 
 function officerRows(db, user, filters) {
-  const accounts = accountScope(user);
-  const regions = regionScope(user);
+  const officers = officerScope(user);
   const facilities = facilityScope(user);
-  const clauses = [accounts.sql, regions.sql];
-  const params = [...facilities.params, ...accounts.params, ...regions.params];
+  const clauses = [officers.sql];
+  const scopedFacilities = `f.officer_id=o.id AND ${facilities.sql}${filters.regionId ? " AND f.region_id=?" : ""}`;
+  const facilityParams = [...facilities.params, ...(filters.regionId ? [filters.regionId] : [])];
+  const params = [...facilityParams, ...facilityParams, ...officers.params];
   if (filters.search) {
-    clauses.push("(instr(fold(a.full_name),?)>0 OR instr(fold(a.officer_id),?)>0)");
+    clauses.push(
+      "(instr(fold(o.full_name),?)>0 OR instr(fold(o.officer_code),?)>0 OR instr(fold(o.position),?)>0 OR instr(fold(u.name),?)>0)",
+    );
     const q = foldSearchText(filters.search);
-    params.push(q, q);
+    params.push(q, q, q, q);
   }
   if (filters.regionId) {
-    clauses.push(
-      "EXISTS (SELECT 1 FROM region_assignments rx WHERE rx.account_id=a.id AND rx.region_id=?)",
-    );
-    params.push(filters.regionId);
+    clauses.push(`EXISTS (SELECT 1 FROM facilities f WHERE ${scopedFacilities})`);
+    params.push(...facilityParams);
   }
   if (filters.status) {
-    clauses.push("a.status=?");
+    clauses.push("o.status=?");
     params.push(filters.status);
   }
   return db
     .prepare(
-      `SELECT a.officer_id AS "Mã cán bộ",a.full_name AS "Họ và tên",
-      a.role_code AS "Vai trò",a.status AS "Trạng thái",
-      group_concat(DISTINCT r.name) AS "Khu vực phụ trách",
-      (SELECT count(*) FROM facilities f WHERE f.officer_id=a.officer_id AND ${facilities.sql})
+      `SELECT o.officer_code AS "Mã cán bộ",o.full_name AS "Họ và tên",
+      o.rank AS "Cấp bậc",o.position AS "Chức vụ",u.name AS "Đơn vị",
+      o.business_role AS "Vai trò",o.status AS "Trạng thái",
+      (SELECT group_concat(DISTINCT r.name) FROM facilities f JOIN regions r ON r.id=f.region_id
+        WHERE ${scopedFacilities}) AS "Khu vực phụ trách",
+      (SELECT count(*) FROM facilities f WHERE ${scopedFacilities})
         AS "Số cơ sở trong phạm vi"
-      FROM accounts a JOIN region_assignments ra ON ra.account_id=a.id
-      JOIN regions r ON r.id=ra.region_id
-      WHERE ${clauses.join(" AND ")} GROUP BY a.id ORDER BY a.full_name,a.id LIMIT ?`,
+      FROM officers o JOIN units u ON u.id=o.unit_id
+      WHERE ${clauses.join(" AND ")} ORDER BY o.full_name,o.id LIMIT ?`,
     )
     .all(...params, MAX_EXPORT_RECORDS + 1);
 }
