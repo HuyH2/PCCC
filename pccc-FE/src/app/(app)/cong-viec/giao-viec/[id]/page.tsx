@@ -4,7 +4,9 @@ import { PageHeader } from "@/components/shared/page-header";
 import { backendFetch, requirePage } from "@/lib/backend";
 import type { TaskRecord } from "@/lib/task-contract";
 import { TaskConversation } from "./task-conversation";
+import { TaskExplanationRequest } from "./task-explanation";
 import { TaskProgress } from "./task-progress";
+import { TaskStatusActions } from "./task-status-actions";
 
 export default async function TrangChiTietCongViec({
   params,
@@ -29,6 +31,18 @@ export default async function TrangChiTietCongViec({
         useCases={["UC-WRK-03"]}
       />
       {task.description && <p className="rounded-xl border p-4 text-sm">{task.description}</p>}
+      <TaskStatusActions
+        task={task}
+        currentUserId={user.id}
+        canEdit={user.permissions.includes("M07.edit")}
+      />
+      <TaskExplanationRequest
+        task={task}
+        canRequest={
+          user.permissions.includes("M07.edit") &&
+          (task.assigned_by === user.id || user.role === "A05")
+        }
+      />
       <TaskProgress
         task={task}
         isAssignee={task.assigned_to === user.id}

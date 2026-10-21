@@ -9,6 +9,7 @@ import {
   sendTaskMessage,
   taskDetail,
   updateTaskProgress,
+  updateTaskStatus,
 } from "./tasks.service.js";
 
 const id = "([a-zA-Z0-9-]+)";
@@ -18,6 +19,7 @@ const messagesPath = new RegExp(`^/api/tasks/${id}/messages$`);
 const messagePath = new RegExp(`^/api/tasks/${id}/messages/${messageId}$`);
 const progressPath = new RegExp(`^/api/tasks/${id}/progress$`);
 const progressHistoryPath = new RegExp(`^/api/tasks/${id}/progress-history$`);
+const statusPath = new RegExp(`^/api/tasks/${id}/status$`);
 
 export const tasksRoutes = [
   { method: "GET", path: "/api/tasks", handle: (ctx) => listTasks(ctx.db, ctx.user, ctx.url) },
@@ -25,6 +27,16 @@ export const tasksRoutes = [
     method: "GET",
     path: "/api/tasks/assignees",
     handle: (ctx) => listTaskAssignees(ctx.db, ctx.user),
+  },
+  {
+    method: "GET",
+    path: "/api/tasks/assigned",
+    handle: (ctx) => listTasks(ctx.db, ctx.user, ctx.url, "assigned"),
+  },
+  {
+    method: "GET",
+    path: "/api/tasks/mine",
+    handle: (ctx) => listTasks(ctx.db, ctx.user, ctx.url, "mine"),
   },
   {
     method: "POST",
@@ -46,6 +58,13 @@ export const tasksRoutes = [
     path: progressPath,
     async handle(ctx, match) {
       return updateTaskProgress(ctx.db, ctx.user, match[1], await ctx.readJson(), ctx.ip);
+    },
+  },
+  {
+    method: "PUT",
+    path: statusPath,
+    async handle(ctx, match) {
+      return updateTaskStatus(ctx.db, ctx.user, match[1], await ctx.readJson(), ctx.ip);
     },
   },
   {

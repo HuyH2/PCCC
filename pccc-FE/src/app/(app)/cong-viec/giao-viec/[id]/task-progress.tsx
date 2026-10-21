@@ -31,6 +31,10 @@ export function TaskProgress({
   const [revision, setRevision] = React.useState(0);
 
   React.useEffect(() => {
+    setProgress(task.progress);
+  }, [task.progress]);
+
+  React.useEffect(() => {
     const controller = new AbortController();
     fetch(`/api/tasks/${encodeURIComponent(task.id)}/progress-history?pageSize=20`, {
       signal: controller.signal,
@@ -50,7 +54,7 @@ export function TaskProgress({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [task.id, revision]);
+  }, [task.id, task.updated_at, revision]);
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

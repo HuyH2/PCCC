@@ -7,6 +7,7 @@ export interface TaskRecord {
   kind: "routine" | "unscheduled" | "assigned";
   due_at: number | null;
   progress: number;
+  completed_at: number | null;
   updated_at: number | null;
   created_at: number;
   assigned_by: string;

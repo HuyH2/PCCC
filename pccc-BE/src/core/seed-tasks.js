@@ -109,6 +109,15 @@ export function seedTasks(db) {
       WHERE id=? AND code=? AND assigned_by=? AND assigned_to=?
         AND status='open' AND due_at IS NULL AND updated_at IS NULL AND progress=0`,
     ).run(kind, now + daysUntilDue * 86400000, progress, now, id, code, assigner, assignee);
+    db.prepare(
+      `INSERT OR IGNORE INTO task_assignments
+      (task_id,assignee_id,assigned_by,assigned_at,note) VALUES (?,?,?,?,?)`,
+    ).run(id, assignee, assigner, now, "Giao việc mẫu");
+    if (!db.prepare("SELECT 1 FROM task_progress WHERE task_id=?").get(id))
+      db.prepare(
+        `INSERT INTO task_progress(task_id,account_id,progress,status,note,created_at)
+        VALUES (?,?,?,'open','Tiến độ khởi tạo',?)`,
+      ).run(id, assignee, progress, now);
   }
   if (db.prepare("SELECT 1 FROM tasks WHERE id='CV-DEMO-01'").get())
     db.prepare(
