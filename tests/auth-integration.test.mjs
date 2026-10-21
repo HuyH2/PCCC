@@ -22,7 +22,7 @@ test(
     const frontendPort = Number(process.env.PCCC_TEST_FRONTEND_PORT || 3100);
     const backendPort = Number(process.env.PCCC_TEST_BACKEND_PORT || 4000);
     const backendOrigin = `http://127.0.0.1:${backendPort}`;
-    const origin = `http://localhost:${frontendPort}`;
+    const origin = `http://127.0.0.1:${frontendPort}`;
     const backend = createApp(db, { appOrigin: origin });
     backend.listen(backendPort, "127.0.0.1");
     await once(backend, "listening");
@@ -79,6 +79,15 @@ test(
         body: body ? JSON.stringify(body) : undefined,
       });
     }
+    const manifestResponse = await request("/manifest.webmanifest");
+    assert.equal(manifestResponse.status, 200);
+    const manifest = await manifestResponse.json();
+    assert.equal(manifest.display, "standalone");
+    assert.ok(manifest.icons.some((icon) => icon.src === "/icon.svg"));
+    const iconResponse = await request("/icon.svg");
+    assert.equal(iconResponse.status, 200);
+    assert.match(iconResponse.headers.get("content-type"), /image\/svg\+xml/);
+    assert.match(await iconResponse.text(), /<svg/);
     const anonymous = await request("/tong-quan");
     assert.equal(anonymous.status, 307);
     assert.ok(anonymous.headers.get("location").endsWith("/dang-nhap"));

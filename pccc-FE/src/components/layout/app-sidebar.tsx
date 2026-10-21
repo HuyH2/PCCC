@@ -33,10 +33,12 @@ function MenuCoCapCon({
   item,
   pathname,
   user,
+  setOpenMobile,
 }: {
   item: NavItem;
   pathname: string;
   user: AuthUser;
+  setOpenMobile: (open: boolean) => void;
 }) {
   const { state, setOpen } = useSidebar();
   const dangHoatDong = laDuongDanHoatDong(pathname, item.href);
@@ -79,7 +81,7 @@ function MenuCoCapCon({
             .map((sub) => (
               <SidebarMenuSubItem key={sub.href}>
                 <SidebarMenuSubButton asChild isActive={laDuongDanHoatDong(pathname, sub.href)}>
-                  <Link href={sub.href}>
+                  <Link href={sub.href} onClick={() => setOpenMobile(false)}>
                     {sub.icon ? <sub.icon /> : null}
                     <span>{sub.title}</span>
                   </Link>
@@ -94,11 +96,12 @@ function MenuCoCapCon({
 
 export function AppSidebar({ user }: { user: AuthUser }) {
   const pathname = usePathname();
+  const { setOpenMobile } = useSidebar();
 
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-sidebar-border border-b">
-        <Link href="/" className="flex items-center gap-2.5 px-1 py-1">
+        <Link href="/" onClick={() => setOpenMobile(false)} className="flex items-center gap-2.5 px-1 py-1">
           <span className="bg-sidebar-primary text-sidebar-primary-foreground flex size-9 shrink-0 items-center justify-center rounded-lg shadow-sm">
             <Flame className="size-5" />
           </span>
@@ -123,7 +126,13 @@ export function AppSidebar({ user }: { user: AuthUser }) {
                 )
                 .map((item) =>
                   item.items?.length ? (
-                    <MenuCoCapCon key={item.href} item={item} pathname={pathname} user={user} />
+                    <MenuCoCapCon
+                      key={item.href}
+                      item={item}
+                      pathname={pathname}
+                      user={user}
+                      setOpenMobile={setOpenMobile}
+                    />
                   ) : (
                     <SidebarMenuItem key={item.href}>
                       <SidebarMenuButton
@@ -131,7 +140,7 @@ export function AppSidebar({ user }: { user: AuthUser }) {
                         tooltip={item.title}
                         isActive={laDuongDanHoatDong(pathname, item.href)}
                       >
-                        <Link href={item.href}>
+                        <Link href={item.href} onClick={() => setOpenMobile(false)}>
                           {item.icon ? <item.icon /> : null}
                           <span>{item.title}</span>
                         </Link>
