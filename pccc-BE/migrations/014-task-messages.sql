@@ -28,4 +28,3 @@ CREATE TABLE task_messages (
 CREATE INDEX task_messages_task_time_idx ON task_messages(task_id,created_at DESC,id DESC);
 CREATE TRIGGER task_messages_no_delete BEFORE DELETE ON task_messages
   BEGIN SELECT RAISE(ABORT,'Task messages must be soft-deleted'); END;
-

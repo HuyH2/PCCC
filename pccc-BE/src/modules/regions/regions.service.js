@@ -151,7 +151,12 @@ export function createRegion(db, principal, payload, ip) {
       "DUPLICATE_CODE",
       "Mã khu vực đã tồn tại.",
     );
-    db.prepare("INSERT INTO regions(id,name,unit_id) VALUES (?,?,?)").run(id, name, unitId);
+    db.prepare("INSERT INTO regions(id,name,unit_id,code) VALUES (?,?,?,?)").run(
+      id,
+      name,
+      unitId,
+      id,
+    );
     const created = regionRow(db, principal, id);
     writeAudit(db, {
       actorId: principal.id,

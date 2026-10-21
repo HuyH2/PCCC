@@ -1,5 +1,26 @@
 # pccc-BE — Backend PCCC/CNCH
 
+## Tổ chức và cán bộ — UC-ORG-01, UC-ORG-02
+
+`src/core/organization.js` và `src/modules/organization/organization.routes.js` dùng lại
+session, M02 permission, scope và audit chung. `002-organization.sql` mở rộng `units`,
+`regions` và tạo `officers` mà vẫn giữ các ID cũ. ROOT chỉ đọc; cập nhật trạng thái và
+chuyển đơn vị được kiểm tra quan hệ và lưu audit.
+
+| Phương thức | Endpoint                                              | Mục đích                           |
+| ----------- | ----------------------------------------------------- | ---------------------------------- |
+| GET         | `/api/organization/tree`, `/api/organization/options` | Cây và tùy chọn theo scope         |
+| GET, POST   | `/api/units`, `/api/officers`                         | Danh sách hoặc tạo đơn vị/cán bộ   |
+| GET, PATCH  | `/api/units/:id`, `/api/officers/:id`                 | Chi tiết hoặc cập nhật             |
+| PATCH       | `/api/units/:id/status`, `/api/officers/:id/status`   | Đổi trạng thái có lý do và audit   |
+| POST        | `/api/organization/regions`                           | Tạo khu phố M02                    |
+| GET, PATCH  | `/api/organization/regions/:id`                       | Chi tiết hoặc cập nhật khu phố M02 |
+| PATCH       | `/api/organization/regions/:id/status`                | Đổi trạng thái khu phố M02         |
+
+`/api/regions` thuộc UC-ORG-03 để quản lý phân công hiện tại và lịch sử phụ trách. M09
+đăng ký routes trong `src/modules/incidents/incidents.routes.js`; chính sách phân loại,
+cảnh báo và upload là cấu hình demo cần xác nhận trước khi dùng làm quy định chính thức.
+
 Backend (modular monolith) của monorepo. Mỗi module nghiệp vụ nằm ở `src/modules/<module>/` (`*.service.js` + `*.routes.js`), hạ tầng chung ở `src/core/`, `src/app.js` đăng ký routes; quy tắc chi tiết ở [PROJECT.md](../PROJECT.md) §2. Phần auth phục vụ **UC-ADM-01** và **UC-ADM-03**, đối chiếu URD v1.0 và sơ đồ sequence ADM-01. Node.js >= 22.13, HTTP API và SQLite tích hợp (`node:sqlite`). Không cần cài package backend. SQLite ở Node 22 còn có cảnh báo experimental; lựa chọn này phục vụ môi trường đồ án, chưa chốt hạ tầng production Q13.
 
 ## Chạy trên PowerShell

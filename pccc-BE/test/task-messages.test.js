@@ -310,7 +310,7 @@ test("assignment rejects unprivileged, out-of-scope and invalid changes", async 
     ).status,
     400,
   );
-  db.prepare("INSERT INTO units(id,name) VALUES ('DV-OTHER','Đơn vị khác')").run();
+  db.prepare("INSERT INTO units(id,name,code) VALUES ('DV-OTHER','Đơn vị khác','DV-OTHER')").run();
   db.prepare("UPDATE account_scopes SET unit_id='DV-OTHER' WHERE account_id='DEMO-A04'").run();
   assert.equal(
     (

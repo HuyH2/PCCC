@@ -4,263 +4,278 @@ import * as React from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
+import { z } from "zod";
 
-import { FormDialog, useFormDialog } from "@/components/forms/form-dialog";
-import { FormSection, FormSpan } from "@/components/shared/form-section";
+import { FormDialog } from "@/components/forms/form-dialog";
+import { FormSection } from "@/components/shared/form-section";
 import {
-  Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage,
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { canBoList, donViList } from "@/data/mock";
-import { canBoSchema, type CanBoFormValues } from "@/data/schemas";
-import type { CanBo } from "@/data/types";
+import { organizationApi, organizationErrorMessage } from "@/lib/organization-client";
+import {
+  organizationSelectClass,
+  type Officer,
+  type OrganizationOptions,
+} from "@/lib/organization-contract";
 
-const capBacOptions = ["Đại tá", "Thượng tá", "Trung tá", "Thiếu tá", "Đại úy", "Thượng úy", "Trung úy", "Thiếu úy"];
-const trangThaiOptions = ["Đang công tác", "Nghỉ phép", "Chuyển công tác"];
-const vaiTroOptions: { ma: string; ten: string }[] = [
-  { ma: "A01", ten: "Chỉ huy/Đội trưởng" },
-  { ma: "A02", ten: "Phó chỉ huy/Tổ trưởng" },
-  { ma: "A03", ten: "Cán bộ kiểm tra/Quản lý địa bàn" },
-  { ma: "A04", ten: "Cán bộ tổng hợp" },
-  { ma: "A05", ten: "Quản trị hệ thống" },
-  { ma: "A06", ten: "Lãnh đạo cấp phòng/Người xem" },
-];
+const requiredText = (label: string, max: number) =>
+  z.string().trim().min(1, `${label} là bắt buộc.`).max(max, `${label} tối đa ${max} ký tự.`);
+const officerSchema = z.object({
+  officerCode: requiredText("Mã số", 50).regex(
+    /^[A-Za-z0-9][A-Za-z0-9._/-]*$/,
+    "Mã số chỉ chứa chữ, số và các ký tự . _ / -.",
+  ),
+  fullName: requiredText("Họ tên", 150),
+  rank: requiredText("Cấp bậc", 100),
+  position: requiredText("Chức vụ", 150),
+  phone: requiredText("Điện thoại", 25).refine(
+    (value) =>
+      /^\+?[0-9\s()-]+$/.test(value) &&
+      value.replace(/\D/g, "").length >= 8 &&
+      value.replace(/\D/g, "").length <= 15,
+    "Điện thoại cần có 8–15 chữ số, có thể có dấu +, khoảng trắng hoặc dấu phân cách.",
+  ),
+  email: z
+    .string()
+    .trim()
+    .min(1, "Email là bắt buộc.")
+    .email("Email không hợp lệ.")
+    .max(254, "Email tối đa 254 ký tự."),
+  unitId: requiredText("Đơn vị", 128),
+  businessRole: requiredText("Vai trò nghiệp vụ", 128),
+  notes: z.string().trim().max(2000, "Ghi chú tối đa 2.000 ký tự."),
+});
+type OfficerFormValues = z.infer<typeof officerSchema>;
 
-/** Biểu mẫu thêm/sửa hồ sơ cán bộ — bảng Master theo lưu ý nghiệp vụ của URD (UC-ORG-02). */
-export function CanBoForm({ trigger, canBo }: { trigger: React.ReactNode; canBo?: CanBo }) {
-  const { open, setOpen, dangLuu, luu } = useFormDialog();
+function officerDefaults(officer?: Officer): OfficerFormValues {
+  return {
+    officerCode: officer?.officerCode ?? "",
+    fullName: officer?.fullName ?? "",
+    rank: officer?.rank ?? "",
+    position: officer?.position ?? "",
+    phone: officer?.phone ?? "",
+    email: officer?.email ?? "",
+    unitId: officer?.unitId ?? "",
+    businessRole: officer?.businessRole ?? "",
+    notes: officer?.notes ?? "",
+  };
+}
 
-  const form = useForm<CanBoFormValues>({
-    resolver: zodResolver(canBoSchema),
+/** Hồ sơ Master; các trường Detail chưa được URD xác định sẽ bổ sung sau khảo sát. */
+export function CanBoForm({
+  trigger,
+  canBo,
+  options,
+  onSaved,
+}: {
+  trigger: React.ReactNode;
+  canBo?: Officer;
+  options: OrganizationOptions;
+  onSaved: () => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const form = useForm<OfficerFormValues>({
+    resolver: zodResolver(officerSchema),
     mode: "onBlur",
-    defaultValues: {
-      ma: canBo?.ma ?? `KV10-${String(canBoList.length + 1).padStart(3, "0")}`,
-      hoTen: canBo?.hoTen ?? "",
-      capBac: canBo?.capBac ?? "",
-      chucVu: canBo?.chucVu ?? "",
-      dienThoai: canBo?.dienThoai ?? "",
-      email: canBo?.email ?? "",
-      donViId: canBo?.donViId ?? "DV02",
-      vaiTro: canBo?.vaiTro ?? "A03",
-      trangThai: canBo?.trangThai ?? "Đang công tác",
-      ghiChu: canBo?.ghiChu ?? "",
-    },
+    defaultValues: officerDefaults(canBo),
   });
+  const units = options.units.filter(
+    (unit) => unit.status === "ACTIVE" || unit.id === canBo?.unitId,
+  );
+  const selectedUnitPresent = units.some((unit) => unit.id === canBo?.unitId);
+  const selectedRolePresent = options.roles.some((role) => role.code === canBo?.businessRole);
 
-  function onSubmit(values: CanBoFormValues) {
-    luu(() => {
-      console.info("[demo] Lưu hồ sơ cán bộ:", values);
-      toast.success(canBo ? "Đã cập nhật hồ sơ cán bộ" : "Đã thêm cán bộ mới", {
-        description: `${values.hoTen} — ${values.chucVu}`,
-      });
-      form.reset(values);
-    });
+  function changeOpen(next: boolean) {
+    if (saving) return;
+    if (next) {
+      form.reset(officerDefaults(canBo));
+      setError(null);
+    }
+    setOpen(next);
+  }
+
+  async function save(values: OfficerFormValues) {
+    if (saving) return;
+    if (!units.some((unit) => unit.id === values.unitId) && values.unitId !== canBo?.unitId) {
+      form.setError("unitId", { message: "Chọn đơn vị trong phạm vi được phép." });
+      return;
+    }
+    if (
+      !options.roles.some((role) => role.code === values.businessRole) &&
+      values.businessRole !== canBo?.businessRole
+    ) {
+      form.setError("businessRole", { message: "Chọn vai trò nghiệp vụ hợp lệ." });
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const original = officerDefaults(canBo);
+      const payload = canBo
+        ? Object.fromEntries(
+            Object.entries(values).filter(
+              ([key, value]) => value !== original[key as keyof OfficerFormValues],
+            ),
+          )
+        : values;
+      if (Object.keys(payload).length === 0) {
+        setError("Chưa có thông tin thay đổi để lưu.");
+        return;
+      }
+      await organizationApi<{ officer: Officer }>(
+        canBo ? `/api/officers/${encodeURIComponent(canBo.id)}` : "/api/officers",
+        {
+          method: canBo ? "PATCH" : "POST",
+          body: payload,
+        },
+      );
+      setOpen(false);
+      toast.success(canBo ? "Đã cập nhật hồ sơ cán bộ" : "Đã thêm cán bộ mới");
+      onSaved();
+    } catch (cause) {
+      setError(organizationErrorMessage(cause));
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
     <FormDialog
       trigger={trigger}
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={changeOpen}
       title={canBo ? "Cập nhật hồ sơ cán bộ" : "Thêm cán bộ"}
-      description="Bảng Master gồm mã số, họ tên, chức vụ, điện thoại, email và ghi chú. Bảng Detail sẽ bổ sung sau khảo sát chi tiết."
-      dangLuu={dangLuu}
-      onSubmit={form.handleSubmit(onSubmit)}
+      description="Nhập thông tin danh bạ, đơn vị và vai trò nghiệp vụ của cán bộ."
+      dangLuu={saving}
+      onSubmit={form.handleSubmit(save)}
+      nhanLuu="Lưu hồ sơ"
     >
       <Form {...form}>
-        <FormSection title="Thông tin cán bộ" cols={2}>
-          <FormField
-            control={form.control}
-            name="ma"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel required>Mã số</FormLabel>
-                <FormControl>
-                  <Input placeholder="KV10-011" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="hoTen"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel required>Họ và tên</FormLabel>
-                <FormControl>
-                  <Input placeholder="Nguyễn Văn An" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="capBac"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel required>Cấp bậc</FormLabel>
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <FormControl>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Chọn cấp bậc" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {capBacOptions.map((c) => (
-                      <SelectItem key={c} value={c}>
-                        {c}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="chucVu"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel required>Chức vụ</FormLabel>
-                <FormControl>
-                  <Input placeholder="Cán bộ quản lý địa bàn" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="dienThoai"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel required>Điện thoại</FormLabel>
-                <FormControl>
-                  <Input placeholder="0903 112 007" inputMode="tel" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="email"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel required>Email</FormLabel>
-                <FormControl>
-                  <Input type="email" placeholder="an.nv@pc07.gov.vn" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </FormSection>
-
-        <FormSection title="Đơn vị và phân quyền" cols={2} className="mt-6">
-          <FormField
-            control={form.control}
-            name="donViId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel required>Đơn vị</FormLabel>
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <FormControl>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Chọn đơn vị" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {donViList.map((d) => (
-                      <SelectItem key={d.id} value={d.id}>
-                        {d.ten}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="vaiTro"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel required>Vai trò</FormLabel>
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <FormControl>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Chọn vai trò" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {vaiTroOptions.map((v) => (
-                      <SelectItem key={v.ma} value={v.ma}>
-                        {v.ma} · {v.ten}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormDescription>Phạm vi dữ liệu được gán riêng ở màn hình Phân công.</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="trangThai"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel required>Trạng thái</FormLabel>
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <FormControl>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Chọn trạng thái" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {trangThaiOptions.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {t}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormDescription>Cán bộ nghỉ hoặc chuyển công tác chỉ đổi trạng thái, không xóa.</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormSpan className="sm:col-span-2">
+        <fieldset disabled={saving} className="space-y-6">
+          {error && (
+            <p role="alert" className="text-destructive rounded-md border p-3 text-sm">
+              {error}
+            </p>
+          )}
+          <FormSection title="Thông tin cán bộ" cols={2}>
+            {(
+              [
+                ["officerCode", "Mã số", "VD: KV10-011", 50],
+                ["fullName", "Họ và tên", "Họ và tên cán bộ", 150],
+                ["rank", "Cấp bậc", "VD: Đại úy", 100],
+                ["position", "Chức vụ", "VD: Cán bộ quản lý địa bàn", 150],
+                ["phone", "Điện thoại", "Số điện thoại liên hệ", 25],
+                ["email", "Email", "Địa chỉ email", 254],
+              ] as const
+            ).map(([name, label, placeholder, maxLength]) => (
+              <FormField
+                key={name}
+                control={form.control}
+                name={name}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel required>{label}</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        placeholder={placeholder}
+                        maxLength={maxLength}
+                        type={name === "email" ? "email" : name === "phone" ? "tel" : "text"}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            ))}
+          </FormSection>
+          <FormSection title="Đơn vị và vai trò nghiệp vụ" cols={2}>
             <FormField
               control={form.control}
-              name="ghiChu"
+              name="unitId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Ghi chú</FormLabel>
+                  <FormLabel required>Đơn vị</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Thông tin bổ sung…" {...field} />
+                    <select {...field} className={organizationSelectClass}>
+                      <option value="">Chọn đơn vị</option>
+                      {canBo && !selectedUnitPresent && (
+                        <option value={canBo.unitId}>{canBo.unitName} (đơn vị hiện tại)</option>
+                      )}
+                      {units.map((unit) => (
+                        <option key={unit.id} value={unit.id}>
+                          {unit.name}
+                          {unit.status === "INACTIVE" ? " (ngưng hoạt động)" : ""}
+                        </option>
+                      ))}
+                    </select>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-          </FormSpan>
-        </FormSection>
+            <FormField
+              control={form.control}
+              name="businessRole"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel required>Vai trò nghiệp vụ</FormLabel>
+                  <FormControl>
+                    <select {...field} className={organizationSelectClass}>
+                      <option value="">Chọn vai trò</option>
+                      {canBo && !selectedRolePresent && (
+                        <option value={canBo.businessRole}>
+                          {canBo.businessRole} (vai trò hiện tại)
+                        </option>
+                      )}
+                      {options.roles.map((role) => (
+                        <option key={role.code} value={role.code}>
+                          {role.code} · {role.name}
+                        </option>
+                      ))}
+                    </select>
+                  </FormControl>
+                  <FormDescription>
+                    Vai trò trong hồ sơ cán bộ được lưu riêng với quyền đăng nhập của tài khoản.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="notes"
+              render={({ field }) => (
+                <FormItem className="sm:col-span-2">
+                  <FormLabel>Ghi chú</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      {...field}
+                      placeholder="Thông tin bổ sung (không bắt buộc)"
+                      maxLength={2000}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </FormSection>
+          <p className="text-muted-foreground text-xs">
+            {canBo
+              ? "Thay đổi trạng thái công tác bằng chức năng Cập nhật trạng thái trong danh bạ."
+              : "Hồ sơ mới được tạo với trạng thái Đang công tác."}
+          </p>
+        </fieldset>
       </Form>
     </FormDialog>
   );

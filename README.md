@@ -1,5 +1,18 @@
 # Hệ thống Quản lý công tác PCCC & CNCH
 
+## Tổ chức, cán bộ và sự cố sau khi hợp nhất nhánh SCRUM-25
+
+`/to-chuc/don-vi`, `/to-chuc/can-bo` và `/su-co` dùng SQLite/API thật. M09 có hồ sơ,
+thiệt hại, phân công, tiến độ, tài liệu riêng tư và thống kê; `/su-co/thong-ke` đọc số liệu
+từ database. Cần cấp quyền M09 phù hợp ở `/quan-tri/vai-tro` trước khi sử dụng; seed không
+tự cấp quyền M09. Hai API địa bàn có mục đích riêng: `/api/regions` phục vụ phân công
+phụ trách, còn `/api/organization/regions` phục vụ danh mục khu phố của M02. Các API
+Tổ chức và cán bộ khác xem [tài liệu backend](pccc-BE/README.md#tổ-chức-và-cán-bộ--uc-org-01-uc-org-02).
+
+Để tạo dữ liệu M09 mẫu, dùng script riêng `pccc-BE/scripts/seed-incidents-demo.js` với
+database tên `incidents-demo.sqlite` và thư mục upload riêng; script từ chối database đang
+chạy. Không chạy script này trên `pccc-BE/data/pccc.sqlite`.
+
 ## Phân công địa bàn và quản lý tài khoản — UC-ORG-03, UC-ADM-02
 
 `/to-chuc/khu-vuc` đã nối API thật: danh sách khu vực theo phạm vi, tạo/sửa khu vực (A05), phân công

@@ -84,7 +84,9 @@ test("dashboard totals and breakdowns agree for system-wide scope", async (t) =>
 
 test("dashboard follows unit, region, facility and empty scopes, including empty regions", async (t) => {
   const { db, get, login } = await fixture(t);
-  db.exec("INSERT INTO regions VALUES ('KP04','Khu phố 04 (mẫu)','DV-KV10')");
+  db.exec(
+    "INSERT INTO regions(id,name,unit_id,code) VALUES ('KP04','Khu phố 04 (mẫu)','DV-KV10','KP04')",
+  );
   const commander = await login("demo.chi-huy");
   assert.deepEqual((await get("/api/dashboard", commander)).data, {
     facilityCount: 2,

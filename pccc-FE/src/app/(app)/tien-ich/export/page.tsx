@@ -1,31 +1,111 @@
 import { Download, FileSpreadsheet, FileText, ShieldAlert, Table2 } from "lucide-react";
+import Link from "next/link";
+import { backendFetch, currentUser } from "@/lib/backend";
 
 import { PageHeader } from "@/components/shared/page-header";
 import { SectionCard } from "@/components/shared/section-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { baoCaoList, canBoList, coSoList, cuocKiemTraList, suCoList, viPhamList } from "@/data/mock";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { baoCaoList, canBoList, coSoList, cuocKiemTraList, viPhamList } from "@/data/mock";
 import { formatNumber } from "@/lib/utils";
 
 export const metadata = { title: "Kết xuất dữ liệu" };
 
 const boDuLieu = [
-  { ma: "R01", ten: "Danh sách cơ sở theo cán bộ/khu phố/trạng thái", soDong: coSoList.length, dinhDang: "Excel, CSV", phanHe: "M03" },
-  { ma: "R02", ten: "Tình trạng hồ sơ PCCC và chứng nhận sắp hết hạn", soDong: coSoList.length, dinhDang: "Excel", phanHe: "M03" },
-  { ma: "R03", ten: "Vi phạm, đình chỉ, không phép", soDong: viPhamList.length, dinhDang: "Excel, PDF", phanHe: "M04" },
-  { ma: "R04", ten: "Kế hoạch kiểm tra: chỉ tiêu, thực hiện, nợ", soDong: 8, dinhDang: "Excel", phanHe: "M06" },
-  { ma: "R05", ten: "Hồ sơ cuộc kiểm tra và kết quả", soDong: cuocKiemTraList.length, dinhDang: "Excel", phanHe: "M06" },
+  {
+    ma: "R01",
+    ten: "Danh sách cơ sở theo cán bộ/khu phố/trạng thái",
+    soDong: coSoList.length,
+    dinhDang: "Excel, CSV",
+    phanHe: "M03",
+  },
+  {
+    ma: "R02",
+    ten: "Tình trạng hồ sơ PCCC và chứng nhận sắp hết hạn",
+    soDong: coSoList.length,
+    dinhDang: "Excel",
+    phanHe: "M03",
+  },
+  {
+    ma: "R03",
+    ten: "Vi phạm, đình chỉ, không phép",
+    soDong: viPhamList.length,
+    dinhDang: "Excel, PDF",
+    phanHe: "M04",
+  },
+  {
+    ma: "R04",
+    ten: "Kế hoạch kiểm tra: chỉ tiêu, thực hiện, nợ",
+    soDong: 8,
+    dinhDang: "Excel",
+    phanHe: "M06",
+  },
+  {
+    ma: "R05",
+    ten: "Hồ sơ cuộc kiểm tra và kết quả",
+    soDong: cuocKiemTraList.length,
+    dinhDang: "Excel",
+    phanHe: "M06",
+  },
   { ma: "R06", ten: "Công việc và KPI theo cán bộ", soDong: 48, dinhDang: "Excel", phanHe: "M07" },
-  { ma: "R08", ten: "Báo cáo và deadline", soDong: baoCaoList.length, dinhDang: "Excel", phanHe: "M08" },
-  { ma: "R09", ten: "Thống kê sự cố theo thời gian và loại", soDong: suCoList.length, dinhDang: "Excel, PDF", phanHe: "M09" },
-  { ma: "R10", ten: "Thiệt hại về người và tài sản", soDong: suCoList.length, dinhDang: "Excel", phanHe: "M09" },
-  { ma: "R11", ten: "Chất lượng dữ liệu: hồ sơ thiếu trường/thiếu file", soDong: coSoList.length, dinhDang: "Excel", phanHe: "M11" },
-  { ma: "R12", ten: "Nhật ký thay đổi theo người dùng/đối tượng", soDong: 40, dinhDang: "Excel", phanHe: "M01" },
+  {
+    ma: "R08",
+    ten: "Báo cáo và deadline",
+    soDong: baoCaoList.length,
+    dinhDang: "Excel",
+    phanHe: "M08",
+  },
+  {
+    ma: "R09",
+    ten: "Thống kê sự cố theo thời gian và loại",
+    soDong: null,
+    dinhDang: "Thống kê từ SQLite",
+    phanHe: "M09",
+  },
+  {
+    ma: "R10",
+    ten: "Thiệt hại về người và tài sản",
+    soDong: null,
+    dinhDang: "Thống kê từ SQLite",
+    phanHe: "M09",
+  },
+  {
+    ma: "R11",
+    ten: "Chất lượng dữ liệu: hồ sơ thiếu trường/thiếu file",
+    soDong: coSoList.length,
+    dinhDang: "Excel",
+    phanHe: "M11",
+  },
+  {
+    ma: "R12",
+    ten: "Nhật ký thay đổi theo người dùng/đối tượng",
+    soDong: 40,
+    dinhDang: "Excel",
+    phanHe: "M01",
+  },
 ];
 
-export default function TrangExport() {
+export default async function TrangExport() {
+  const user = await currentUser();
+  const canSeeIncidentStatistics = user.permissions.includes("M09.export");
+  let incidentCount: number | null = null;
+  if (canSeeIncidentStatistics) {
+    try {
+      const response = await backendFetch("/api/incidents/statistics");
+      if (response.ok) incidentCount = (await response.json()).total;
+    } catch {
+      /* The statistics page offers a retry if the backend is unavailable. */
+    }
+  }
   return (
     <div className="space-y-5">
       <PageHeader
@@ -73,29 +153,46 @@ export default function TrangExport() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {boDuLieu.map((b) => (
-              <TableRow key={b.ma}>
-                <TableCell>
-                  <Badge variant="secondary" className="font-mono">
-                    {b.ma}
-                  </Badge>
-                </TableCell>
-                <TableCell className="font-medium">{b.ten}</TableCell>
-                <TableCell>
-                  <Badge variant="outline" className="font-mono text-[11px]">
-                    {b.phanHe}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right tabular-nums">{formatNumber(b.soDong)}</TableCell>
-                <TableCell className="text-muted-foreground text-[13px]">{b.dinhDang}</TableCell>
-                <TableCell className="text-right">
-                  <Button variant="outline" size="sm">
-                    <FileSpreadsheet />
-                    Xuất
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
+            {boDuLieu
+              .filter((b) => b.phanHe !== "M09" || canSeeIncidentStatistics)
+              .map((b) => (
+                <TableRow key={b.ma}>
+                  <TableCell>
+                    <Badge variant="secondary" className="font-mono">
+                      {b.ma}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="font-medium">{b.ten}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="font-mono text-[11px]">
+                      {b.phanHe}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {b.phanHe === "M09"
+                      ? incidentCount == null
+                        ? "Chưa tải được"
+                        : formatNumber(incidentCount)
+                      : formatNumber(b.soDong ?? 0)}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-[13px]">{b.dinhDang}</TableCell>
+                  <TableCell className="text-right">
+                    {b.phanHe === "M09" ? (
+                      <Button variant="outline" size="sm" asChild>
+                        <Link href="/su-co/thong-ke">
+                          <FileSpreadsheet />
+                          Xem số liệu
+                        </Link>
+                      </Button>
+                    ) : (
+                      <Button variant="outline" size="sm">
+                        <FileSpreadsheet />
+                        Xuất
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
           </TableBody>
         </Table>
       </SectionCard>
@@ -104,9 +201,10 @@ export default function TrangExport() {
         <CardContent className="flex items-start gap-2.5 pt-5 text-[13px]">
           <ShieldAlert className="text-destructive mt-0.5 size-4 shrink-0" />
           <p className="text-muted-foreground">
-            <strong className="text-foreground font-semibold">Kiểm soát dữ liệu xuất:</strong> mỗi lần kết
-            xuất đều ghi nhật ký người thực hiện, phạm vi và thời gian (NFR-03). Cần phân loại rõ dữ liệu
-            được phép xuất, dữ liệu phải mã hóa và ai được quyền tải (URD mục 10, Q12).
+            <strong className="text-foreground font-semibold">Kiểm soát dữ liệu xuất:</strong> mỗi
+            lần kết xuất đều ghi nhật ký người thực hiện, phạm vi và thời gian (NFR-03). Cần phân
+            loại rõ dữ liệu được phép xuất, dữ liệu phải mã hóa và ai được quyền tải (URD mục 10,
+            Q12).
           </p>
         </CardContent>
       </Card>
