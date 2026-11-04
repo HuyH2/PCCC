@@ -1,10 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
+import { inflateRawSync } from "node:zlib";
 
 import { openDatabase, transaction } from "../src/core/database.js";
 import { seedDemo } from "../src/core/seed.js";
 import { createApp } from "../src/app.js";
+import { businessDate } from "../src/core/time.js";
 
 const password = "Report-export-test-2026";
 const origin = "http://localhost:3000";
@@ -56,6 +58,23 @@ async function fixture(t) {
     return response.cookie;
   }
   return { db, request, binary, login };
+}
+
+function zipEntry(buffer, entryName) {
+  let offset = 0;
+  while (offset + 30 <= buffer.length && buffer.readUInt32LE(offset) === 0x04034b50) {
+    const method = buffer.readUInt16LE(offset + 8);
+    const compressedSize = buffer.readUInt32LE(offset + 18);
+    const nameLength = buffer.readUInt16LE(offset + 26);
+    const extraLength = buffer.readUInt16LE(offset + 28);
+    const nameStart = offset + 30;
+    const name = buffer.toString("utf8", nameStart, nameStart + nameLength);
+    const dataStart = nameStart + nameLength + extraLength;
+    const compressed = buffer.subarray(dataStart, dataStart + compressedSize);
+    if (name === entryName) return method === 8 ? inflateRawSync(compressed) : compressed;
+    offset = dataStart + compressedSize;
+  }
+  throw new Error(`Missing XLSX entry: ${entryName}`);
 }
 
 test("migration adds report tables and M08 report grants", async (t) => {
@@ -172,9 +191,11 @@ test("types, options and previews enforce filters and data scope", async (t) => 
     inspections.data.rows.every((row) => row.facility_name !== "Cơ sở CS003 (dữ liệu mẫu)"),
   );
 
-  const tasks = await request("/api/report-export/preview?type=R06&from=2026-10-01&to=2026-10-31", {
-    cookie: commander,
-  });
+  const today = businessDate();
+  const tasks = await request(
+    `/api/report-export/preview?type=R06&from=${today.slice(0, 8)}01&to=${today}`,
+    { cookie: commander },
+  );
   assert.equal(tasks.status, 200);
   assert.ok(tasks.data.total >= 1);
   assert.ok(tasks.data.columns.some((column) => column.key === "completion_rate"));
@@ -234,11 +255,36 @@ test("exports XLSX/PDF, stores history and protects download", async (t) => {
   assert.match(xlsx.data.item.file_name, /^BC-R01-\d{8}-[A-F0-9]+\.xlsx$/);
   assert.ok(xlsx.data.item.download_url);
 
+  const filteredPreview = await request("/api/report-export/preview?type=R01&regionId=KP01", {
+    cookie: commander,
+  });
+  assert.equal(filteredPreview.status, 200);
+  assert.deepEqual(
+    filteredPreview.data.rows.map((row) => row.id),
+    ["CS001"],
+  );
+  const filteredXlsx = await request("/api/report-export/exports", {
+    method: "POST",
+    cookie: commander,
+    body: { reportTypeId: "R01", regionId: "KP01", format: "xlsx" },
+  });
+  assert.equal(filteredXlsx.status, 201);
+  assert.equal(filteredXlsx.data.item.row_count, filteredPreview.data.total);
+
   const xlsxFile = await binary(xlsx.data.item.download_url, { cookie: commander });
   assert.equal(xlsxFile.status, 200);
   assert.match(xlsxFile.headers.get("content-type"), /spreadsheetml/);
   assert.equal(xlsxFile.buffer.subarray(0, 2).toString(), "PK");
   assert.ok(xlsxFile.buffer.length > 2000);
+  const xlsxSheet = zipEntry(xlsxFile.buffer, "xl/worksheets/sheet2.xml").toString("utf8");
+  for (const row of filteredPreview.data.rows) assert.ok(xlsxSheet.includes(row.id));
+  const filteredFile = await binary(filteredXlsx.data.item.download_url, { cookie: commander });
+  const filteredSheet = zipEntry(filteredFile.buffer, "xl/worksheets/sheet2.xml").toString("utf8");
+  assert.ok(filteredSheet.includes("CS001"));
+  assert.ok(
+    !filteredSheet.includes("CS002"),
+    "XLSX should exclude rows outside the selected region",
+  );
   assert.equal((await binary(xlsx.data.item.download_url)).status, 401);
   assert.equal((await binary(xlsx.data.item.download_url, { cookie: other })).status, 403);
   assert.equal((await binary(xlsx.data.item.download_url, { cookie: admin })).status, 200);
@@ -255,6 +301,8 @@ test("exports XLSX/PDF, stores history and protects download", async (t) => {
   assert.equal(pdfFile.headers.get("content-type"), "application/pdf");
   assert.equal(pdfFile.buffer.subarray(0, 8).toString(), "%PDF-1.7");
   assert.ok(pdfFile.buffer.length > 100_000);
+  assert.match(pdfFile.buffer.toString("latin1"), /\/Type \/Pages\b/);
+  assert.match(pdfFile.buffer.toString("latin1"), /\/Type \/Page\b/);
   assert.ok(await db.prepare("SELECT 1 FROM report_export_submissions WHERE file_size > 0").get());
   assert.ok(
     await db
@@ -272,10 +320,10 @@ test("exports XLSX/PDF, stores history and protects download", async (t) => {
 
   const history = await request("/api/report-export/exports", { cookie: commander });
   assert.equal(history.status, 200);
-  assert.equal(history.data.total, 2);
+  assert.equal(history.data.total, 3);
   assert.ok(history.data.items.every((item) => item.status === "completed"));
   assert.ok(history.data.items.every((item) => item.download_url));
-  assert.equal((await request("/api/report-export/exports", { cookie: admin })).data.total, 2);
+  assert.equal((await request("/api/report-export/exports", { cookie: admin })).data.total, 3);
   assert.equal((await request("/api/report-export/exports", { cookie: other })).data.total, 0);
 });
 
