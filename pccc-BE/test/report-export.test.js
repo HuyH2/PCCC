@@ -6,6 +6,7 @@ import { inflateRawSync } from "node:zlib";
 import { openDatabase, transaction } from "../src/core/database.js";
 import { seedDemo } from "../src/core/seed.js";
 import { createApp } from "../src/app.js";
+import { businessDate } from "../src/core/time.js";
 
 const password = "Report-export-test-2026";
 const origin = "http://localhost:3000";
@@ -190,9 +191,11 @@ test("types, options and previews enforce filters and data scope", async (t) => 
     inspections.data.rows.every((row) => row.facility_name !== "Cơ sở CS003 (dữ liệu mẫu)"),
   );
 
-  const tasks = await request("/api/report-export/preview?type=R06&from=2026-10-01&to=2026-10-31", {
-    cookie: commander,
-  });
+  const today = businessDate();
+  const tasks = await request(
+    `/api/report-export/preview?type=R06&from=${today.slice(0, 8)}01&to=${today}`,
+    { cookie: commander },
+  );
   assert.equal(tasks.status, 200);
   assert.ok(tasks.data.total >= 1);
   assert.ok(tasks.data.columns.some((column) => column.key === "completion_rate"));
@@ -256,7 +259,10 @@ test("exports XLSX/PDF, stores history and protects download", async (t) => {
     cookie: commander,
   });
   assert.equal(filteredPreview.status, 200);
-  assert.deepEqual(filteredPreview.data.rows.map((row) => row.id), ["CS001"]);
+  assert.deepEqual(
+    filteredPreview.data.rows.map((row) => row.id),
+    ["CS001"],
+  );
   const filteredXlsx = await request("/api/report-export/exports", {
     method: "POST",
     cookie: commander,
@@ -275,7 +281,10 @@ test("exports XLSX/PDF, stores history and protects download", async (t) => {
   const filteredFile = await binary(filteredXlsx.data.item.download_url, { cookie: commander });
   const filteredSheet = zipEntry(filteredFile.buffer, "xl/worksheets/sheet2.xml").toString("utf8");
   assert.ok(filteredSheet.includes("CS001"));
-  assert.ok(!filteredSheet.includes("CS002"), "XLSX should exclude rows outside the selected region");
+  assert.ok(
+    !filteredSheet.includes("CS002"),
+    "XLSX should exclude rows outside the selected region",
+  );
   assert.equal((await binary(xlsx.data.item.download_url)).status, 401);
   assert.equal((await binary(xlsx.data.item.download_url, { cookie: other })).status, 403);
   assert.equal((await binary(xlsx.data.item.download_url, { cookie: admin })).status, 200);
@@ -311,10 +320,10 @@ test("exports XLSX/PDF, stores history and protects download", async (t) => {
 
   const history = await request("/api/report-export/exports", { cookie: commander });
   assert.equal(history.status, 200);
-  assert.equal(history.data.total, 2);
+  assert.equal(history.data.total, 3);
   assert.ok(history.data.items.every((item) => item.status === "completed"));
   assert.ok(history.data.items.every((item) => item.download_url));
-  assert.equal((await request("/api/report-export/exports", { cookie: admin })).data.total, 2);
+  assert.equal((await request("/api/report-export/exports", { cookie: admin })).data.total, 3);
   assert.equal((await request("/api/report-export/exports", { cookie: other })).data.total, 0);
 });
 

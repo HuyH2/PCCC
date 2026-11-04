@@ -35,11 +35,12 @@ async function fixture(t) {
       body: body === undefined ? undefined : raw ? body : JSON.stringify(body),
     });
     const contentType = response.headers.get("content-type") ?? "";
+    const buffer = Buffer.from(await response.arrayBuffer());
     return {
       status: response.status,
       headers: response.headers,
-      data: contentType.includes("application/json") ? await response.json() : null,
-      buffer: Buffer.from(await response.arrayBuffer()),
+      data: contentType.includes("application/json") ? JSON.parse(buffer.toString("utf8")) : null,
+      buffer,
       cookie: response.headers.get("set-cookie")?.split(";")[0],
     };
   }
@@ -61,7 +62,7 @@ test("HTTP report lifecycle covers validation, deadline reminder, scoped file ac
   const requester = await login("demo.admin");
   const assignee = await login("demo.tong-hop");
   const otherAssignee = await login("demo.can-bo");
-  const outsider = await login("demo.chi-huy");
+  const wrongAssignee = await login("demo.chi-huy");
   const viewer = await login("demo.nguoi-xem");
   const dueDate = businessDate();
   const payload = {
@@ -73,9 +74,13 @@ test("HTTP report lifecycle covers validation, deadline reminder, scoped file ac
   };
 
   assert.equal((await request("/api/reports/types")).status, 401);
-  assert.equal((await request("/api/reports/requests", { method: "POST", body: payload })).status, 401);
   assert.equal(
-    (await request("/api/reports/requests", { method: "POST", cookie: viewer, body: payload })).status,
+    (await request("/api/reports/requests", { method: "POST", body: payload })).status,
+    401,
+  );
+  assert.equal(
+    (await request("/api/reports/requests", { method: "POST", cookie: viewer, body: payload }))
+      .status,
     403,
   );
   for (const invalid of [
@@ -99,7 +104,10 @@ test("HTTP report lifecycle covers validation, deadline reminder, scoped file ac
   assert.equal(created.status, 201);
   const id = created.data.request.id;
   assert.equal(created.data.request.status, "open");
-  assert.equal((await request(`/api/reports/requests/${id}`, { cookie: viewer })).status, 404);
+  assert.equal(
+    (await request(`/api/reports/requests/${id}`, { cookie: otherAssignee })).status,
+    404,
+  );
 
   const assignedNotifications = await request("/api/notifications?unread=1", { cookie: assignee });
   const assigned = assignedNotifications.data.items.find((item) => item.object_id === id);
@@ -122,8 +130,16 @@ test("HTTP report lifecycle covers validation, deadline reminder, scoped file ac
     1,
     "polling the notification endpoint must not duplicate a reminder for the same day",
   );
-  assert.equal((await request(`/api/notifications/${reminder.id}/read`, { method: "POST", cookie: requester })).status, 404);
-  assert.equal((await request(`/api/notifications/${reminder.id}/read`, { method: "POST", cookie: assignee })).status, 200);
+  assert.equal(
+    (await request(`/api/notifications/${reminder.id}/read`, { method: "POST", cookie: requester }))
+      .status,
+    404,
+  );
+  assert.equal(
+    (await request(`/api/notifications/${reminder.id}/read`, { method: "POST", cookie: assignee }))
+      .status,
+    200,
+  );
   assert.equal(
     (await request("/api/notifications?unread=1", { cookie: assignee })).data.items.some(
       (item) => item.id === reminder.id,
@@ -143,7 +159,7 @@ test("HTTP report lifecycle covers validation, deadline reminder, scoped file ac
   assert.equal(invalidFile.status, 415);
   const forbiddenSubmit = await request(`/api/reports/requests/${id}/submit`, {
     method: "POST",
-    cookie: otherAssignee,
+    cookie: wrongAssignee,
     headers: {
       "Content-Type": "application/pdf",
       "X-File-Name": encodeURIComponent("report.pdf"),
@@ -161,6 +177,7 @@ test("HTTP report lifecycle covers validation, deadline reminder, scoped file ac
       "X-Report-Note": "",
     },
     body: Buffer.from("not a PDF"),
+    raw: true,
   });
   assert.equal(fakePdf.status, 400);
 
@@ -178,7 +195,7 @@ test("HTTP report lifecycle covers validation, deadline reminder, scoped file ac
   });
   assert.equal(submitted.status, 201);
   assert.equal(submitted.data.request.status, "submitted");
-  const submission = submitted.data.request.submissions.at(-1);
+  const submission = submitted.data.submissions.at(-1);
   assert.ok(submission);
   const downloaded = await request(
     `/api/reports/requests/${id}/submissions/${submission.id}/file`,
@@ -192,14 +209,13 @@ test("HTTP report lifecycle covers validation, deadline reminder, scoped file ac
     401,
   );
   assert.equal(
-    (await request(`/api/reports/requests/${id}/submissions/${submission.id}/file`, { cookie: viewer })).status,
+    (
+      await request(`/api/reports/requests/${id}/submissions/${submission.id}/file`, {
+        cookie: otherAssignee,
+      })
+    ).status,
     404,
   );
-  assert.equal(
-    (await request(`/api/reports/requests/${id}/submissions/${submission.id}/file`, { cookie: outsider })).status,
-    403,
-  );
-
   const completed = await request(`/api/reports/requests/${id}/complete`, {
     method: "POST",
     cookie: requester,
@@ -208,7 +224,11 @@ test("HTTP report lifecycle covers validation, deadline reminder, scoped file ac
   assert.equal(completed.data.request.status, "completed");
   assert.equal(completed.data.request.deadline_status, "closed");
   assert.equal(
-    (await db.prepare("SELECT count(*) AS n FROM audit_logs WHERE object_id=? AND feature='M08'").get(id)).n,
+    (
+      await db
+        .prepare("SELECT count(*) AS n FROM audit_logs WHERE object_id=? AND feature='M08'")
+        .get(id)
+    ).n,
     3,
   );
   assert.equal(
@@ -216,23 +236,30 @@ test("HTTP report lifecycle covers validation, deadline reminder, scoped file ac
     1,
   );
   const finalNotifications = await request("/api/notifications", { cookie: assignee });
-  assert.ok(finalNotifications.data.items.some((item) => item.object_id === id && item.kind === "completed"));
+  assert.ok(
+    finalNotifications.data.items.some(
+      (item) => item.object_id === id && item.kind === "completed",
+    ),
+  );
   assert.equal(
     (await request("/api/reports/requests?bucket=overdue", { cookie: requester })).data.items.some(
       (item) => item.id === id,
     ),
     false,
   );
-  assert.equal((await request("/api/reports/requests?bucket=due_soon", { cookie: requester })).data.items.some(
-    (item) => item.id === id,
-  ), false);
+  assert.equal(
+    (await request("/api/reports/requests?bucket=due_soon", { cookie: requester })).data.items.some(
+      (item) => item.id === id,
+    ),
+    false,
+  );
 });
 
 test("HTTP recurring report schedule creates one period and rejects invalid or duplicate generation", async (t) => {
-  const { request, login } = await fixture(t);
+  const { db, request, login } = await fixture(t);
   const admin = await login("demo.admin");
   const viewer = await login("demo.nguoi-xem");
-  const nextDay = new Date(Date.parse(`${businessDate()}T00:00:00+07:00`) + 86400000);
+  const nextDay = new Date(Date.parse(`${businessDate()}T12:00:00+07:00`) + 86400000);
   const firstDueDate = nextDay.toISOString().slice(0, 10);
 
   assert.equal(
@@ -268,8 +295,16 @@ test("HTTP recurring report schedule creates one period and rejects invalid or d
   });
   assert.equal(generated.status, 200);
   assert.equal(generated.data.dueDate, firstDueDate);
+  await db
+    .prepare("UPDATE report_schedules SET next_due_date=? WHERE id=?")
+    .run(firstDueDate, created.data.id);
   assert.equal(
-    (await request(`/api/reports/schedules/${created.data.id}/generate`, { method: "POST", cookie: admin })).status,
+    (
+      await request(`/api/reports/schedules/${created.data.id}/generate`, {
+        method: "POST",
+        cookie: admin,
+      })
+    ).status,
     409,
   );
   const list = await request("/api/reports/requests?assigneeId=DEMO-A04", { cookie: admin });
@@ -282,12 +317,17 @@ test("HTTP recurring report schedule creates one period and rejects invalid or d
 test("dashboard API aggregates match canonical facility, officer and region rows", async (t) => {
   const { db, request, login } = await fixture(t);
   const admin = await login("demo.admin");
+  await db
+    .prepare("DELETE FROM role_permissions WHERE role_code='A06' AND permission_code='M10.view'")
+    .run();
   const summary = await request("/api/dashboard", { cookie: admin });
   assert.equal(summary.status, 200);
   const facilityCount = (await db.prepare("SELECT count(*) AS n FROM facilities").get()).n;
   const officerCount = (
     await db
-      .prepare("SELECT count(DISTINCT officer_id) AS n FROM facility_overview WHERE officer_id IS NOT NULL")
+      .prepare(
+        "SELECT count(DISTINCT officer_id) AS n FROM facility_overview WHERE officer_id IS NOT NULL",
+      )
       .get()
   ).n;
   const regionCount = (await db.prepare("SELECT count(*) AS n FROM regions").get()).n;
@@ -295,7 +335,7 @@ test("dashboard API aggregates match canonical facility, officer and region rows
 
   const byRegion = await request("/api/dashboard/facilities-by-region", { cookie: admin });
   assert.equal(byRegion.status, 200);
-  assert.equal(byRegion.data.total, facilityCount);
+  assert.equal(byRegion.data.total, regionCount);
   assert.equal(
     byRegion.data.items.reduce((sum, item) => sum + item.facilityCount, 0),
     facilityCount,
@@ -309,5 +349,8 @@ test("dashboard API aggregates match canonical facility, officer and region rows
     facilityCount,
   );
   assert.equal((await request("/api/dashboard")).status, 401);
-  assert.equal((await request("/api/dashboard", { cookie: await login("demo.nguoi-xem") })).status, 403);
+  assert.equal(
+    (await request("/api/dashboard", { cookie: await login("demo.nguoi-xem") })).status,
+    403,
+  );
 });

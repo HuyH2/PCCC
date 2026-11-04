@@ -374,9 +374,9 @@ Thêm mục mới **ở cuối** danh sách, theo mẫu ở §7.
 ### F15 — Kiểm thử báo cáo, deadline, notification và Dashboard (UC-RPT-01..06, UC-SYS-02/03) — đang kiểm chứng
 
 - **Người làm / branch:** Codex — `test/report-deadline-notification-dashboard`.
-- **Mô tả:** Đang bổ sung kiểm thử API end-to-end cho tạo yêu cầu, deadline, nhắc việc, nộp/tải file, hoàn thành, lịch định kỳ và đối chiếu số liệu Dashboard với nguồn dữ liệu; mở rộng kiểm tra nội dung XLSX theo bộ lọc.
+- **Mô tả:** Bổ sung kiểm thử API end-to-end cho tạo yêu cầu, deadline, nhắc việc, nộp/tải file, hoàn thành, lịch định kỳ và đối chiếu số liệu Dashboard với nguồn dữ liệu; mở rộng kiểm tra nội dung XLSX theo bộ lọc.
 - **Backend/Test:** `pccc-BE/test/report-workflow.test.js`; mở rộng `pccc-BE/test/report-export.test.js`; ma trận, trạng thái và bước retest ở `pccc-BE/REPORT_DEADLINE_TEST_REPORT.md`.
-- **Kết quả xác minh:** Chưa chạy runtime test vì package chưa có trong `node_modules` và npm registry trả `EACCES` khi cài frozen lockfile. Không có kết quả test nào được báo PASS.
+- **Kết quả xác minh:** 20/20 test trong bốn suite liên quan PASS; `pnpm format:check` và `pnpm --filter pccc-be check` PASS. UI và mở file bằng ứng dụng văn phòng/PDF chưa kiểm thủ công.
 - **Giới hạn:** Chưa chạy kiểm thử trình duyệt hoặc mở file bằng ứng dụng văn phòng/PDF; nhắc deadline hiện được refresh khi API notification được gọi, không xác minh scheduler nền. Dashboard hiện thống kê cơ sở/cán bộ/khu vực, không thống kê báo cáo.
 
 ## 7. Quy tắc khi làm feature
