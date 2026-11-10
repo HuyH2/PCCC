@@ -1,0 +1,8 @@
+
+> pccc@1.0.0 typecheck C:\Users\ASUS\Downloads\node_54-main\node_54-main\os\PCCC
+> pnpm --filter pccc-fe typecheck
+
+
+> pccc-fe@1.0.0 typecheck C:\Users\ASUS\Downloads\node_54-main\node_54-main\os\PCCC\pccc-FE
+> tsc --noEmit
+

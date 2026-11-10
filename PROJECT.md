@@ -362,6 +362,24 @@ Thêm mục mới **ở cuối** danh sách, theo mẫu ở §7.
 - **Test:** `pccc-BE/test/facilities.test.js` kiểm tra tạo mới, validation, duplicate, audit, scope, filter và quyền.
 - **Ghi chú:** Schema hiện tại chỉ lưu tên, địa chỉ, khu vực, cán bộ và trạng thái. Các thuộc tính mock như diện tích, số tầng, thông tin liên hệ và lịch kiểm tra không được giả lập là đã lưu.
 
+### F14 — QA/UAT Phân hệ M07 & Hồ sơ Kiểm thử Toàn hệ thống (UC-WRK-01..06, QA-UAT-M07)
+
+- **Người làm / branch:** QA Lead / Business Analyst — `feature/documentation-qa-uat`
+- **Mô tả:** Hoàn thiện bộ hồ sơ kiểm thử chuyên nghiệp cho toàn bộ 6 Use Cases phân hệ M07 (Lịch công tác, Giao việc, Tiến độ & Hoàn thành, KPI & Nợ chỉ tiêu, Giải trình & Xóa nợ, Trao đổi tin nhắn thread per task) và chuẩn hóa tài liệu nghiệp vụ, RTM, Test Plan, UAT toàn hệ thống.
+- **Backend:** Bộ test suite `pccc-BE/test/m07-e2e.test.js` (8 bài kiểm thử lớn bao phủ 4 luồng E2E cốt lõi, 10 ca kiểm thử ngoại lệ NEG-01..10, ca kiểm thử tích hợp INT-01..04, kiểm soát xung đột đồng thời HTTP 409 với mã lỗi hệ thống NO_CHANGE/TASK_CLOSED/EXPLANATION_CLOSED, tính toán múi giờ Việt Nam, xác thực CSRF/Origin). Tổng test assertions backend đạt 168/168 tests PASS 100% (thời lượng 22.9s, log `final_pnpm_test_run.log`).
+- **Frontend & Giao diện:** Kiểm chứng toàn vẹn 5 màn hình phân hệ M07 (`/cong-viec/lich`, `/cong-viec/giao-viec`, `/cong-viec/giao-viec/[id]`, `/cong-viec/kpi`, `/cong-viec/giai-trinh`) kết nối trực tiếp API backend thật, responsive mobile 390px PWA, tiếng Việt có dấu, định dạng ngày chuẩn VN.
+- **Hồ sơ nghiệm thu & Tài liệu:**
+  - `docs/M07_Test_Cases_WRK.md` (59 Test Cases: 51 PASS, 8 NOT RUN, 0 FAIL) & sheet `M07_WRK` trong `Test_Plan_Test_Cases_PCCC.xlsx`.
+  - `docs/M07_Test_Execution_Report.md` (Báo cáo thực thi thực tế: 51 PASS, 0 FAIL, 8 NOT RUN).
+  - `docs/M07_Bug_Report_Retest.md` (0 Bug Blocker/Critical/Major; 1 tồn đọng Minor về upload file giải trình đề xuất chuyển GĐ2 chờ BA/PO phê duyệt).
+  - `docs/M07_Sign_off.md` (Biên bản nghiệm thu kỹ thuật Đạt có điều kiện: M07 đạt 5/6 UC 'Đầy đủ + có test').
+  - `docs/Functional_Specification_PCCC.md` v2.0 (chuẩn hóa đầy đủ 11 phân hệ, 56 UC toàn hệ thống).
+  - `docs/Requirements_Traceability_Matrix.md` & `.xlsx` v2.0 (chuẩn hóa 56 UC, 28 UC Đầy đủ, 8 UC chưa test đủ).
+  - `docs/Test_Plan_Test_Cases_PCCC.md` & `.xlsx` v2.0 (64 Base TCs: 54 PASS, 10 NOT RUN; chuẩn hóa mã TC-WRK-03-01).
+  - `docs/QA_UAT_Test_Summary.md` v2.0 (Tổng kết kiểm thử toàn diện 11 module; xác thực log typecheck/lint 0 lỗi).
+  - `docs/UAT_Scripts.md` (Kịch bản UAT phân vai A01-A06, chuẩn hóa quy tắc nghiệp vụ bảo mật và lịch 7 ngày liên tiếp).
+  - `docs/User_Manual_PCCC.md` v2.0 (chuẩn hóa nghiệp vụ toàn hệ thống).
+
 ## 7. Quy tắc khi làm feature
 
 Bắt buộc với mọi feature mới (người hoặc AI agent):

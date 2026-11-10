@@ -175,6 +175,46 @@ Thực hiện qua trang **Vi phạm - Đình chỉ** (`/vi-pham`):
 3. Nhập lý do và số quyết định
 4. Xác nhận
 
+### 4.6 Quản lý Lịch công tác, Giao việc & Nghiệm thu (M07)
+
+#### Xem lịch công tác & Việc quá hạn (`/cong-viec/lich`)
+1. Vào menu **Lịch & Công việc → Lịch công tác hàng ngày**.
+2. Xem danh sách công việc phân bổ trong 7 ngày tới (ngày hôm nay có viền nổi bật).
+3. Theo dõi khối thẻ đỏ **Công việc quá hạn** để đôn đốc cán bộ hoàn thành kịp thời (việc đến hạn hôm nay chưa quá hạn cho đến hết ngày).
+
+#### Giao việc mới cho cán bộ (`/cong-viec/giao-viec`)
+1. Vào **Giao việc & theo dõi tiến độ**, nhấn nút **Giao việc** (hiển thị cho A01/A02/A05).
+2. Điền thông tin nhiệm vụ:
+   - **Tên công việc:** Nhập ngắn gọn, rõ ràng (tối đa 200 ký tự).
+   - **Mô tả:** Chi tiết nội dung kiểm tra, yêu cầu nghiệp vụ (tối đa 4000 ký tự).
+   - **Loại công việc:** Chọn `Định kỳ` (routine), `Đột xuất` (unscheduled), hoặc `Được giao` (assigned).
+   - **Hạn hoàn thành:** Chọn ngày cụ thể (định dạng `YYYY-MM-DD`).
+   - **Cán bộ thực hiện:** Chọn cán bộ từ danh sách thả xuống (chỉ hiển thị cán bộ active thuộc phạm vi đơn vị).
+3. Nhấn **Giao việc**. Công việc sẽ xuất hiện ở trạng thái `Đang thực hiện` với tiến độ `0%`.
+
+#### Nghiệm thu & Quản lý trạng thái công việc (`/cong-viec/giao-viec/[id]`)
+1. Mở trang chi tiết công việc.
+2. Xem toàn bộ timeline lịch sử tiến độ cán bộ đã cập nhật.
+3. **Hoàn thành công việc:** Khi cán bộ báo cáo xong, nhấn **Hoàn thành** kèm ghi chú nghiệm thu → Task chuyển sang trạng thái `Hoàn thành`, tiến độ chốt `100%`, ghi nhận ngày giờ hoàn tất.
+4. **Hủy công việc:** Nếu nhiệm vụ không còn cần thiết, nhấn **Hủy việc** (chỉ người giao mới có quyền).
+5. **Mở lại công việc:** Với công việc đã hủy, người giao có thể nhấn **Mở lại** để tiếp tục thực hiện.
+
+### 4.7 Quản lý KPI Đội & Phê duyệt Giải trình Xóa nợ (M07)
+
+#### Cấu hình chỉ tiêu KPI tháng (`/cong-viec/kpi`)
+1. Vào **KPI & Nợ chỉ tiêu**, chọn kỳ tháng cần xem xét (`YYYY-MM`).
+2. Xem thống kê toàn đội: Tổng số việc, Tỷ lệ hoàn thành trung bình, Tổng nợ lũy kế.
+3. Tại form **Thiết lập chỉ tiêu**: Chọn cán bộ, nhập số lượng việc mục tiêu (0 đến 10.000 việc), nhập ghi chú → Nhấn **Lưu chỉ tiêu**.
+
+#### Yêu cầu & Phê duyệt giải trình (`/cong-viec/giai-trinh`)
+1. **Yêu cầu giải trình:** Khi cán bộ nợ chỉ tiêu hoặc chậm tiến độ, nhấn **Yêu cầu giải trình mới** → Chọn cán bộ, chọn giải trình theo `Kỳ KPI` (hoặc `Công việc`), nhập lý do cần giải trình → Nhấn **Gửi yêu cầu**.
+2. **Phê duyệt giải trình:**
+   - Khi cán bộ gửi phản hồi, yêu cầu chuyển sang mục `Chờ chỉ huy xử lý`.
+   - Nhấn **Xử lý giải trình** → Xem xét lý do cán bộ nêu.
+   - Chọn **Chấp nhận** (accepted) nếu lý do chính đáng: Với giải trình theo kỳ KPI, hệ thống tự động **xóa nợ chỉ tiêu** của kỳ đó (`debt_waived=1`), không bị cộng dồn sang các tháng tiếp theo.
+   - Chọn **Không chấp nhận** (rejected) nếu lý do không thỏa đáng: Nợ chỉ tiêu tiếp tục được giữ nguyên.
+   - Nhập ghi chú giải thích và nhấn **Lưu quyết định**.
+
 ---
 
 ## 5. A02 — Tổ trưởng / Phó chỉ huy
@@ -204,7 +244,7 @@ Thực hiện qua trang **Vi phạm - Đình chỉ** (`/vi-pham`):
 
 1. Nhấn **Giao việc mới**
 2. Điền: Tiêu đề, Mô tả, Hạn hoàn thành, Cán bộ thực hiện
-3. Lưu → Cán bộ được thông báo
+3. Lưu → Công việc được tạo thành công và xuất hiện trực tiếp trong danh sách công việc của cán bộ tại màn hình Giao việc và Lịch công tác (hệ thống chưa có thông báo đẩy tự động do phân hệ M10 vẫn đang sử dụng mock dữ liệu)
 
 ---
 
@@ -264,12 +304,50 @@ Nhấn **Hoàn thành** → Trạng thái `Hoàn thành`
 3. Chọn cơ sở, nhập lý do, ngày thực hiện
 4. Tiếp tục như quy trình kiểm tra thông thường
 
-### 6.3 Trao đổi Công việc
+### 6.3 Quản lý Công việc, Cập nhật Tiến độ & Trao đổi Hội thoại (M07)
 
-1. Vào **Giao việc & Tiến độ → [Tên task]**
-2. Xem thread trao đổi
-3. Nhập tin nhắn → Gửi
-4. Cập nhật % tiến độ
+#### Xem danh sách nhiệm vụ được giao
+1. Vào **Lịch & Công việc → Giao việc & theo dõi tiến độ** (`/cong-viec/giao-viec`).
+2. Chọn tab **Việc của tôi** để xem danh sách các nhiệm vụ được phân công cho cá nhân.
+3. Lọc theo trạng thái (`Đang thực hiện`, `Hoàn thành`, `Đã hủy`) hoặc hạn (`Quá hạn`, `Tuần này`).
+4. Nhấn vào tên công việc để mở trang chi tiết (`/cong-viec/giao-viec/[id]`).
+
+#### Báo cáo cập nhật tiến độ
+1. Tại khối **Cập nhật tiến độ**:
+   - Di chuyển thanh trượt (slider) hoặc nhập giá trị từ `0` đến `100%`.
+   - Nhập ghi chú diễn giải các việc đã làm (vd: `Đã kiểm tra hệ thống báo cháy tầng 1 đến 5`).
+2. Nhấn **Cập nhật tiến độ**.
+3. **Quy tắc quan trọng:** Khi cập nhật đạt **100%**, công việc **chưa tự động đóng**. Trạng thái vẫn là `Đang thực hiện`.
+4. Khi toàn bộ hồ sơ và hiện trường đã hoàn tất, nhấn nút **Hoàn thành** tại khối Trạng thái để chính thức đóng công việc.
+
+#### Trao đổi tin nhắn nghiệp vụ với Chỉ huy (Thread Chat)
+1. Tại khối **Trao đổi theo công việc**:
+   - Khung chat hiển thị toàn bộ lịch sử trao đổi theo thứ tự thời gian.
+   - Nhập nội dung tin nhắn (tối đa 4000 ký tự) và nhấn **Gửi**.
+   - Tin nhắn mới sẽ xuất hiện ngay lập tức; phía Chỉ huy sẽ thấy tin nhắn tự động sau tối đa 5 giây (cơ chế tự làm mới).
+2. **Sửa tin nhắn:** Rê chuột vào tin nhắn của mình, nhấn biểu tượng cây bút để sửa nội dung.
+3. **Xóa tin nhắn:** Rê chuột vào tin nhắn của mình, nhấn biểu tượng thùng rác để xóa mềm (nội dung sẽ ẩn đi nhưng vẫn giữ vết thời gian).
+4. **Lưu ý:** Khi công việc đã `Hoàn thành` hoặc `Đã hủy`, khung chat sẽ tự động khóa để bảo toàn dữ liệu.
+
+### 6.4 Theo dõi KPI Cá nhân & Gửi Phản hồi Giải trình (M07)
+
+#### Tra cứu kết quả KPI cá nhân (`/cong-viec/kpi`)
+1. Vào **KPI & Nợ chỉ tiêu**, chọn kỳ tháng cần xem.
+2. Cán bộ chỉ nhìn thấy dữ liệu KPI của chính mình:
+   - **Chỉ tiêu tháng:** Số việc được giao hoàn thành.
+   - **Đã hoàn thành:** Số công việc có `completed_at` trong tháng.
+   - **Nợ kỳ trước:** Số việc chưa đạt từ các tháng trước dồn sang.
+   - **Tổng cần làm:** $\text{Chỉ tiêu} + \text{Nợ kỳ trước}$.
+   - **Điểm số KPI:** Tỷ lệ % hoàn thành (tối đa 100 điểm).
+   - **Nợ kỳ này:** Số việc còn thiếu sẽ bị mang sang tháng sau.
+
+#### Gửi phản hồi giải trình khi có yêu cầu (`/cong-viec/giai-trinh`)
+1. Vào **Giải trình công việc & KPI**.
+2. Tìm yêu cầu có trạng thái `Chờ cán bộ phản hồi` (thẻ màu vàng cam).
+3. Đọc lý do yêu cầu từ Chỉ huy.
+4. Nhấn **Gửi phản hồi giải trình** → Nhập rõ ràng nguyên nhân khách quan/chủ quan (vd: `Tập trung chữa cháy và cứu nạn vụ hỏa hoạn...`).
+5. Nhấn **Gửi giải trình** → Trạng thái chuyển sang `Chờ chỉ huy xử lý`.
+6. Theo dõi kết quả phê duyệt: Khi Chỉ huy duyệt `Chấp nhận`, nợ chỉ tiêu của tháng đó sẽ được xóa bỏ hoàn toàn.
 
 ---
 

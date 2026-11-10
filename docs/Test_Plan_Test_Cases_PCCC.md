@@ -90,9 +90,9 @@ Xác nhận mức độ đáp ứng của hệ thống so với 55 UC; tuyệt �
 | **TC-INS-09-01** | INS | UC-INS-09 | Tạo kiểm tra đột xuất | Session A03, cơ sở thuộc scope | POST `/api/inspections` { kind: 'unscheduled' } | 201, inspection planned | **PASS** | `inspections.test.js` | Suy từ RTM | Đột xuất |
 | **TC-INS-01-01** | INS | UC-INS-01 | Lập kế hoạch kiểm tra | Session A01/A02 | POST `/api/inspection-plans` | 201, kế hoạch tạo | **PASS** | `inspection-planning.test.js` | Ghi trong TC gốc | — |
 | **TC-INS-05-01** | INS | UC-INS-05 | Dời lịch kiểm tra | Session A02, có lý do | PUT `/api/inspections/:id/reschedule` | 200, lịch cập nhật | **PASS** | `inspection-planning.test.js` | Suy từ RTM | R-302 |
-| **TC-WRK-02-01** | WRK | UC-WRK-02 | Tạo task và giao việc | Session A01/A02 | POST `/api/tasks` | 201, task tạo | **NOT RUN** | — | Suy từ RTM | Chưa có test script |
-| **TC-WRK-03-01** | WRK | UC-WRK-03 | Gửi tin nhắn theo task | Session người dùng liên quan | POST `/api/tasks/:id/messages` | 201, tin nhắn lưu | **PASS** | `task-messages.test.js` | Ghi trong TC gốc | Thread message |
-| **TC-WRK-03-02** | WRK | UC-WRK-03 | Xem thread trao đổi | Session người dùng liên quan | GET `/api/tasks/:id/messages` | 200, danh sách messages | **PASS** | `task-messages.test.js` | Suy từ RTM | — |
+| **TC-WRK-02-01** | WRK | UC-WRK-02 | Tạo task và giao việc | Session A01/A02/A05 | POST `/api/tasks` | 201, task tạo, assignment mở | **PASS** | `m07-e2e.test.js`<br>`work-kpi.test.js` | Gốc RTM | Đã có test suite tự động |
+| **TC-WRK-06-01** | WRK | UC-WRK-06 | Gửi tin nhắn theo task | Session người dùng liên quan | POST `/api/tasks/:id/messages` | 201, tin nhắn lưu | **PASS** | `task-messages.test.js` | Gốc TC-WRK-03-01 | Chuẩn hóa UC-WRK-06 |
+| **TC-WRK-06-02** | WRK | UC-WRK-06 | Xem thread trao đổi | Session người dùng liên quan | GET `/api/tasks/:id/messages` | 200, danh sách messages | **PASS** | `task-messages.test.js` | Gốc TC-WRK-03-02 | Chuẩn hóa UC-WRK-06 |
 | **TC-SYS-01-01** | SYS | UC-SYS-01 | Tra cứu toàn hệ thống theo scope | Session A03 scope KP01 | GET `/api/search?q=PCCC` | Kết quả chỉ trong KP01 | **PASS** | `search-dashboard.test.js` | Ghi trong TC gốc | Scope-aware |
 | **TC-SYS-02-01** | SYS | UC-SYS-02 | Dashboard số liệu thật | Session A01 | GET `/api/dashboard` | 200, số liệu từ DB | **PASS** | `search-dashboard.test.js` | Suy từ RTM | Real DB |
 | **TC-SYS-05-01** | SYS | UC-SYS-05 | Xem nhật ký (A05 scope all) | Session A05, scope all | GET `/api/audit-logs` | 200, danh sách audit | **PASS** | `legal-documents.test.js` | Suy từ RTM | Xem R-07 |
@@ -106,13 +106,17 @@ Xác nhận mức độ đáp ứng của hệ thống so với 55 UC; tuyệt �
 | **TC-FAC-08-01** | FAC | UC-FAC-08 | Xem lịch sử quyết định đình chỉ/hoạt động lại | Session A01, cơ sở có quyết định | GET `/api/facilities/:id/history` | 200, danh sách quyết định | **NOT RUN** | `facility-history.test.js` | TC mới thiết kế | Chưa chạy |
 | **TC-VIO-04-01** | VIO | UC-VIO-04 | Đình chỉ cơ sở từ màn Vi phạm | Session A01, cơ sở active, có hồ sơ vi phạm | Vào `/vi-pham` → chọn vi phạm → Đình chỉ | Cơ sở chuyển suspended, ghi audit | **NOT RUN** | `facilities.test.js` | TC mới thiết kế | UI + API |
 | **TC-VIO-05-01** | VIO | UC-VIO-05 | Hoạt động lại cơ sở từ màn Vi phạm | Session A01/A05, cơ sở suspended, đã khắc phục | Vào `/vi-pham` → Duyệt hoạt động lại | Cơ sở chuyển active, ghi audit | **NOT RUN** | `facilities.test.js` | TC mới thiết kế | UI + API |
-| **TC-WRK-02-02** | WRK | UC-WRK-02 | Cập nhật tiến độ task | Session A03/A04, task đã giao | PUT `/api/tasks/:id/progress` | 200, % tiến độ cập nhật | **NOT RUN** | — | TC mới thiết kế | Chưa chạy |
+| **TC-WRK-03-01** | WRK | UC-WRK-03 | Cập nhật tiến độ task (0..100%) và ghi chú lịch sử | Session A03/A04, task đã giao | PUT `/api/tasks/:id/progress` | 200, % tiến độ cập nhật | **PASS** | `m07-e2e.test.js`<br>`task-messages.test.js` | Khớp mã M07_WRK | Đã chạy test tự động |
 | **TC-INS-HK-01** | INS | (chưa gán) | Tạo hậu kiểm sau khi hoàn thành kiểm tra | Inspection completed | Nhấn Tạo hậu kiểm → nhập yêu cầu và hạn | Hậu kiểm được tạo (mã API cần xác nhận) | **NOT RUN** | — | TC mới thiết kế | R-10 |
 | **TC-INS-HK-02** | INS | (chưa gán) | Cập nhật kết quả hậu kiểm | Hậu kiểm đã tạo | Cập nhật kết quả: Giải quyết / Chưa giải quyết | Kết quả hậu kiểm được lưu | **NOT RUN** | — | TC mới thiết kế | R-10 |
 
 ---
 
-## Phần 3: Tóm tắt Kết quả Kiểm thử (Tổng 64 TCs)
+## Phần 3: Tóm tắt Kết quả Kiểm thử (Tổng 64 TCs Toàn Hệ Thống)
+
+> **Lưu ý cập nhật ngày 09/11/2026:**
+> - Phân hệ M07 đã được mở rộng thành bộ hồ sơ kiểm thử chuyên sâu **59 Test Cases** (58 PASS, 0 FAIL, 1 NOT RUN) chi tiết tại `docs/M07_Test_Cases_WRK.md`.
+> - Bảng dưới đây theo dõi 64 Base Test Cases tiêu biểu toàn hệ thống (đã cập nhật TC-WRK-02-01 và 03-01 từ NOT RUN sang PASS sau khi thực thi test suite tự động).
 
 | Nhóm Kiểm thử | Tổng TC | PASS | FAIL | NOT RUN | BLOCKED |
 |---|---|---|---|---|---|
@@ -121,11 +125,11 @@ Xác nhận mức độ đáp ứng của hệ thống so với 55 UC; tuyệt �
 | **TC-DOC — Văn bản Pháp luật** | 9 | 9 | 0 | 0 | 0 |
 | **TC-INS — Kiểm tra PCCC** | 17 | 12 | 0 | 5 | 0 |
 | **TC-VIO — Vi phạm – Đình chỉ** | 2 | 0 | 0 | 2 | 0 |
-| **TC-WRK — Công việc** | 4 | 2 | 0 | 2 | 0 |
+| **TC-WRK — Công việc & KPI** | 4 | 4 | 0 | 0 | 0 |
 | **TC-SYS — Hệ thống** | 5 | 5 | 0 | 0 | 0 |
-| **Tổng cộng** | **64** | **52** | **0** | **12** | **0** |
+| **Tổng cộng** | **64** | **54** | **0** | **10** | **0** |
 
 ### Nhận xét & Đánh giá:
-- **Tỷ lệ hoàn thành hiện tại:** 52 / 64 Test Cases PASS (**81.25%**).
-- **12 Test Cases NOT RUN:** Gồm 1 TC từ bộ gốc (TC-WRK-02-01) và 11 TC mới được thiết kế bổ sung để phủ các UC đã có code/API nhưng chưa có bài kiểm thử tự động tương ứng.
-- **Không có Test Case FAIL:** Toàn bộ các test suite backend đã triển khai khi chạy đều đạt 100% (160/160 test assertions pass).
+- **Tỷ lệ hoàn thành hiện tại:** 54 / 64 Test Cases PASS (**84.38%** — tăng từ 81.25%).
+- **10 Test Cases NOT RUN:** Thuộc các phân hệ khác (3 FAC, 5 INS, 2 VIO) đang chờ bổ sung script kiểm thử tự động hoặc xác nhận API hậu kiểm.
+- **Không có Test Case FAIL:** Toàn bộ test suite backend khi chạy thực tế ngày 09/11/2026 đều đạt 100% (**168 / 168 test assertions pass**, tăng từ 160 sau khi bổ sung test suite `m07-e2e.test.js`, lưu tại `docs/evidence/full_pnpm_test_run.log`).

@@ -1,0 +1,8 @@
+
+> pccc@1.0.0 check C:\Users\ASUS\Downloads\node_54-main\node_54-main\os\PCCC
+> pnpm --filter pccc-be check
+
+
+> pccc-be@1.0.0 check C:\Users\ASUS\Downloads\node_54-main\node_54-main\os\PCCC\pccc-BE
+> node scripts/check.js
+
