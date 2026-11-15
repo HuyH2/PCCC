@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { inflateRawSync } from "node:zlib";
 
-import { openDatabase, transaction } from "../src/core/database.js";
+import { openDatabase } from "../src/core/database.js";
 import { seedDemo } from "../src/core/seed.js";
 import { createApp } from "../src/app.js";
 import { businessDate } from "../src/core/time.js";
@@ -421,21 +421,11 @@ test("date range and row caps reject oversized exports before writing history", 
     400,
   );
 
-  const insert = db.prepare(
-    "INSERT INTO facilities(id,name,address,region_id,officer_id,status) VALUES (?,?,?,?,?,'active')",
-  );
-  const load = async () =>
-    await transaction(db, async () => {
-      for (let index = 0; index <= 5000; index++)
-        await insert.run(
-          `CS-BULK-${index}`,
-          `Cơ sở bulk ${index}`,
-          "Địa chỉ bulk",
-          "KP01",
-          "CB-A03",
-        );
-    });
-  await load();
+  // Seed in one PostgreSQL statement so slow per-row WASM calls do not leave
+  // the preceding HTTP keep-alive connection idle past its timeout.
+  await db.exec(`INSERT INTO facilities(id,name,address,region_id,officer_id,status)
+    SELECT 'CS-BULK-' || n, 'Cơ sở bulk ' || n, 'Địa chỉ bulk', 'KP01', 'CB-A03', 'active'
+    FROM generate_series(0, 5000) AS n`);
 
   assert.equal(
     (await request("/api/report-export/preview?type=R01", { cookie: commander })).status,

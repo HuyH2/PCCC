@@ -344,3 +344,27 @@ export async function updateFacilityStatus(db, user, id, input, ip) {
     return { facilityId: id, status, previousStatus: before.status, occurredAt: now };
   });
 }
+
+export async function updateFacilityConditions(db, user, id, input, ip) {
+  requirePermission(user, "M03.edit");
+  object(input, ["conditions"]);
+  text(input.conditions, "Điều kiện PCCC", 0, 10000);
+  return transaction(db, async () => {
+    const before = (await getFacility(db, user, id)).facility;
+    const conditions = input.conditions.trim();
+    await db
+      .prepare("UPDATE facilities SET fire_safety_conditions=? WHERE id=?")
+      .run(conditions, id);
+    await writeAudit(db, {
+      actorId: user.id,
+      feature: "M03",
+      objectType: "facility",
+      objectId: id,
+      action: "facility.conditions_updated",
+      before: { fire_safety_conditions: before.fire_safety_conditions },
+      after: { fire_safety_conditions: conditions },
+      ip,
+    });
+    return getFacility(db, user, id);
+  });
+}

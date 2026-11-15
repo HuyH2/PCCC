@@ -407,3 +407,18 @@ Mẫu mục nhật ký:
 - **Test:** `<file test>` (<số test>: <nội dung chính>)
 - **Ghi chú:** <giả định, điểm cần xác nhận, giới hạn>
 ```
+
+### F14 — Sửa hồ sơ PCCC, chứng nhận và liên kết tra cứu (UC-FAC-04/05, UC-SYS-01)
+
+- Nhánh `Khai/fix-bug-facilities-certificates-search`, từ main `b2f425f`.
+- Migration `002-facility-conditions-certificates.sql`: nội dung điều kiện PCCC, ngày cấp chứng nhận, constraint thứ tự ngày.
+- `PUT /api/facilities/:id/conditions`: M03.edit + M03.view + data scope, validation 10.000 ký tự, transaction và audit trước/sau. Đọc qua GET hồ sơ hiện có.
+- UI chi tiết cho phép lưu điều kiện theo hồ sơ; không tự chuẩn hóa checklist pháp lý vì URD còn cần xác nhận. Ngày cấp chứng nhận được lưu trong hồ sơ nhân sự; trạng thái dựa trên ngày hết hạn nhập tay, theo ngày Việt Nam, không tự gán thời hạn.
+- Tra cứu cơ sở có liên kết mở chi tiết, giữ kiểm quyền tại trang/API đích.
+- Test hồi quy: facilities.test.js và facility-profile-documents.test.js.
+
+### F15 — Retest UI và giới hạn tài nguyên backend tests
+
+- `pnpm test` giới hạn 2 test worker chạy song song, tránh khởi tạo quá nhiều PGlite/WASM đồng thời theo số CPU.
+- Fixture Export 5.001 cơ sở dùng PostgreSQL generate_series thay vì 5.001 lời gọi async; giữ nguyên dữ liệu và assertion giới hạn 413/history rỗng.
+- Browser production + PGlite cô lập: điều kiện PCCC lưu/reload; chứng nhận ngày cấp + còn hạn/hết hạn sau sửa/reload; tra cứu CS001 → bấm kết quả → đúng chi tiết.

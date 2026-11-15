@@ -1,3 +1,4 @@
+import { FacilityConditions } from "./facility-conditions";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/shared/page-header";
@@ -23,6 +24,11 @@ export default async function TrangChiTietCoSo({ params }: { params: Promise<{ i
         description={`${facility.id} · ${facility.address}`}
         module="M03"
         useCases={["UC-FAC-02", "UC-FAC-03", "UC-FAC-06", "UC-FAC-08"]}
+      />
+      <FacilityConditions
+        id={facility.id}
+        initial={facility.fire_safety_conditions}
+        canEdit={user.permissions.includes("M03.edit")}
       />
       <FacilityProfileManager
         facilityId={facility.id}
