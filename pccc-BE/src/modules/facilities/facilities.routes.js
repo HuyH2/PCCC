@@ -7,6 +7,7 @@ import {
   listFacilityOptions,
 } from "./facilities.service.js";
 import {
+  updateFacilityConditions,
   getFacilityStatus,
   listFacilityStatusHistory,
   listFacilityChanges,
@@ -46,6 +47,18 @@ async function sendAttachment(ctx, facilityId, attachmentId, disposition) {
 }
 
 export const facilitiesRoutes = [
+  {
+    method: "PUT",
+    path: /^\/api\/facilities\/([^/]+)\/conditions$/,
+    handle: async (ctx, match) =>
+      updateFacilityConditions(
+        ctx.db,
+        ctx.user,
+        decodeURIComponent(match[1]),
+        await ctx.readJson(),
+        ctx.ip,
+      ),
+  },
   {
     method: "GET",
     path: /^\/api\/facilities\/([^/]+)\/personnel$/,

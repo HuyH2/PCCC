@@ -6,6 +6,7 @@ export interface FacilityRecord {
   region_name: string;
   officer_id: string;
   officer_name: string | null;
+  fire_safety_conditions: string;
   status: string;
 }
 
@@ -59,6 +60,7 @@ export interface FacilityPersonnel {
   is_head: number;
   training_status: string | null;
   certificate_number: string | null;
+  certificate_issue_date: string | null;
   certificate_expiry: string | null;
   notes: string;
   is_active: number;

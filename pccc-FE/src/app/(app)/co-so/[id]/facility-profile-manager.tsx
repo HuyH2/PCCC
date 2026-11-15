@@ -1,7 +1,17 @@
 "use client";
 
 import * as React from "react";
-import { Download, Eye, FileText, Pencil, Plus, Trash2, Upload, UserRound, UserX } from "lucide-react";
+import {
+  Download,
+  Eye,
+  FileText,
+  Pencil,
+  Plus,
+  Trash2,
+  Upload,
+  UserRound,
+  UserX,
+} from "lucide-react";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +63,9 @@ function PersonnelEditor({
   const [certificateNumber, setCertificateNumber] = React.useState(
     personnel?.certificate_number ?? "",
   );
+  const [certificateIssueDate, setCertificateIssueDate] = React.useState(
+    personnel?.certificate_issue_date ?? "",
+  );
   const [certificateExpiry, setCertificateExpiry] = React.useState(
     personnel?.certificate_expiry ?? "",
   );
@@ -83,6 +96,7 @@ function PersonnelEditor({
           isHead,
           trainingStatus: trainingStatus.trim() || null,
           certificateNumber: certificateNumber.trim() || null,
+          certificateIssueDate: certificateIssueDate || null,
           certificateExpiry: certificateExpiry || null,
           notes: notes.trim(),
           isActive,
@@ -165,6 +179,13 @@ function PersonnelEditor({
           />
         </div>
         <div className="space-y-2">
+          <Label htmlFor="personnel-issued">Ngày cấp chứng nhận</Label>
+          <Input
+            id="personnel-issued"
+            type="date"
+            value={certificateIssueDate}
+            onChange={(e) => setCertificateIssueDate(e.target.value)}
+          />
           <Label htmlFor="personnel-certificate">Hạn chứng nhận</Label>
           <Input
             id="personnel-certificate"
@@ -360,6 +381,19 @@ function PersonnelPanel({ facilityId, canEdit }: { facilityId: string; canEdit: 
                 <div>
                   <dt className="text-muted-foreground">Hạn chứng nhận</dt>
                   <dd>{item.certificate_expiry || "—"}</dd>
+                  <dt>Ngày cấp</dt>
+                  <dd>{item.certificate_issue_date || "—"}</dd>
+                  <dt>Trạng thái chứng nhận</dt>
+                  <dd>
+                    {!item.certificate_expiry
+                      ? "Chưa xác định thời hạn"
+                      : item.certificate_expiry <
+                          new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(
+                            new Date(),
+                          )
+                        ? "Hết hạn"
+                        : "Còn hạn"}
+                  </dd>
                 </div>
               </dl>
               {item.notes && <p className="mt-3 whitespace-pre-wrap text-sm">{item.notes}</p>}

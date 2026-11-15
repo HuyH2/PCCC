@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import * as React from "react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -238,10 +239,16 @@ export default function TrangTraCuu() {
             {state.result.groups.facilities && (
               <TabsContent value="facilities" className="space-y-2">
                 {state.result.groups.facilities.items.map((f) => (
-                  <ResultCard key={f.id} title={f.name} code={f.id}>
-                    {f.address} · {f.regionName} · CB: {f.officerName ?? f.officerId} ·{" "}
-                    {facilityStatusLabels[f.status] ?? f.status}
-                  </ResultCard>
+                  <Link
+                    key={f.id}
+                    href={`/co-so/${encodeURIComponent(f.id)}`}
+                    className="block rounded-xl focus-visible:outline-2 focus-visible:outline-ring"
+                  >
+                    <ResultCard title={f.name} code={f.id}>
+                      {f.address} · {f.regionName} · CB: {f.officerName ?? f.officerId} ·{" "}
+                      {facilityStatusLabels[f.status] ?? f.status}
+                    </ResultCard>
+                  </Link>
                 ))}
                 <GroupFooter group={state.result.groups.facilities} />
               </TabsContent>

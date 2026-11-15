@@ -24,6 +24,7 @@ const personnelColumns = `
   p.training_status,
   p.certificate_number,
   p.certificate_expiry,
+ p.certificate_issue_date,
   p.notes,
   p.is_active,
   p.version,
@@ -82,6 +83,7 @@ function validatePersonnel(input, before = null) {
     "trainingStatus",
     "certificateNumber",
     "certificateExpiry",
+    "certificateIssueDate",
     "notes",
     "isActive",
     "version",
@@ -114,6 +116,19 @@ function validatePersonnel(input, before = null) {
     );
   }
 
+  const issued = date(
+    input.certificateIssueDate === undefined
+      ? before?.certificate_issue_date
+      : input.certificateIssueDate,
+    "Ngày cấp",
+  );
+  const expiry = date(input.certificateExpiry, "Hạn chứng nhận");
+  assert(
+    !issued || !expiry || issued <= expiry,
+    400,
+    "INVALID_INPUT",
+    "Ngày hết hạn không được trước ngày cấp.",
+  );
   return {
     fullName,
     position,
@@ -122,7 +137,8 @@ function validatePersonnel(input, before = null) {
     isHead: Number(input.isHead),
     trainingStatus: nullableText(input.trainingStatus, "Tình trạng huấn luyện", 100),
     certificateNumber: nullableText(input.certificateNumber, "Số chứng chỉ", 100),
-    certificateExpiry: date(input.certificateExpiry, "Hạn chứng nhận"),
+    certificateIssueDate: issued,
+    certificateExpiry: expiry,
     notes: nullableText(input.notes, "Ghi chú", 2000) ?? "",
     isActive: Number(isActive),
   };
@@ -256,7 +272,7 @@ export async function saveFacilityPersonnel(db, user, facilityId, input, personn
         .prepare(
           `UPDATE facility_personnel
          SET full_name = ?, position = ?, phone = ?, email = ?, is_head = ?,
-             training_status = ?, certificate_number = ?, certificate_expiry = ?, notes = ?, is_active = ?,
+             training_status = ?, certificate_number = ?, certificate_expiry = ?, certificate_issue_date = ?, notes = ?, is_active = ?,
              version = version + 1, updated_by = ?, updated_at = ?
          WHERE id = ?`,
         )
@@ -269,6 +285,7 @@ export async function saveFacilityPersonnel(db, user, facilityId, input, personn
           values.trainingStatus,
           values.certificateNumber,
           values.certificateExpiry,
+          values.certificateIssueDate,
           values.notes,
           values.isActive,
           user.id,
@@ -280,10 +297,10 @@ export async function saveFacilityPersonnel(db, user, facilityId, input, personn
         .prepare(
           `INSERT INTO facility_personnel (
            id, facility_id, full_name, position, phone, email, is_head,
-           training_status, certificate_number, certificate_expiry, notes, is_active,
+           training_status, certificate_number, certificate_expiry, certificate_issue_date, notes, is_active,
            created_by, updated_by, created_at, updated_at
          )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           id,
@@ -296,6 +313,7 @@ export async function saveFacilityPersonnel(db, user, facilityId, input, personn
           values.trainingStatus,
           values.certificateNumber,
           values.certificateExpiry,
+          values.certificateIssueDate,
           values.notes,
           values.isActive,
           user.id,

@@ -160,3 +160,51 @@ test("facility mutations require authentication and the create grant", async (t)
     403,
   );
 });
+
+test("facility conditions persist with audit, validation and scope", async (t) => {
+  const { db, request, login } = await fixture(t);
+  const cookie = await login("demo.can-bo");
+  assert.equal(
+    (
+      await request("/api/facilities/CS001/conditions", {
+        method: "PUT",
+        body: { conditions: "QA" },
+      })
+    ).status,
+    401,
+  );
+  const saved = await request("/api/facilities/CS001/conditions", {
+    method: "PUT",
+    cookie,
+    body: { conditions: "Điều kiện theo hồ sơ QA" },
+  });
+  assert.equal(saved.status, 200);
+  assert.equal(saved.data.facility.fire_safety_conditions, "Điều kiện theo hồ sơ QA");
+  assert.equal(
+    (await request("/api/facilities/CS001", { cookie })).data.facility.fire_safety_conditions,
+    "Điều kiện theo hồ sơ QA",
+  );
+  assert.equal(
+    (
+      await request("/api/facilities/CS003/conditions", {
+        method: "PUT",
+        cookie,
+        body: { conditions: "QA" },
+      })
+    ).status,
+    404,
+  );
+  assert.equal(
+    (
+      await request("/api/facilities/CS001/conditions", {
+        method: "PUT",
+        cookie,
+        body: { conditions: "x".repeat(10001) },
+      })
+    ).status,
+    400,
+  );
+  assert.ok(
+    await db.prepare("SELECT id FROM audit_logs WHERE action='facility.conditions_updated'").get(),
+  );
+});

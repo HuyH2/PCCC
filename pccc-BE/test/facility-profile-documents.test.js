@@ -462,3 +462,23 @@ test("facility attachments accept verified Word and Excel files", async (t) => {
     2,
   );
 });
+
+test("certificate issue date persists and rejects invalid chronology", async (t) => {
+  const { request, login } = await fixture(t);
+  const cookie = await login("demo.can-bo");
+  const path = "/api/facilities/CS001/personnel";
+  const saved = await request(path, {
+    method: "POST",
+    cookie,
+    body: personnel({ certificateIssueDate: "2026-01-01" }),
+  });
+  assert.equal(saved.status, 201);
+  assert.equal(saved.data.personnel.certificate_issue_date, "2026-01-01");
+  for (const certificateIssueDate of ["2028-01-01", "2026-02-30"]) {
+    assert.equal(
+      (await request(path, { method: "POST", cookie, body: personnel({ certificateIssueDate }) }))
+        .status,
+      400,
+    );
+  }
+});
