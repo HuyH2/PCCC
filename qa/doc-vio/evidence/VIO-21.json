@@ -1,0 +1,109 @@
+{
+  "id": "VIO-21",
+  "uc": "UC-VIO-01..05",
+  "title": "Lịch sử cơ sở đồng bộ khi đình chỉ",
+  "steps": "Đọc lịch sử cơ sở trước/sau POST suspension.",
+  "expected": "Lịch sử cơ sở có sự kiện active → suspended (BR-03).",
+  "startedAt": "2026-11-16T07:48:40.415Z",
+  "layer": "HTTP API + isolated PostgreSQL/PGlite",
+  "status": "PASS",
+  "finishedAt": "2026-11-16T07:48:41.663Z",
+  "evidence": "VIO-21.json",
+  "trace": [
+    {
+      "actor": "officer",
+      "method": "GET",
+      "path": "/api/facilities/CS001/status-history",
+      "status": 200,
+      "response": {
+        "items": [],
+        "total": 0,
+        "page": 1,
+        "pageSize": 20
+      }
+    },
+    {
+      "actor": "officer",
+      "method": "POST",
+      "path": "/api/violations",
+      "request": {
+        "facilityId": "CS001",
+        "type": "TEST_Lối thoát nạn bị chặn",
+        "severity": "Nghiêm trọng",
+        "detectedOn": "2026-11-01",
+        "description": "TEST_VIO: dữ liệu giả lập kiểm thử",
+        "trackedOfficerId": "CB-A03"
+      },
+      "status": 201,
+      "response": {
+        "violation": {
+          "id": "VP-e3318115-005e-478c-87cf-b0370a9d5c89",
+          "facilityId": "CS001",
+          "facilityName": "Cơ sở CS001 (dữ liệu mẫu)",
+          "facilityAddress": "Địa chỉ giả lập",
+          "type": "TEST_Lối thoát nạn bị chặn",
+          "severity": "Nghiêm trọng",
+          "detectedOn": "2026-11-01",
+          "description": "TEST_VIO: dữ liệu giả lập kiểm thử",
+          "facilityCondition": "violation",
+          "remediationDeadline": null,
+          "trackedOfficerId": "CB-A03",
+          "status": "recorded",
+          "suspended": false,
+          "decisionNumber": null,
+          "progress": 0,
+          "evidenceCount": 0,
+          "createdBy": "DEMO-A03",
+          "createdAt": 1794815321627,
+          "updatedAt": 1794815321627
+        }
+      }
+    },
+    {
+      "actor": "officer",
+      "method": "POST",
+      "path": "/api/violations/VP-e3318115-005e-478c-87cf-b0370a9d5c89/suspension",
+      "request": {
+        "decisionNumber": "TEST_QD_001",
+        "reason": "Quyết định đình chỉ giả lập",
+        "issuedOn": "2026-11-02"
+      },
+      "status": 201,
+      "response": {
+        "suspension": {
+          "id": "88f15566-4790-465b-ad11-8fe40588a4a4",
+          "decisionNumber": "TEST_QD_001",
+          "reason": "Quyết định đình chỉ giả lập",
+          "issuedOn": "2026-11-02",
+          "effectiveUntil": null
+        }
+      }
+    },
+    {
+      "actor": "officer",
+      "method": "GET",
+      "path": "/api/facilities/CS001/status-history",
+      "status": 200,
+      "response": {
+        "items": [
+          {
+            "id": 2,
+            "facility_id": "CS001",
+            "previous_status": "active",
+            "new_status": "suspended",
+            "reason": "Quyết định đình chỉ giả lập",
+            "decision_reference": "TEST_QD_001",
+            "actor_id": "DEMO-A03",
+            "occurred_at": 1794815321643,
+            "audit_log_id": 15,
+            "actor_name": "Cán bộ kiểm tra/Quản lý địa bàn (mẫu)",
+            "actor_username": "demo.can-bo"
+          }
+        ],
+        "total": 1,
+        "page": 1,
+        "pageSize": 20
+      }
+    }
+  ]
+}

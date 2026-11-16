@@ -1,0 +1,26 @@
+{
+  "id": "DOC-04",
+  "uc": "UC-DOC-01",
+  "title": "Tài liệu yêu cầu đăng nhập",
+  "steps": "GET danh sách văn bản không cookie.",
+  "expected": "401.",
+  "startedAt": "2026-11-16T07:48:00.643Z",
+  "layer": "HTTP API + isolated PostgreSQL/PGlite",
+  "status": "PASS",
+  "finishedAt": "2026-11-16T07:48:04.259Z",
+  "evidence": "DOC-04.json",
+  "trace": [
+    {
+      "actor": "anonymous",
+      "method": "GET",
+      "path": "/api/legal-documents",
+      "status": 401,
+      "response": {
+        "error": {
+          "code": "UNAUTHENTICATED",
+          "message": "Vui lòng đăng nhập."
+        }
+      }
+    }
+  ]
+}

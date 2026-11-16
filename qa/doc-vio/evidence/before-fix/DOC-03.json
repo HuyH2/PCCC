@@ -1,0 +1,39 @@
+{
+  "id": "DOC-03",
+  "uc": "UC-DOC-02",
+  "title": "Cán bộ không có quyền tạo",
+  "steps": "Cán bộ POST văn bản hợp lệ.",
+  "expected": "403.",
+  "startedAt": "2026-11-14T20:41:02.722Z",
+  "layer": "HTTP API + isolated PostgreSQL/PGlite",
+  "status": "PASS",
+  "finishedAt": "2026-11-14T20:41:03.625Z",
+  "evidence": "DOC-03.json",
+  "trace": [
+    {
+      "actor": "officer",
+      "method": "POST",
+      "path": "/api/legal-documents",
+      "request": {
+        "category_id": "law",
+        "title": "TEST Văn bản phòng cháy",
+        "reference_number": "TEST-DOC-001",
+        "issuing_authority": "Cơ quan giả lập",
+        "issued_date": "2026-01-01",
+        "effective_date": "2026-02-01",
+        "status": "effective",
+        "file": {
+          "name": "TEST_evidence.pdf",
+          "contentBase64": "JVBERi0xLjQKMSAwIG9iago8PD4+CmVuZG9iagp0cmFpbGVyCjw8Pj4KJSVFT0YK"
+        }
+      },
+      "status": 403,
+      "response": {
+        "error": {
+          "code": "FORBIDDEN",
+          "message": "Bạn không có quyền thực hiện thao tác này."
+        }
+      }
+    }
+  ]
+}

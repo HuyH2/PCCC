@@ -1,0 +1,245 @@
+{
+  "id": "VIO-08",
+  "uc": "UC-VIO-01..05",
+  "title": "Cán bộ không được phê duyệt",
+  "steps": "Cán bộ gọi trực tiếp API approve của hồ sơ chờ duyệt.",
+  "expected": "403; hồ sơ vẫn pending_approval, cơ sở suspended.",
+  "startedAt": "2026-11-16T07:48:20.542Z",
+  "layer": "HTTP API + isolated PostgreSQL/PGlite",
+  "status": "PASS",
+  "finishedAt": "2026-11-16T07:48:22.177Z",
+  "evidence": "VIO-08.json",
+  "trace": [
+    {
+      "actor": "officer",
+      "method": "POST",
+      "path": "/api/violations",
+      "request": {
+        "facilityId": "CS001",
+        "type": "TEST_Lối thoát nạn bị chặn",
+        "severity": "Nghiêm trọng",
+        "detectedOn": "2026-11-01",
+        "description": "TEST_VIO: dữ liệu giả lập kiểm thử",
+        "trackedOfficerId": "CB-A03"
+      },
+      "status": 201,
+      "response": {
+        "violation": {
+          "id": "VP-c0dc5ccf-cad1-4250-8a77-260b6541855c",
+          "facilityId": "CS001",
+          "facilityName": "Cơ sở CS001 (dữ liệu mẫu)",
+          "facilityAddress": "Địa chỉ giả lập",
+          "type": "TEST_Lối thoát nạn bị chặn",
+          "severity": "Nghiêm trọng",
+          "detectedOn": "2026-11-01",
+          "description": "TEST_VIO: dữ liệu giả lập kiểm thử",
+          "facilityCondition": "violation",
+          "remediationDeadline": null,
+          "trackedOfficerId": "CB-A03",
+          "status": "recorded",
+          "suspended": false,
+          "decisionNumber": null,
+          "progress": 0,
+          "evidenceCount": 0,
+          "createdBy": "DEMO-A03",
+          "createdAt": 1794815302090,
+          "updatedAt": 1794815302090
+        }
+      }
+    },
+    {
+      "actor": "officer",
+      "method": "POST",
+      "path": "/api/violations/VP-c0dc5ccf-cad1-4250-8a77-260b6541855c/suspension",
+      "request": {
+        "decisionNumber": "TEST_QD_001",
+        "reason": "Quyết định đình chỉ giả lập",
+        "issuedOn": "2026-11-02"
+      },
+      "status": 201,
+      "response": {
+        "suspension": {
+          "id": "dccc211a-8f1d-41e9-8e48-de59921bcc5e",
+          "decisionNumber": "TEST_QD_001",
+          "reason": "Quyết định đình chỉ giả lập",
+          "issuedOn": "2026-11-02",
+          "effectiveUntil": null
+        }
+      }
+    },
+    {
+      "actor": "officer",
+      "method": "POST",
+      "path": "/api/violations/VP-c0dc5ccf-cad1-4250-8a77-260b6541855c/remediation",
+      "request": {
+        "note": "Đã khắc phục để kiểm thử",
+        "progress": 100
+      },
+      "status": 201,
+      "response": {
+        "remediation": {
+          "id": "4a324a69-6332-4191-8b67-297fac07b86a",
+          "note": "Đã khắc phục để kiểm thử",
+          "progress": 100,
+          "createdBy": "DEMO-A03",
+          "createdAt": 1794815302118
+        }
+      }
+    },
+    {
+      "actor": "officer",
+      "method": "POST",
+      "path": "/api/violations/VP-c0dc5ccf-cad1-4250-8a77-260b6541855c/evidences",
+      "request": {
+        "fileName": "TEST_evidence.pdf",
+        "mediaType": "application/pdf",
+        "contentBase64": "JVBERi0xLjQKMSAwIG9iago8PD4+CmVuZG9iagp0cmFpbGVyCjw8Pj4KJSVFT0YK"
+      },
+      "status": 201,
+      "response": {
+        "evidence": {
+          "id": "9e69282f-4c59-401b-8da6-f0000bd1fd96",
+          "fileName": "TEST_evidence.pdf",
+          "mediaType": "application/pdf",
+          "fileSize": 48,
+          "uploadedBy": "DEMO-A03",
+          "uploadedAt": 1794815302127
+        }
+      }
+    },
+    {
+      "actor": "officer",
+      "method": "POST",
+      "path": "/api/violations/VP-c0dc5ccf-cad1-4250-8a77-260b6541855c/submit-approval",
+      "request": {},
+      "status": 200,
+      "response": {
+        "violation": {
+          "id": "VP-c0dc5ccf-cad1-4250-8a77-260b6541855c",
+          "facilityId": "CS001",
+          "facilityName": "Cơ sở CS001 (dữ liệu mẫu)",
+          "facilityAddress": "Địa chỉ giả lập",
+          "type": "TEST_Lối thoát nạn bị chặn",
+          "severity": "Nghiêm trọng",
+          "detectedOn": "2026-11-01",
+          "description": "TEST_VIO: dữ liệu giả lập kiểm thử",
+          "facilityCondition": "violation",
+          "remediationDeadline": null,
+          "trackedOfficerId": "CB-A03",
+          "status": "pending_approval",
+          "suspended": true,
+          "decisionNumber": "TEST_QD_001",
+          "progress": 100,
+          "evidenceCount": 1,
+          "createdBy": "DEMO-A03",
+          "createdAt": 1794815302090,
+          "updatedAt": 1794815302141
+        }
+      }
+    },
+    {
+      "actor": "officer",
+      "method": "POST",
+      "path": "/api/violations/VP-c0dc5ccf-cad1-4250-8a77-260b6541855c/approve",
+      "request": {},
+      "status": 403,
+      "response": {
+        "error": {
+          "code": "FORBIDDEN",
+          "message": "Bạn không có quyền thực hiện thao tác này."
+        }
+      }
+    },
+    {
+      "actor": "officer",
+      "method": "GET",
+      "path": "/api/violations/VP-c0dc5ccf-cad1-4250-8a77-260b6541855c",
+      "status": 200,
+      "response": {
+        "violation": {
+          "id": "VP-c0dc5ccf-cad1-4250-8a77-260b6541855c",
+          "facilityId": "CS001",
+          "facilityName": "Cơ sở CS001 (dữ liệu mẫu)",
+          "facilityAddress": "Địa chỉ giả lập",
+          "type": "TEST_Lối thoát nạn bị chặn",
+          "severity": "Nghiêm trọng",
+          "detectedOn": "2026-11-01",
+          "description": "TEST_VIO: dữ liệu giả lập kiểm thử",
+          "facilityCondition": "violation",
+          "remediationDeadline": null,
+          "trackedOfficerId": "CB-A03",
+          "status": "pending_approval",
+          "suspended": true,
+          "decisionNumber": "TEST_QD_001",
+          "progress": 100,
+          "evidenceCount": 1,
+          "createdBy": "DEMO-A03",
+          "createdAt": 1794815302090,
+          "updatedAt": 1794815302141
+        },
+        "suspension": {
+          "id": "dccc211a-8f1d-41e9-8e48-de59921bcc5e",
+          "decision_number": "TEST_QD_001",
+          "reason": "Quyết định đình chỉ giả lập",
+          "issued_on": "2026-11-02",
+          "effective_until": null,
+          "created_by": "DEMO-A03",
+          "created_at": 1794815302103
+        },
+        "remediation": [
+          {
+            "id": "4a324a69-6332-4191-8b67-297fac07b86a",
+            "note": "Đã khắc phục để kiểm thử",
+            "progress": 100,
+            "created_by": "DEMO-A03",
+            "created_at": 1794815302118
+          }
+        ],
+        "evidences": [
+          {
+            "id": "9e69282f-4c59-401b-8da6-f0000bd1fd96",
+            "file_name": "TEST_evidence.pdf",
+            "media_type": "application/pdf",
+            "file_size": 48,
+            "uploaded_by": "DEMO-A03",
+            "uploaded_at": 1794815302127,
+            "downloadUrl": "/api/violations/VP-c0dc5ccf-cad1-4250-8a77-260b6541855c/evidences/9e69282f-4c59-401b-8da6-f0000bd1fd96"
+          }
+        ],
+        "history": [
+          {
+            "from_status": null,
+            "to_status": "recorded",
+            "reason": "Ghi nhận vi phạm",
+            "occurred_at": 1794815302090,
+            "actor_name": "Cán bộ kiểm tra/Quản lý địa bàn (mẫu)"
+          },
+          {
+            "from_status": "recorded",
+            "to_status": "remediation",
+            "reason": "Cập nhật hồ sơ khắc phục",
+            "occurred_at": 1794815302118,
+            "actor_name": "Cán bộ kiểm tra/Quản lý địa bàn (mẫu)"
+          },
+          {
+            "from_status": "remediation",
+            "to_status": "pending_approval",
+            "reason": "Gửi yêu cầu phê duyệt",
+            "occurred_at": 1794815302141,
+            "actor_name": "Cán bộ kiểm tra/Quản lý địa bàn (mẫu)"
+          }
+        ]
+      }
+    },
+    {
+      "actor": "officer",
+      "method": "GET",
+      "path": "/api/facilities/CS001/status",
+      "status": 200,
+      "response": {
+        "facilityId": "CS001",
+        "status": "suspended"
+      }
+    }
+  ]
+}

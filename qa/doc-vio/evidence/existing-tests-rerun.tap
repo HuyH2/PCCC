@@ -1,0 +1,78 @@
+TAP version 13
+# Subtest: status transition writes immutable history and audit, and timeline filters by type/time
+ok 1 - status transition writes immutable history and audit, and timeline filters by type/time
+  ---
+  duration_ms: 4206.1581
+  type: 'test'
+  ...
+# Subtest: scope, permission and validation protect reads and mutations without partial history
+ok 2 - scope, permission and validation protect reads and mutations without partial history
+  ---
+  duration_ms: 1398.2896
+  type: 'test'
+  ...
+# Subtest: admin approval restores suspended facility only with evidence, decision and explicit confirmation
+ok 3 - admin approval restores suspended facility only with evidence, decision and explicit confirmation
+  ---
+  duration_ms: 1693.7862
+  type: 'test'
+  ...
+# Backend request failed { name: 'error' }
+# Subtest: failed audit insert rolls back facility status and violation record
+ok 4 - failed audit insert rolls back facility status and violation record
+  ---
+  duration_ms: 1165.2931
+  type: 'test'
+  ...
+# Subtest: document access requires session, M05 permissions and scope; writes require Commander or Admin
+ok 5 - document access requires session, M05 permissions and scope; writes require Commander or Admin
+  ---
+  duration_ms: 4137.6722
+  type: 'test'
+  ...
+# Subtest: Commander manages documents with unit scope; grants, role and scope are enforced on every write
+ok 6 - Commander manages documents with unit scope; grants, role and scope are enforced on every write
+  ---
+  duration_ms: 1282.4766
+  type: 'test'
+  ...
+# Subtest: create, detail, accent search, combined filters, pagination and versioned update with history
+ok 7 - create, detail, accent search, combined filters, pagination and versioned update with history
+  ---
+  duration_ms: 1303.0234
+  type: 'test'
+  ...
+# Subtest: document validation rejects duplicates, unknown fields, dates, URLs and invalid filters
+ok 8 - document validation rejects duplicates, unknown fields, dates, URLs and invalid filters
+  ---
+  duration_ms: 1251.3394
+  type: 'test'
+  ...
+# Subtest: PDF create/upload/download enforce authorization, content, size, filename and concurrency
+ok 9 - PDF create/upload/download enforce authorization, content, size, filename and concurrency
+  ---
+  duration_ms: 1223.3004
+  type: 'test'
+  ...
+# Backend request failed { name: 'error' }
+# Subtest: audit failure rolls back document mutation; seed preserves existing edits and append-only log
+ok 10 - audit failure rolls back document mutation; seed preserves existing edits and append-only log
+  ---
+  duration_ms: 1380.6874
+  type: 'test'
+  ...
+# Subtest: system audit filters actor/time/feature/action/object and protects snapshots from ordinary users
+ok 11 - system audit filters actor/time/feature/action/object and protects snapshots from ordinary users
+  ---
+  duration_ms: 1124.9769
+  type: 'test'
+  ...
+1..11
+# tests 11
+# suites 0
+# pass 11
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 12575.5155

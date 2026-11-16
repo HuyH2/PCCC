@@ -1,0 +1,149 @@
+{
+  "id": "VIO-30",
+  "uc": "UC-VIO-01..05",
+  "title": "Khắc phục chỉ có khoảng trắng bị từ chối dù tiến độ 100%",
+  "steps": "Tạo vi phạm; thêm khắc phục note chỉ có khoảng trắng, progress=100; đọc lại hồ sơ.",
+  "expected": "400; không thêm khắc phục hoặc đổi trạng thái/lịch sử.",
+  "startedAt": "2026-11-16T07:48:51.572Z",
+  "layer": "HTTP API + isolated PostgreSQL/PGlite",
+  "status": "PASS",
+  "finishedAt": "2026-11-16T07:48:52.815Z",
+  "evidence": "VIO-30.json",
+  "trace": [
+    {
+      "actor": "officer",
+      "method": "POST",
+      "path": "/api/violations",
+      "request": {
+        "facilityId": "CS001",
+        "type": "TEST_Lối thoát nạn bị chặn",
+        "severity": "Nghiêm trọng",
+        "detectedOn": "2026-11-01",
+        "description": "TEST_VIO: dữ liệu giả lập kiểm thử",
+        "trackedOfficerId": "CB-A03"
+      },
+      "status": 201,
+      "response": {
+        "violation": {
+          "id": "VP-6166cc61-8da8-4b47-b627-b8704ee17a0a",
+          "facilityId": "CS001",
+          "facilityName": "Cơ sở CS001 (dữ liệu mẫu)",
+          "facilityAddress": "Địa chỉ giả lập",
+          "type": "TEST_Lối thoát nạn bị chặn",
+          "severity": "Nghiêm trọng",
+          "detectedOn": "2026-11-01",
+          "description": "TEST_VIO: dữ liệu giả lập kiểm thử",
+          "facilityCondition": "violation",
+          "remediationDeadline": null,
+          "trackedOfficerId": "CB-A03",
+          "status": "recorded",
+          "suspended": false,
+          "decisionNumber": null,
+          "progress": 0,
+          "evidenceCount": 0,
+          "createdBy": "DEMO-A03",
+          "createdAt": 1794815332775,
+          "updatedAt": 1794815332775
+        }
+      }
+    },
+    {
+      "actor": "officer",
+      "method": "GET",
+      "path": "/api/violations/VP-6166cc61-8da8-4b47-b627-b8704ee17a0a",
+      "status": 200,
+      "response": {
+        "violation": {
+          "id": "VP-6166cc61-8da8-4b47-b627-b8704ee17a0a",
+          "facilityId": "CS001",
+          "facilityName": "Cơ sở CS001 (dữ liệu mẫu)",
+          "facilityAddress": "Địa chỉ giả lập",
+          "type": "TEST_Lối thoát nạn bị chặn",
+          "severity": "Nghiêm trọng",
+          "detectedOn": "2026-11-01",
+          "description": "TEST_VIO: dữ liệu giả lập kiểm thử",
+          "facilityCondition": "violation",
+          "remediationDeadline": null,
+          "trackedOfficerId": "CB-A03",
+          "status": "recorded",
+          "suspended": false,
+          "decisionNumber": null,
+          "progress": 0,
+          "evidenceCount": 0,
+          "createdBy": "DEMO-A03",
+          "createdAt": 1794815332775,
+          "updatedAt": 1794815332775
+        },
+        "suspension": null,
+        "remediation": [],
+        "evidences": [],
+        "history": [
+          {
+            "from_status": null,
+            "to_status": "recorded",
+            "reason": "Ghi nhận vi phạm",
+            "occurred_at": 1794815332775,
+            "actor_name": "Cán bộ kiểm tra/Quản lý địa bàn (mẫu)"
+          }
+        ]
+      }
+    },
+    {
+      "actor": "officer",
+      "method": "POST",
+      "path": "/api/violations/VP-6166cc61-8da8-4b47-b627-b8704ee17a0a/remediation",
+      "request": {
+        "note": "   ",
+        "progress": 100
+      },
+      "status": 400,
+      "response": {
+        "error": {
+          "code": "INVALID_INPUT",
+          "message": "Nội dung khắc phục phải có từ 3 đến 2000 ký tự."
+        }
+      }
+    },
+    {
+      "actor": "officer",
+      "method": "GET",
+      "path": "/api/violations/VP-6166cc61-8da8-4b47-b627-b8704ee17a0a",
+      "status": 200,
+      "response": {
+        "violation": {
+          "id": "VP-6166cc61-8da8-4b47-b627-b8704ee17a0a",
+          "facilityId": "CS001",
+          "facilityName": "Cơ sở CS001 (dữ liệu mẫu)",
+          "facilityAddress": "Địa chỉ giả lập",
+          "type": "TEST_Lối thoát nạn bị chặn",
+          "severity": "Nghiêm trọng",
+          "detectedOn": "2026-11-01",
+          "description": "TEST_VIO: dữ liệu giả lập kiểm thử",
+          "facilityCondition": "violation",
+          "remediationDeadline": null,
+          "trackedOfficerId": "CB-A03",
+          "status": "recorded",
+          "suspended": false,
+          "decisionNumber": null,
+          "progress": 0,
+          "evidenceCount": 0,
+          "createdBy": "DEMO-A03",
+          "createdAt": 1794815332775,
+          "updatedAt": 1794815332775
+        },
+        "suspension": null,
+        "remediation": [],
+        "evidences": [],
+        "history": [
+          {
+            "from_status": null,
+            "to_status": "recorded",
+            "reason": "Ghi nhận vi phạm",
+            "occurred_at": 1794815332775,
+            "actor_name": "Cán bộ kiểm tra/Quản lý địa bàn (mẫu)"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,196 @@
+{
+  "id": "DOC-01",
+  "uc": "UC-DOC-01/02",
+  "title": "Tạo → phân loại → cập nhật → tìm kiếm → tải PDF",
+  "steps": "Chỉ huy tạo PDF; cập nhật loại decree/version 1; cán bộ tìm TEST-DOC-001, đọc lại và tải PDF.",
+  "expected": "Lưu đúng, version 2, tìm đúng ID, PDF nguyên vẹn, lịch sử có 2 sự kiện.",
+  "startedAt": "2026-11-14T20:40:58.826Z",
+  "layer": "HTTP API + isolated PostgreSQL/PGlite",
+  "status": "PASS",
+  "finishedAt": "2026-11-14T20:41:01.795Z",
+  "evidence": "DOC-01.json",
+  "trace": [
+    {
+      "actor": "commander",
+      "method": "POST",
+      "path": "/api/legal-documents",
+      "request": {
+        "category_id": "law",
+        "title": "TEST Văn bản phòng cháy",
+        "reference_number": "TEST-DOC-001",
+        "issuing_authority": "Cơ quan giả lập",
+        "issued_date": "2026-01-01",
+        "effective_date": "2026-02-01",
+        "status": "effective",
+        "file": {
+          "name": "TEST_evidence.pdf",
+          "contentBase64": "JVBERi0xLjQKMSAwIG9iago8PD4+CmVuZG9iagp0cmFpbGVyCjw8Pj4KJSVFT0YK"
+        }
+      },
+      "status": 201,
+      "response": {
+        "document": {
+          "id": "23143467-f2d0-45a2-97fa-28b72a89225a",
+          "category_id": "law",
+          "category_name": "Luật",
+          "title": "TEST Văn bản phòng cháy",
+          "reference_number": "TEST-DOC-001",
+          "issuing_authority": "Cơ quan giả lập",
+          "issued_date": "2026-01-01",
+          "effective_date": "2026-02-01",
+          "status": "effective",
+          "source_url": null,
+          "file_name": "TEST_evidence.pdf",
+          "file_size": 48,
+          "notes": "",
+          "version": 1,
+          "created_by": "DEMO-A01",
+          "updated_by": "DEMO-A01",
+          "created_at": 1794688861754,
+          "updated_at": 1794688861754
+        }
+      }
+    },
+    {
+      "actor": "commander",
+      "method": "PUT",
+      "path": "/api/legal-documents/23143467-f2d0-45a2-97fa-28b72a89225a",
+      "request": {
+        "category_id": "decree",
+        "title": "TEST Văn bản đã sửa",
+        "reference_number": "TEST-DOC-001",
+        "issuing_authority": "Cơ quan giả lập",
+        "issued_date": "2026-01-01",
+        "effective_date": "2026-02-01",
+        "status": "effective",
+        "file": {
+          "name": "TEST_evidence.pdf",
+          "contentBase64": "JVBERi0xLjQKMSAwIG9iago8PD4+CmVuZG9iagp0cmFpbGVyCjw8Pj4KJSVFT0YK"
+        },
+        "version": 1
+      },
+      "status": 200,
+      "response": {
+        "document": {
+          "id": "23143467-f2d0-45a2-97fa-28b72a89225a",
+          "category_id": "decree",
+          "category_name": "Nghị định",
+          "title": "TEST Văn bản đã sửa",
+          "reference_number": "TEST-DOC-001",
+          "issuing_authority": "Cơ quan giả lập",
+          "issued_date": "2026-01-01",
+          "effective_date": "2026-02-01",
+          "status": "effective",
+          "source_url": null,
+          "file_name": "TEST_evidence.pdf",
+          "file_size": 48,
+          "notes": "",
+          "version": 2,
+          "created_by": "DEMO-A01",
+          "updated_by": "DEMO-A01",
+          "created_at": 1794688861754,
+          "updated_at": 1794688861763
+        }
+      }
+    },
+    {
+      "actor": "officer",
+      "method": "GET",
+      "path": "/api/legal-documents?q=TEST-DOC-001&categoryId=decree",
+      "status": 200,
+      "response": {
+        "items": [
+          {
+            "id": "23143467-f2d0-45a2-97fa-28b72a89225a",
+            "category_id": "decree",
+            "category_name": "Nghị định",
+            "title": "TEST Văn bản đã sửa",
+            "reference_number": "TEST-DOC-001",
+            "issuing_authority": "Cơ quan giả lập",
+            "issued_date": "2026-01-01",
+            "effective_date": "2026-02-01",
+            "status": "effective",
+            "source_url": null,
+            "file_name": "TEST_evidence.pdf",
+            "file_size": 48,
+            "notes": "",
+            "version": 2,
+            "created_by": "DEMO-A01",
+            "updated_by": "DEMO-A01",
+            "created_at": 1794688861754,
+            "updated_at": 1794688861763
+          }
+        ],
+        "total": 1,
+        "page": 1,
+        "pageSize": 20
+      }
+    },
+    {
+      "actor": "officer",
+      "method": "GET",
+      "path": "/api/legal-documents/23143467-f2d0-45a2-97fa-28b72a89225a",
+      "status": 200,
+      "response": {
+        "document": {
+          "id": "23143467-f2d0-45a2-97fa-28b72a89225a",
+          "category_id": "decree",
+          "category_name": "Nghị định",
+          "title": "TEST Văn bản đã sửa",
+          "reference_number": "TEST-DOC-001",
+          "issuing_authority": "Cơ quan giả lập",
+          "issued_date": "2026-01-01",
+          "effective_date": "2026-02-01",
+          "status": "effective",
+          "source_url": null,
+          "file_name": "TEST_evidence.pdf",
+          "file_size": 48,
+          "notes": "",
+          "version": 2,
+          "created_by": "DEMO-A01",
+          "updated_by": "DEMO-A01",
+          "created_at": 1794688861754,
+          "updated_at": 1794688861763
+        }
+      }
+    },
+    {
+      "actor": "officer",
+      "method": "GET",
+      "path": "/api/legal-documents/23143467-f2d0-45a2-97fa-28b72a89225a/file",
+      "status": 200,
+      "response": {
+        "bytes": "JVBERi0xLjQKMSAwIG9iago8PD4+CmVuZG9iagp0cmFpbGVyCjw8Pj4KJSVFT0YK"
+      }
+    },
+    {
+      "actor": "officer",
+      "method": "GET",
+      "path": "/api/legal-documents/23143467-f2d0-45a2-97fa-28b72a89225a/history",
+      "status": 200,
+      "response": {
+        "items": [
+          {
+            "id": 15,
+            "action": "legal_document.updated",
+            "occurred_at": 1794688861765,
+            "before_json": "{\"id\":\"23143467-f2d0-45a2-97fa-28b72a89225a\",\"category_id\":\"law\",\"category_name\":\"Luật\",\"title\":\"TEST Văn bản phòng cháy\",\"reference_number\":\"TEST-DOC-001\",\"issuing_authority\":\"Cơ quan giả lập\",\"issued_date\":\"2026-01-01\",\"effective_date\":\"2026-02-01\",\"status\":\"effective\",\"source_url\":null,\"file_name\":\"TEST_evidence.pdf\",\"file_size\":48,\"notes\":\"\",\"version\":1,\"created_by\":\"DEMO-A01\",\"updated_by\":\"DEMO-A01\",\"created_at\":1794688861754,\"updated_at\":1794688861754}",
+            "after_json": "{\"id\":\"23143467-f2d0-45a2-97fa-28b72a89225a\",\"category_id\":\"decree\",\"category_name\":\"Nghị định\",\"title\":\"TEST Văn bản đã sửa\",\"reference_number\":\"TEST-DOC-001\",\"issuing_authority\":\"Cơ quan giả lập\",\"issued_date\":\"2026-01-01\",\"effective_date\":\"2026-02-01\",\"status\":\"effective\",\"source_url\":null,\"file_name\":\"TEST_evidence.pdf\",\"file_size\":48,\"notes\":\"\",\"version\":2,\"created_by\":\"DEMO-A01\",\"updated_by\":\"DEMO-A01\",\"created_at\":1794688861754,\"updated_at\":1794688861763}",
+            "actor_name": "Chỉ huy/Đội trưởng (mẫu)"
+          },
+          {
+            "id": 14,
+            "action": "legal_document.created",
+            "occurred_at": 1794688861756,
+            "before_json": null,
+            "after_json": "{\"id\":\"23143467-f2d0-45a2-97fa-28b72a89225a\",\"category_id\":\"law\",\"category_name\":\"Luật\",\"title\":\"TEST Văn bản phòng cháy\",\"reference_number\":\"TEST-DOC-001\",\"issuing_authority\":\"Cơ quan giả lập\",\"issued_date\":\"2026-01-01\",\"effective_date\":\"2026-02-01\",\"status\":\"effective\",\"source_url\":null,\"file_name\":\"TEST_evidence.pdf\",\"file_size\":48,\"notes\":\"\",\"version\":1,\"created_by\":\"DEMO-A01\",\"updated_by\":\"DEMO-A01\",\"created_at\":1794688861754,\"updated_at\":1794688861754}",
+            "actor_name": "Chỉ huy/Đội trưởng (mẫu)"
+          }
+        ],
+        "total": 2,
+        "page": 1,
+        "pageSize": 20
+      }
+    }
+  ]
+}

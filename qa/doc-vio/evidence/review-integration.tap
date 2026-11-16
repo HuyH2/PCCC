@@ -1,0 +1,16 @@
+TAP version 13
+# Subtest: Next frontend proxy + separate backend: login, first-password change, role navigation, scope and logout
+ok 1 - Next frontend proxy + separate backend: login, first-password change, role navigation, scope and logout
+  ---
+  duration_ms: 6339.1033
+  type: 'test'
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 12275.0071

@@ -1,0 +1,51 @@
+{
+  "id": "DOC-02",
+  "uc": "UC-DOC-02",
+  "title": "Chặn thiếu tên văn bản",
+  "steps": "POST văn bản có title rỗng bằng chỉ huy.",
+  "expected": "400, không tạo bản ghi.",
+  "startedAt": "2026-11-14T20:41:01.797Z",
+  "layer": "HTTP API + isolated PostgreSQL/PGlite",
+  "status": "PASS",
+  "finishedAt": "2026-11-14T20:41:02.722Z",
+  "evidence": "DOC-02.json",
+  "trace": [
+    {
+      "actor": "commander",
+      "method": "POST",
+      "path": "/api/legal-documents",
+      "request": {
+        "category_id": "law",
+        "title": "",
+        "reference_number": "TEST-DOC-001",
+        "issuing_authority": "Cơ quan giả lập",
+        "issued_date": "2026-01-01",
+        "effective_date": "2026-02-01",
+        "status": "effective",
+        "file": {
+          "name": "TEST_evidence.pdf",
+          "contentBase64": "JVBERi0xLjQKMSAwIG9iago8PD4+CmVuZG9iagp0cmFpbGVyCjw8Pj4KJSVFT0YK"
+        }
+      },
+      "status": 400,
+      "response": {
+        "error": {
+          "code": "INVALID_INPUT",
+          "message": "title phải có từ 1 đến 500 ký tự."
+        }
+      }
+    },
+    {
+      "actor": "officer",
+      "method": "GET",
+      "path": "/api/legal-documents?q=TEST-DOC-001",
+      "status": 200,
+      "response": {
+        "items": [],
+        "total": 0,
+        "page": 1,
+        "pageSize": 20
+      }
+    }
+  ]
+}

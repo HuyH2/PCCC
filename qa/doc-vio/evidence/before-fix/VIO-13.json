@@ -1,0 +1,34 @@
+{
+  "id": "VIO-13",
+  "uc": "UC-VIO-01..05",
+  "title": "Chặn cơ sở ngoài phạm vi",
+  "steps": "Cán bộ KP01 tạo vi phạm cho CS003/KP03.",
+  "expected": "404.",
+  "startedAt": "2026-11-14T20:41:15.950Z",
+  "layer": "HTTP API + isolated PostgreSQL/PGlite",
+  "status": "PASS",
+  "finishedAt": "2026-11-14T20:41:16.886Z",
+  "evidence": "VIO-13.json",
+  "trace": [
+    {
+      "actor": "officer",
+      "method": "POST",
+      "path": "/api/violations",
+      "request": {
+        "facilityId": "CS003",
+        "type": "TEST_Lối thoát nạn bị chặn",
+        "severity": "Nghiêm trọng",
+        "detectedOn": "2026-11-01",
+        "description": "TEST_VIO: dữ liệu giả lập kiểm thử",
+        "trackedOfficerId": "CB-A03"
+      },
+      "status": 404,
+      "response": {
+        "error": {
+          "code": "NOT_FOUND",
+          "message": "Không tìm thấy cơ sở trong phạm vi được cấp."
+        }
+      }
+    }
+  ]
+}

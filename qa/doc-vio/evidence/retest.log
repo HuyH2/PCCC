@@ -1,0 +1,31 @@
+PASS: DOC-01 Tạo → phân loại → cập nhật → tìm kiếm → tải PDF
+PASS: DOC-02 Chặn thiếu tên văn bản
+PASS: DOC-03 Cán bộ không có quyền tạo
+PASS: DOC-04 Tài liệu yêu cầu đăng nhập
+PASS: VIO-01 Ghi nhận, đình chỉ, khắc phục, phê duyệt
+PASS: VIO-02 Từ chối, cập nhật và gửi lại
+PASS: VIO-03 Thiếu trường bắt buộc
+PASS: VIO-04 Ngày/hạn không hợp lệ
+PASS: VIO-05 Cơ sở không phép/không đủ điều kiện
+PASS: VIO-06 Chặn gửi duyệt thiếu bằng chứng
+PASS: VIO-07 Chặn gửi duyệt trước khắc phục
+PASS: VIO-08 Cán bộ không được phê duyệt
+PASS: VIO-09 Chặn từ chối thiếu lý do
+PASS: VIO-10 Chặn duyệt lặp
+PASS: VIO-11 Khóa hồ sơ đã hoàn thành
+PASS: VIO-12 Khóa quyết định đình chỉ của hồ sơ đã hoàn thành
+PASS: VIO-13 Chặn cơ sở ngoài phạm vi
+PASS: VIO-14 Scope rỗng chặn đọc/ghi và file
+PASS: VIO-15 Chưa đăng nhập
+PASS: VIO-16 Upload sai loại/nội dung
+PASS: VIO-17 Bằng chứng gắn đúng hồ sơ
+PASS: VIO-18 Không bỏ qua duyệt qua API cơ sở
+PASS: VIO-19 Nhiều quyết định đình chỉ cùng cơ sở
+PASS: VIO-20 Cán bộ theo dõi không tồn tại
+PASS: VIO-21 Lịch sử cơ sở đồng bộ khi đình chỉ
+PASS: VIO-22 Tìm kiếm, lọc và phân trang
+PASS: VIO-23 Đình chỉ thiếu số quyết định / trùng
+PASS: VIO-24 Tiến độ khắc phục không hợp lệ
+PASS: VIO-25 Đồng bộ với hồ sơ đình chỉ từ phân hệ cơ sở
+PASS: VIO-26 Thu hồi quyền duyệt có hiệu lực ngay
+{"PASS":30,"FAIL":0,"BLOCKED":0}
