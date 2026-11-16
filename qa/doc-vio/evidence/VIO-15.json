@@ -1,0 +1,46 @@
+{
+  "id": "VIO-15",
+  "uc": "UC-VIO-01..05",
+  "title": "Chưa đăng nhập",
+  "steps": "GET danh sách và POST vi phạm không cookie.",
+  "expected": "401.",
+  "startedAt": "2026-11-16T07:48:32.142Z",
+  "layer": "HTTP API + isolated PostgreSQL/PGlite",
+  "status": "PASS",
+  "finishedAt": "2026-11-16T07:48:33.457Z",
+  "evidence": "VIO-15.json",
+  "trace": [
+    {
+      "actor": "anonymous",
+      "method": "GET",
+      "path": "/api/violations",
+      "status": 401,
+      "response": {
+        "error": {
+          "code": "UNAUTHENTICATED",
+          "message": "Vui lòng đăng nhập."
+        }
+      }
+    },
+    {
+      "actor": "anonymous",
+      "method": "POST",
+      "path": "/api/violations",
+      "request": {
+        "facilityId": "CS001",
+        "type": "TEST_Lối thoát nạn bị chặn",
+        "severity": "Nghiêm trọng",
+        "detectedOn": "2026-11-01",
+        "description": "TEST_VIO: dữ liệu giả lập kiểm thử",
+        "trackedOfficerId": "CB-A03"
+      },
+      "status": 401,
+      "response": {
+        "error": {
+          "code": "UNAUTHENTICATED",
+          "message": "Vui lòng đăng nhập."
+        }
+      }
+    }
+  ]
+}

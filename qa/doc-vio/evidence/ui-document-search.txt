@@ -1,0 +1,130 @@
+- link "PCCC & CNCH PC07 · Đội Khu vực 10":
+  - /url: /
+  - generic: PCCC & CNCH
+  - generic: PC07 · Đội Khu vực 10
+- generic: Điều hành
+- list:
+  - link "Tổng quan":
+    - /url: /
+    - generic: Tổng quan
+  - link "Tra cứu toàn hệ thống":
+    - /url: /tra-cuu
+    - generic: Tra cứu toàn hệ thống
+  - link "Cảnh báo & nhắc việc":
+    - /url: /canh-bao
+    - generic: Cảnh báo & nhắc việc
+- generic: Quản lý địa bàn
+- list:
+  - button "Tổ chức - Cán bộ":
+    - generic: Tổ chức - Cán bộ
+  - link "Cơ sở & hồ sơ":
+    - /url: /co-so
+    - generic: Cơ sở & hồ sơ
+  - link "Vi phạm - Đình chỉ":
+    - /url: /vi-pham
+    - generic: Vi phạm - Đình chỉ
+- generic: Nghiệp vụ
+- list:
+  - button "Công tác kiểm tra":
+    - generic: Công tác kiểm tra
+  - button "Lịch - Công việc - KPI":
+    - generic: Lịch - Công việc - KPI
+  - button "Báo cáo - Deadline":
+    - generic: Báo cáo - Deadline
+  - link "Sự cố cháy nổ - CNCH":
+    - /url: /su-co
+    - generic: Sự cố cháy nổ - CNCH
+  - link "Văn bản - Quy chuẩn":
+    - /url: /van-ban
+    - generic: Văn bản - Quy chuẩn
+- generic: Hệ thống
+- list:
+  - button "Số hóa dữ liệu":
+    - generic: Số hóa dữ liệu
+- paragraph:
+  - text: URD v1.0 · Bản demo dùng
+  - strong: dữ liệu mẫu
+  - text: theo NFR-02.
+- main:
+  - button "Ẩn/hiện menu":
+    - generic: Ẩn/hiện menu
+  - navigation "Breadcrumb":
+    - list:
+      - link "Trang chủ":
+        - /url: /
+      - generic: Văn bản - Quy chuẩn
+  - link "Tra cứu toàn hệ thống…":
+    - /url: /tra-cuu
+    - generic: Tra cứu toàn hệ thống…
+  - button "Đổi giao diện sáng/tối":
+  - button "Thông báo (5 chưa đọc)":
+    - generic: "5"
+  - button "t( Chỉ huy/Đội trưởng (mẫu) Chỉ huy/Đội trưởng":
+    - generic: t(
+    - generic: Chỉ huy/Đội trưởng (mẫu)
+    - generic: Chỉ huy/Đội trưởng
+  - heading "Kho văn bản pháp luật & quy chuẩn" [level=1]
+  - generic "Văn bản pháp luật/quy chuẩn": M05
+  - generic: UC-DOC-01
+  - generic: UC-DOC-02
+  - paragraph: Tra cứu và quản lý văn bản dùng chung. Trạng thái hiệu lực do người có quyền cập nhật.
+  - link "Thêm văn bản":
+    - /url: /van-ban/them
+  - generic: Tên / số ký hiệu
+  - textbox "Tên / số ký hiệu":
+    - /placeholder: Tìm văn bản…
+    - text: TEST-UI-001
+  - generic: Loại văn bản
+  - combobox "Loại văn bản":
+    - option "Tất cả loại" [selected]
+    - option "Công văn chỉ đạo"
+    - option "Hướng dẫn nghiệp vụ"
+    - option "Luật"
+    - option "Nghị định"
+    - option "Quy chuẩn/Tiêu chuẩn"
+    - option "Thông tư"
+  - generic: Trạng thái hiệu lực
+  - combobox "Trạng thái hiệu lực":
+    - option "Tất cả trạng thái" [selected]
+    - option "Còn hiệu lực"
+    - option "Hết hiệu lực"
+    - option "Chưa có hiệu lực"
+  - button "Tìm kiếm / Lọc" [active]
+  - region "Bảng dữ liệu, cuộn ngang nếu cần":
+    - table:
+      - rowgroup:
+        - row "Số/ký hiệu Tên văn bản Loại Cơ quan ban hành Ngày hiệu lực Trạng thái":
+          - columnheader "Số/ký hiệu"
+          - columnheader "Tên văn bản"
+          - columnheader "Loại"
+          - columnheader "Cơ quan ban hành"
+          - columnheader "Ngày hiệu lực"
+          - columnheader "Trạng thái"
+      - rowgroup:
+        - row "TEST-UI-001 TEST_UI Văn bản PCCC Nghị định Cơ quan giả lập 14/11/2026 Còn hiệu lực":
+          - cell "TEST-UI-001"
+          - cell "TEST_UI Văn bản PCCC":
+            - link "TEST_UI Văn bản PCCC":
+              - /url: /van-ban/229c6405-e66f-4055-bdf5-705b97143248
+          - cell "Nghị định"
+          - cell "Cơ quan giả lập"
+          - cell "14/11/2026"
+          - cell "Còn hiệu lực"
+  - paragraph:
+    - text: Kết quả
+    - strong: "1"
+    - text: –
+    - strong: "1"
+    - text: trong
+    - strong: "1"
+    - text: bản ghi
+  - combobox "Số dòng mỗi trang":
+    - generic: "20"
+  - button "Trang đầu" [disabled]:
+  - button "Trang trước" [disabled]:
+  - generic: 1 / 1
+  - button "Trang sau" [disabled]:
+  - button "Trang cuối" [disabled]:
+- region "Notifications alt+T"
+- alert: Hệ thống Quản lý công tác PCCC & CNCH
+- generic: Khu phố 01 (mẫu)

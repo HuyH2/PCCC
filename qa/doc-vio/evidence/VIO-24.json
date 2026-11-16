@@ -1,0 +1,140 @@
+{
+  "id": "VIO-24",
+  "uc": "UC-VIO-01..05",
+  "title": "Tiến độ khắc phục không hợp lệ",
+  "steps": "POST progress -1, 101, 1.5.",
+  "expected": "400; không lưu khắc phục.",
+  "startedAt": "2026-11-16T07:48:44.082Z",
+  "layer": "HTTP API + isolated PostgreSQL/PGlite",
+  "status": "PASS",
+  "finishedAt": "2026-11-16T07:48:45.347Z",
+  "evidence": "VIO-24.json",
+  "trace": [
+    {
+      "actor": "officer",
+      "method": "POST",
+      "path": "/api/violations",
+      "request": {
+        "facilityId": "CS001",
+        "type": "TEST_Lối thoát nạn bị chặn",
+        "severity": "Nghiêm trọng",
+        "detectedOn": "2026-11-01",
+        "description": "TEST_VIO: dữ liệu giả lập kiểm thử",
+        "trackedOfficerId": "CB-A03"
+      },
+      "status": 201,
+      "response": {
+        "violation": {
+          "id": "VP-ddb768bf-a9f7-470a-be85-24a49afa7318",
+          "facilityId": "CS001",
+          "facilityName": "Cơ sở CS001 (dữ liệu mẫu)",
+          "facilityAddress": "Địa chỉ giả lập",
+          "type": "TEST_Lối thoát nạn bị chặn",
+          "severity": "Nghiêm trọng",
+          "detectedOn": "2026-11-01",
+          "description": "TEST_VIO: dữ liệu giả lập kiểm thử",
+          "facilityCondition": "violation",
+          "remediationDeadline": null,
+          "trackedOfficerId": "CB-A03",
+          "status": "recorded",
+          "suspended": false,
+          "decisionNumber": null,
+          "progress": 0,
+          "evidenceCount": 0,
+          "createdBy": "DEMO-A03",
+          "createdAt": 1794815325306,
+          "updatedAt": 1794815325306
+        }
+      }
+    },
+    {
+      "actor": "officer",
+      "method": "POST",
+      "path": "/api/violations/VP-ddb768bf-a9f7-470a-be85-24a49afa7318/remediation",
+      "request": {
+        "note": "Dữ liệu thử",
+        "progress": -1
+      },
+      "status": 400,
+      "response": {
+        "error": {
+          "code": "INVALID_INPUT",
+          "message": "Tiến độ phải là số nguyên từ 0 đến 100."
+        }
+      }
+    },
+    {
+      "actor": "officer",
+      "method": "POST",
+      "path": "/api/violations/VP-ddb768bf-a9f7-470a-be85-24a49afa7318/remediation",
+      "request": {
+        "note": "Dữ liệu thử",
+        "progress": 101
+      },
+      "status": 400,
+      "response": {
+        "error": {
+          "code": "INVALID_INPUT",
+          "message": "Tiến độ phải là số nguyên từ 0 đến 100."
+        }
+      }
+    },
+    {
+      "actor": "officer",
+      "method": "POST",
+      "path": "/api/violations/VP-ddb768bf-a9f7-470a-be85-24a49afa7318/remediation",
+      "request": {
+        "note": "Dữ liệu thử",
+        "progress": 1.5
+      },
+      "status": 400,
+      "response": {
+        "error": {
+          "code": "INVALID_INPUT",
+          "message": "Tiến độ phải là số nguyên từ 0 đến 100."
+        }
+      }
+    },
+    {
+      "actor": "officer",
+      "method": "GET",
+      "path": "/api/violations/VP-ddb768bf-a9f7-470a-be85-24a49afa7318",
+      "status": 200,
+      "response": {
+        "violation": {
+          "id": "VP-ddb768bf-a9f7-470a-be85-24a49afa7318",
+          "facilityId": "CS001",
+          "facilityName": "Cơ sở CS001 (dữ liệu mẫu)",
+          "facilityAddress": "Địa chỉ giả lập",
+          "type": "TEST_Lối thoát nạn bị chặn",
+          "severity": "Nghiêm trọng",
+          "detectedOn": "2026-11-01",
+          "description": "TEST_VIO: dữ liệu giả lập kiểm thử",
+          "facilityCondition": "violation",
+          "remediationDeadline": null,
+          "trackedOfficerId": "CB-A03",
+          "status": "recorded",
+          "suspended": false,
+          "decisionNumber": null,
+          "progress": 0,
+          "evidenceCount": 0,
+          "createdBy": "DEMO-A03",
+          "createdAt": 1794815325306,
+          "updatedAt": 1794815325306
+        },
+        "suspension": null,
+        "remediation": [],
+        "evidences": [],
+        "history": [
+          {
+            "from_status": null,
+            "to_status": "recorded",
+            "reason": "Ghi nhận vi phạm",
+            "occurred_at": 1794815325306,
+            "actor_name": "Cán bộ kiểm tra/Quản lý địa bàn (mẫu)"
+          }
+        ]
+      }
+    }
+  ]
+}

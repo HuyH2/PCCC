@@ -1,0 +1,1036 @@
+TAP version 13
+# Subtest: account transfer migration and seed retain one current region owner with history constraints
+ok 1 - account transfer migration and seed retain one current region owner with history constraints
+  ---
+  duration_ms: 5065.1974
+  type: 'test'
+  ...
+# Subtest: administrator locks and unlocks accounts, revokes sessions and preserves last admin
+ok 2 - administrator locks and unlocks accounts, revokes sessions and preserves last admin
+  ---
+  duration_ms: 1655.6437
+  type: 'test'
+  ...
+# Subtest: partial and full transfer update current owners, direct scope, sessions and append-only history
+ok 3 - partial and full transfer update current owners, direct scope, sessions and append-only history
+  ---
+  duration_ms: 1470.3789
+  type: 'test'
+  ...
+# Backend request failed { name: 'error' }
+# Subtest: transfer denies unauthorized and invalid selections; audit failure rolls back all changes
+ok 4 - transfer denies unauthorized and invalid selections; audit failure rolls back all changes
+  ---
+  duration_ms: 1510.7489
+  type: 'test'
+  ...
+# Subtest: migration persists, reopens idempotently, and enforces FK/unique/audit constraints
+ok 5 - migration persists, reopens idempotently, and enforces FK/unique/audit constraints
+  ---
+  duration_ms: 7034.1813
+  type: 'test'
+  ...
+# Subtest: seed preserves existing password, permissions and scopes
+ok 6 - seed preserves existing password, permissions and scopes
+  ---
+  duration_ms: 3552.3502
+  type: 'test'
+  ...
+# Subtest: login sets HttpOnly session, persists identity, rotates and logs out with real revocation
+ok 7 - login sets HttpOnly session, persists identity, rotates and logs out with real revocation
+  ---
+  duration_ms: 1435.5068
+  type: 'test'
+  ...
+# Subtest: wrong password and missing username have generic failure; locked/inactive/disabled roles refuse login
+ok 8 - wrong password and missing username have generic failure; locked/inactive/disabled roles refuse login
+  ---
+  duration_ms: 1606.4759
+  type: 'test'
+  ...
+# Subtest: locked account, expired or fabricated session immediately loses access
+ok 9 - locked account, expired or fabricated session immediately loses access
+  ---
+  duration_ms: 1274.8885
+  type: 'test'
+  ...
+# Subtest: first login requires password change, revokes all sessions, and accepts only the new password
+ok 10 - first login requires password change, revokes all sessions, and accepts only the new password
+  ---
+  duration_ms: 1850.964
+  type: 'test'
+  ...
+# Subtest: skip password change preserves password and session, persists choice and audits once
+ok 11 - skip password change preserves password and session, persists choice and audits once
+  ---
+  duration_ms: 1468.1218
+  type: 'test'
+  ...
+# Subtest: skip requires active authentication and valid origin, and affects only the session account
+ok 12 - skip requires active authentication and valid origin, and affects only the session account
+  ---
+  duration_ms: 1380.5356
+  type: 'test'
+  ...
+# Subtest: rate limit caps repeated credentials attempts
+ok 13 - rate limit caps repeated credentials attempts
+  ---
+  duration_ms: 2311.6786
+  type: 'test'
+  ...
+# Subtest: successful logins do not exhaust the shared frontend proxy failure budget
+ok 14 - successful logins do not exhaust the shared frontend proxy failure budget
+  ---
+  duration_ms: 2275.2659
+  type: 'test'
+  ...
+# Subtest: origin and input validation block CSRF, forged roles, malformed JSON, oversized body and SQL injection
+ok 15 - origin and input validation block CSRF, forged roles, malformed JSON, oversized body and SQL injection
+  ---
+  duration_ms: 1208.3017
+  type: 'test'
+  ...
+# Subtest: permission denial protects admin API independent of claimed role
+ok 16 - permission denial protects admin API independent of claimed role
+  ---
+  duration_ms: 1503.5139
+  type: 'test'
+  ...
+# Subtest: region scope protects list/search/count/detail/dashboard and denies empty scope
+ok 17 - region scope protects list/search/count/detail/dashboard and denies empty scope
+  ---
+  duration_ms: 1379.2723
+  type: 'test'
+  ...
+# Subtest: unit scopes include descendants; facility-only scope limits to exactly that object
+ok 18 - unit scopes include descendants; facility-only scope limits to exactly that object
+  ---
+  duration_ms: 1385.0499
+  type: 'test'
+  ...
+# Subtest: admin changes role grants immediately, rejects invalid grants, preserves last admin and audits
+ok 19 - admin changes role grants immediately, rejects invalid grants, preserves last admin and audits
+  ---
+  duration_ms: 1565.4903
+  type: 'test'
+  ...
+# Subtest: admin assigns role and validated scope atomically, revokes session and keeps audit before/after
+ok 20 - admin assigns role and validated scope atomically, revokes session and keeps audit before/after
+  ---
+  duration_ms: 1669.9335
+  type: 'test'
+  ...
+# Subtest: scope-limited admin cannot configure global permissions
+ok 21 - scope-limited admin cannot configure global permissions
+  ---
+  duration_ms: 1103.9338
+  type: 'test'
+  ...
+# Subtest: read-only leadership gets scoped reads and no edit permission
+ok 22 - read-only leadership gets scoped reads and no edit permission
+  ---
+  duration_ms: 1138.5402
+  type: 'test'
+  ...
+# Subtest: data-transfer endpoints require authentication
+ok 23 - data-transfer endpoints require authentication
+  ---
+  duration_ms: 3770.2057
+  type: 'test'
+  ...
+# Subtest: data exports enforce grants and scope, write audit history, and provide stable CSV headers
+ok 24 - data exports enforce grants and scope, write audit history, and provide stable CSV headers
+  ---
+  duration_ms: 1620.092
+  type: 'test'
+  ...
+# Subtest: officer export uses scoped personnel profiles, including staff without accounts
+ok 25 - officer export uses scoped personnel profiles, including staff without accounts
+  ---
+  duration_ms: 1467.5903
+  type: 'test'
+  ...
+# Subtest: data transfer job history is owner-limited unless system admin has global scope
+ok 26 - data transfer job history is owner-limited unless system admin has global scope
+  ---
+  duration_ms: 1647.2307
+  type: 'test'
+  ...
+# Subtest: facility create validates fields, scope and duplicates, then writes an audit record
+ok 27 - facility create validates fields, scope and duplicates, then writes an audit record
+  ---
+  duration_ms: 4048.4626
+  type: 'test'
+  ...
+# Subtest: facility update rejects a duplicate name and address pair
+ok 28 - facility update rejects a duplicate name and address pair
+  ---
+  duration_ms: 1318.1481
+  type: 'test'
+  ...
+# Subtest: facility listing filters within scope before pagination and options stay scoped
+ok 29 - facility listing filters within scope before pagination and options stay scoped
+  ---
+  duration_ms: 1379.519
+  type: 'test'
+  ...
+# Subtest: facility mutations require authentication and the create grant
+ok 30 - facility mutations require authentication and the create grant
+  ---
+  duration_ms: 1226.3261
+  type: 'test'
+  ...
+# Subtest: status transition writes immutable history and audit, and timeline filters by type/time
+ok 31 - status transition writes immutable history and audit, and timeline filters by type/time
+  ---
+  duration_ms: 3809.6022
+  type: 'test'
+  ...
+# Subtest: scope, permission and validation protect reads and mutations without partial history
+ok 32 - scope, permission and validation protect reads and mutations without partial history
+  ---
+  duration_ms: 1371.4627
+  type: 'test'
+  ...
+# Subtest: admin approval restores suspended facility only with evidence, decision and explicit confirmation
+ok 33 - admin approval restores suspended facility only with evidence, decision and explicit confirmation
+  ---
+  duration_ms: 1813.6086
+  type: 'test'
+  ...
+# Backend request failed { name: 'error' }
+# Subtest: failed audit insert rolls back facility status and violation record
+ok 34 - failed audit insert rolls back facility status and violation record
+  ---
+  duration_ms: 1419.3103
+  type: 'test'
+  ...
+# Subtest: facility personnel migration enforces relationships, history and one active head
+ok 35 - facility personnel migration enforces relationships, history and one active head
+  ---
+  duration_ms: 3608.7928
+  type: 'test'
+  ...
+# Subtest: personnel APIs manage profiles, replace the head and preserve audit under M03 scope
+ok 36 - personnel APIs manage profiles, replace the head and preserve audit under M03 scope
+  ---
+  duration_ms: 1589.4242
+  type: 'test'
+  ...
+# Subtest: facility attachments validate files and linked personnel, store private paths, and authorize view/download
+ok 37 - facility attachments validate files and linked personnel, store private paths, and authorize view/download
+  ---
+  duration_ms: 1525.5827
+  type: 'test'
+  ...
+# Subtest: facility attachments accept verified Word and Excel files
+ok 38 - facility attachments accept verified Word and Excel files
+  ---
+  duration_ms: 1251.3186
+  type: 'test'
+  ...
+# Subtest: bulk M09 demo seed covers statuses and related data without replacing edits
+ok 39 - bulk M09 demo seed covers statuses and related data without replacing edits
+  ---
+  duration_ms: 4714.2833
+  type: 'test'
+  ...
+# Subtest: M02 blocks departure and transfer of an officer with active M09 work; cancelling releases the blocker
+ok 40 - M02 blocks departure and transfer of an officer with active M09 work; cancelling releases the blocker
+  ---
+  duration_ms: 3797.824
+  type: 'test'
+  ...
+# Subtest: M02 historical M09 assignments on a closed incident do not freeze officer transfers
+ok 41 - M02 historical M09 assignments on a closed incident do not freeze officer transfers
+  ---
+  duration_ms: 1132.6069
+  type: 'test'
+  ...
+# Subtest: M02 preserves M09 unit references for draft and closed history without blocking an unrelated empty unit
+ok 42 - M02 preserves M09 unit references for draft and closed history without blocking an unrelated empty unit
+  ---
+  duration_ms: 1315.1694
+  type: 'test'
+  ...
+# Subtest: M02 region status and ancestry stay unchanged when M09 holds a historical reference
+ok 43 - M02 region status and ancestry stay unchanged when M09 holds a historical reference
+  ---
+  duration_ms: 1272.1856
+  type: 'test'
+  ...
+# Subtest: M09 schema separates draft, processing and deadlines; enforces references, unique codes and numeric damage
+ok 44 - M09 schema separates draft, processing and deadlines; enforces references, unique codes and numeric damage
+  ---
+  duration_ms: 3993.6861
+  type: 'test'
+  ...
+# Subtest: M09 business and history/audit transaction rolls back; status history is append-only
+ok 45 - M09 business and history/audit transaction rolls back; status history is append-only
+  ---
+  duration_ms: 1462.1236
+  type: 'test'
+  ...
+# Subtest: M09 demo seed requires explicit isolated paths and markers; rerun preserves rows and private file
+ok 46 - M09 demo seed requires explicit isolated paths and markers; rerun preserves rows and private file
+  ---
+  duration_ms: 14735.7357
+  type: 'test'
+  ...
+# Subtest: M09 demo seed cleans new private file when metadata transaction fails
+ok 47 - M09 demo seed cleans new private file when metadata transaction fails
+  ---
+  duration_ms: 1371.959
+  type: 'test'
+  ...
+# Subtest: INC-01 drafts and official records persist in PostgreSQL with unique automatic codes
+ok 48 - INC-01 drafts and official records persist in PostgreSQL with unique automatic codes
+  ---
+  duration_ms: 4991.0485
+  type: 'test'
+  ...
+# Subtest: INC-01 official validation rejects missing required fields, impossible dates and invalid references
+ok 49 - INC-01 official validation rejects missing required fields, impossible dates and invalid references
+  ---
+  duration_ms: 2263.2229
+  type: 'test'
+  ...
+# Subtest: INC-01/02 editing classification and scene retains omitted values and audit before/after
+ok 50 - INC-01/02 editing classification and scene retains omitted values and audit before/after
+  ---
+  duration_ms: 1796.1601
+  type: 'test'
+  ...
+# Subtest: closed incident details can be corrected with a reason and retain status and audit
+ok 51 - closed incident details can be corrected with a reason and retain status and audit
+  ---
+  duration_ms: 1914.1544
+  type: 'test'
+  ...
+# Subtest: INC-03 human and property damages update without double counting and validate nonnegative values
+ok 52 - INC-03 human and property damages update without double counting and validate nonnegative values
+  ---
+  duration_ms: 1511.4271
+  type: 'test'
+  ...
+# Subtest: INC-04 multiple officers receive independent tasks, reassignment and progress retain audit
+ok 53 - INC-04 multiple officers receive independent tasks, reassignment and progress retain audit
+  ---
+  duration_ms: 1780.9357
+  type: 'test'
+  ...
+# Subtest: INC-05 deadline extension requires reason, keeps previous/new deadline and completion stops warnings
+ok 54 - INC-05 deadline extension requires reason, keeps previous/new deadline and completion stops warnings
+  ---
+  duration_ms: 1636.6292
+  type: 'test'
+  ...
+# Subtest: INC upload uses real private file, verifies permission and scoped download
+ok 55 - INC upload uses real private file, verifies permission and scoped download
+  ---
+  duration_ms: 1530.3421
+  type: 'test'
+  ...
+# Subtest: INC upload rejects unapproved, spoofed, oversized and unsafe-name files with no orphan metadata/files
+ok 56 - INC upload rejects unapproved, spoofed, oversized and unsafe-name files with no orphan metadata/files
+  ---
+  duration_ms: 1658.7447
+  type: 'test'
+  ...
+# Subtest: INC writes and document storage rollback together when the shared audit insert fails
+ok 57 - INC writes and document storage rollback together when the shared audit insert fails
+  ---
+  duration_ms: 1810.2788
+  type: 'test'
+  ...
+# Subtest: INC authentication, separated permissions, CSRF and forged actor are enforced by direct API requests
+ok 58 - INC authentication, separated permissions, CSRF and forged actor are enforced by direct API requests
+  ---
+  duration_ms: 1787.972
+  type: 'test'
+  ...
+# Subtest: INC region, unit, facility and empty scopes constrain lists, writes, child resources and statistics
+ok 59 - INC region, unit, facility and empty scopes constrain lists, writes, child resources and statistics
+  ---
+  duration_ms: 2024.8627
+  type: 'test'
+  ...
+# Subtest: INC revoked session while JSON body is streaming cannot commit an incident
+ok 60 - INC revoked session while JSON body is streaming cannot commit an incident
+  ---
+  duration_ms: 1611.0532
+  type: 'test'
+  ...
+# Subtest: INC-06 SQLite statistics reconcile with SQL and avoid multiplication from damages, documents and assignments
+ok 61 - INC-06 SQLite statistics reconcile with SQL and avoid multiplication from damages, documents and assignments
+  ---
+  duration_ms: 2087.1716
+  type: 'test'
+  ...
+# Subtest: INC statistics permission is separate from record viewing and rejects invalid period/filter input
+ok 62 - INC statistics permission is separate from record viewing and rejects invalid period/filter input
+  ---
+  duration_ms: 2225.929
+  type: 'test'
+  ...
+# Subtest: INC-05 warning uses exact epoch boundaries and configured advance hours without changing processing status
+ok 63 - INC-05 warning uses exact epoch boundaries and configured advance hours without changing processing status
+  ---
+  duration_ms: 1611.832
+  type: 'test'
+  ...
+# Subtest: INC completion evidence rule is configurable and drafts or illegal transitions cannot complete
+ok 64 - INC completion evidence rule is configurable and drafts or illegal transitions cannot complete
+  ---
+  duration_ms: 1504.1176
+  type: 'test'
+  ...
+# Subtest: INC revoked permission while multipart upload is streaming leaves no file or metadata
+ok 65 - INC revoked permission while multipart upload is streaming leaves no file or metadata
+  ---
+  duration_ms: 1515.5457
+  type: 'test'
+  ...
+# Subtest: INC create, edit and assignment/completion permissions remain distinct
+ok 66 - INC create, edit and assignment/completion permissions remain distinct
+  ---
+  duration_ms: 2608.3923
+  type: 'test'
+  ...
+# Subtest: INC assigned officer can update own task progress with edit permission but cannot reassign it
+ok 67 - INC assigned officer can update own task progress with edit permission but cannot reassign it
+  ---
+  duration_ms: 1697.1032
+  type: 'test'
+  ...
+# Subtest: INC optimistic version rejects stale metadata without losing another user's edit
+ok 68 - INC optimistic version rejects stale metadata without losing another user's edit
+  ---
+  duration_ms: 1288.7998
+  type: 'test'
+  ...
+# Subtest: INC statistics rejects unsafe aggregate totals without rounded monetary values
+ok 69 - INC statistics rejects unsafe aggregate totals without rounded monetary values
+  ---
+  duration_ms: 1699.6404
+  type: 'test'
+  ...
+# Subtest: INC refuses upload storage in repository public without writing file or metadata
+ok 70 - INC refuses upload storage in repository public without writing file or metadata
+  ---
+  duration_ms: 1467.4586
+  type: 'test'
+  ...
+# Subtest: INC administrator configures demo policy/catalog with audit, validation and no implicit role grants
+ok 71 - INC administrator configures demo policy/catalog with audit, validation and no implicit role grants
+  ---
+  duration_ms: 1762.6089
+  type: 'test'
+  ...
+# Subtest: INC-02 empty and configured subtype options enforce type ownership and persist classification history
+ok 72 - INC-02 empty and configured subtype options enforce type ownership and persist classification history
+  ---
+  duration_ms: 1693.5921
+  type: 'test'
+  ...
+# Subtest: UC-INS-01/02: create, publish and allocate annual/month/week/officer targets
+ok 73 - UC-INS-01/02: create, publish and allocate annual/month/week/officer targets
+  ---
+  duration_ms: 4816.9369
+  type: 'test'
+  ...
+# Subtest: UC-INS-03..05: select scoped facility, create case, notify and keep reschedule history
+ok 74 - UC-INS-03..05: select scoped facility, create case, notify and keep reschedule history
+  ---
+  duration_ms: 1949.9198
+  type: 'test'
+  ...
+# Subtest: planning APIs require authentication, permission, actor role and data scope
+ok 75 - planning APIs require authentication, permission, actor role and data scope
+  ---
+  duration_ms: 1421.6011
+  type: 'test'
+  ...
+# Subtest: UC-INS-01: plan lifecycle rejects duplicates, stale writes and edits after closing
+ok 76 - UC-INS-01: plan lifecycle rejects duplicates, stale writes and edits after closing
+  ---
+  duration_ms: 1996.5192
+  type: 'test'
+  ...
+# Subtest: UC-INS-02: allocation enforces parent hierarchy, uniqueness and parent totals
+ok 77 - UC-INS-02: allocation enforces parent hierarchy, uniqueness and parent totals
+  ---
+  duration_ms: 1517.8872
+  type: 'test'
+  ...
+# Subtest: UC-INS-03: periodic case validates plan state, plan year and 24-hour time values
+ok 78 - UC-INS-03: periodic case validates plan state, plan year and 24-hour time values
+  ---
+  duration_ms: 1372.0529
+  type: 'test'
+  ...
+# Subtest: UC-INS-04/05: notice and reschedule validation preserve versions and append-only history
+ok 79 - UC-INS-04/05: notice and reschedule validation preserve versions and append-only history
+  ---
+  duration_ms: 1442.2465
+  type: 'test'
+  ...
+# Subtest: planning actor roles cannot cross plan, case, notice and reschedule responsibilities
+ok 80 - planning actor roles cannot cross plan, case, notice and reschedule responsibilities
+  ---
+  duration_ms: 1597.5492
+  type: 'test'
+  ...
+# Subtest: migration and seed create checklists, items and sample inspections idempotently
+ok 81 - migration and seed create checklists, items and sample inspections idempotently
+  ---
+  duration_ms: 4599.2018
+  type: 'test'
+  ...
+# Subtest: full flow: create unscheduled → checklist → record → results → conclusion → complete → follow-up
+ok 82 - full flow: create unscheduled → checklist → record → results → conclusion → complete → follow-up
+  ---
+  duration_ms: 1614.7795
+  type: 'test'
+  ...
+# Subtest: thematic inspection requires a topic; inputs and state transitions are validated
+ok 83 - thematic inspection requires a topic; inputs and state transitions are validated
+  ---
+  duration_ms: 1583.2748
+  type: 'test'
+  ...
+# Subtest: APIs require a session (401) and M06 permissions (403)
+ok 84 - APIs require a session (401) and M06 permissions (403)
+  ---
+  duration_ms: 1539.7786
+  type: 'test'
+  ...
+# Subtest: data scope: list, detail, files and mutations never reach out-of-scope facilities
+ok 85 - data scope: list, detail, files and mutations never reach out-of-scope facilities
+  ---
+  duration_ms: 1489.8209
+  type: 'test'
+  ...
+# Subtest: UC-INS-06: only commanders (A01) and deputies (A02) create checklists
+ok 86 - UC-INS-06: only commanders (A01) and deputies (A02) create checklists
+  ---
+  duration_ms: 1722.4353
+  type: 'test'
+  ...
+# Subtest: document access requires session, M05 permissions and scope; writes require Commander or Admin
+ok 87 - document access requires session, M05 permissions and scope; writes require Commander or Admin
+  ---
+  duration_ms: 3933.9374
+  type: 'test'
+  ...
+# Subtest: Commander manages documents with unit scope; grants, role and scope are enforced on every write
+ok 88 - Commander manages documents with unit scope; grants, role and scope are enforced on every write
+  ---
+  duration_ms: 1172.2156
+  type: 'test'
+  ...
+# Subtest: create, detail, accent search, combined filters, pagination and versioned update with history
+ok 89 - create, detail, accent search, combined filters, pagination and versioned update with history
+  ---
+  duration_ms: 1199.2878
+  type: 'test'
+  ...
+# Subtest: document validation rejects duplicates, unknown fields, dates, URLs and invalid filters
+ok 90 - document validation rejects duplicates, unknown fields, dates, URLs and invalid filters
+  ---
+  duration_ms: 1116.8365
+  type: 'test'
+  ...
+# Subtest: PDF create/upload/download enforce authorization, content, size, filename and concurrency
+ok 91 - PDF create/upload/download enforce authorization, content, size, filename and concurrency
+  ---
+  duration_ms: 1952.3866
+  type: 'test'
+  ...
+# Backend request failed { name: 'error' }
+# Subtest: audit failure rolls back document mutation; seed preserves existing edits and append-only log
+ok 92 - audit failure rolls back document mutation; seed preserves existing edits and append-only log
+  ---
+  duration_ms: 1488.6434
+  type: 'test'
+  ...
+# Subtest: system audit filters actor/time/feature/action/object and protects snapshots from ordinary users
+ok 93 - system audit filters actor/time/feature/action/object and protects snapshots from ordinary users
+  ---
+  duration_ms: 1234.5732
+  type: 'test'
+  ...
+# Subtest: mobile same-origin login keeps a secure session and APIs enforce scope
+ok 94 - mobile same-origin login keeps a secure session and APIs enforce scope
+  ---
+  duration_ms: 3663.6292
+  type: 'test'
+  ...
+# Subtest: organization demo seed creates directory records and remains idempotent
+ok 95 - organization demo seed creates directory records and remains idempotent
+  ---
+  duration_ms: 4237.7811
+  type: 'test'
+  ...
+# Subtest: ORG tree uses shared units/regions and readonly root; valid ward and neighborhood persist
+ok 96 - ORG tree uses shared units/regions and readonly root; valid ward and neighborhood persist
+  ---
+  duration_ms: 3868.1416
+  type: 'test'
+  ...
+# Subtest: ORG unit edits, responsible officer and audit commit together with before/after
+ok 97 - ORG unit edits, responsible officer and audit commit together with before/after
+  ---
+  duration_ms: 1175.6689
+  type: 'test'
+  ...
+# Subtest: ORG invalid parent, level, self/cycle, duplicate code and responsible person leave data unchanged
+ok 98 - ORG invalid parent, level, self/cycle, duplicate code and responsible person leave data unchanged
+  ---
+  duration_ms: 1432.5091
+  type: 'test'
+  ...
+# Subtest: ORG empty units deactivate without physical delete; active children and references block
+ok 99 - ORG empty units deactivate without physical delete; active children and references block
+  ---
+  duration_ms: 1331.3436
+  type: 'test'
+  ...
+# Subtest: ORG M02 permissions, session, CSRF and forged actor are enforced on every endpoint
+ok 100 - ORG M02 permissions, session, CSRF and forged actor are enforced on every endpoint
+  ---
+  duration_ms: 1312.8866
+  type: 'test'
+  ...
+# Subtest: ORG unit scope includes descendants and blocks reads, writes and parent moves outside scope
+ok 101 - ORG unit scope includes descendants and blocks reads, writes and parent moves outside scope
+  ---
+  duration_ms: 1638.384
+  type: 'test'
+  ...
+# Subtest: ORG officer create returns 201; NOCASE code/email duplicates and concurrent submits return 409
+ok 102 - ORG officer create returns 201; NOCASE code/email duplicates and concurrent submits return 409
+  ---
+  duration_ms: 1470.9302
+  type: 'test'
+  ...
+# Subtest: ORG officer validation rejects missing, malformed, oversized, disabled role and unknown unit
+ok 103 - ORG officer validation rejects missing, malformed, oversized, disabled role and unknown unit
+  ---
+  duration_ms: 1484.3857
+  type: 'test'
+  ...
+# Subtest: ORG officer partial edit preserves omitted fields and never changes linked account role/scope
+ok 104 - ORG officer partial edit preserves omitted fields and never changes linked account role/scope
+  ---
+  duration_ms: 1353.8514
+  type: 'test'
+  ...
+# Subtest: ORG search matches Vietnamese name, position and unit before filtering/count/pagination
+ok 105 - ORG search matches Vietnamese name, position and unit before filtering/count/pagination
+  ---
+  duration_ms: 1403.4096
+  type: 'test'
+  ...
+# Subtest: ORG ACTIVE to INACTIVE/TRANSFERRED requires real date, reason and keeps profile plus audit
+ok 106 - ORG ACTIVE to INACTIVE/TRANSFERRED requires real date, reason and keeps profile plus audit
+  ---
+  duration_ms: 1474.7753
+  type: 'test'
+  ...
+# Subtest: ORG officer assignment references block departure or incompatible unit moves without territory transfer
+ok 107 - ORG officer assignment references block departure or incompatible unit moves without territory transfer
+  ---
+  duration_ms: 1325.9924
+  type: 'test'
+  ...
+# Subtest: ORG all officer/unit/status mutations rollback entirely when audit insert fails
+ok 108 - ORG all officer/unit/status mutations rollback entirely when audit insert fails
+  ---
+  duration_ms: 1574.2056
+  type: 'test'
+  ...
+# Subtest: ORG region/facility scopes never grant entire unit staff or owning-unit mutations; empty scope denies all
+ok 109 - ORG region/facility scopes never grant entire unit staff or owning-unit mutations; empty scope denies all
+  ---
+  duration_ms: 1672.4894
+  type: 'test'
+  ...
+# Subtest: ORG valid empty ward reparent succeeds; references prevent changing authorization ancestry
+ok 110 - ORG valid empty ward reparent succeeds; references prevent changing authorization ancestry
+  ---
+  duration_ms: 1552.7366
+  type: 'test'
+  ...
+# Subtest: ORG DB constraints enforce officer FK, unique, statuses and no physical deletion
+ok 111 - ORG DB constraints enforce officer FK, unique, statuses and no physical deletion
+  ---
+  duration_ms: 1400.4607
+  type: 'test'
+  ...
+# Subtest: ORG duplicate edit returns 409 and inactive unit/leader cannot be assigned
+ok 112 - ORG duplicate edit returns 409 and inactive unit/leader cannot be assigned
+  ---
+  duration_ms: 1525.762
+  type: 'test'
+  ...
+# Subtest: ORG database reopen retains officers, edits, status and audit; reseed never overwrites
+ok 113 - ORG database reopen retains officers, edits, status and audit; reseed never overwrites
+  ---
+  duration_ms: 5876.0707
+  type: 'test'
+  ...
+# Subtest: ORG ancestor context cannot reveal notes and hidden leaders survive ordinary scoped edits
+ok 114 - ORG ancestor context cannot reveal notes and hidden leaders survive ordinary scoped edits
+  ---
+  duration_ms: 1600.014
+  type: 'test'
+  ...
+# Subtest: ORG unit staff scope does not expand through cross-unit legacy facility assignments
+ok 115 - ORG unit staff scope does not expand through cross-unit legacy facility assignments
+  ---
+  duration_ms: 1496.2997
+  type: 'test'
+  ...
+# Subtest: ORG neighborhood edit/status audit and rollback share the existing regions source
+ok 116 - ORG neighborhood edit/status audit and rollback share the existing regions source
+  ---
+  duration_ms: 1317.8463
+  type: 'test'
+  ...
+# Subtest: ORG revoked session while request body is streaming cannot commit an officer
+ok 117 - ORG revoked session while request body is streaming cannot commit an officer
+  ---
+  duration_ms: 1263.055
+  type: 'test'
+  ...
+# Subtest: region catalogue follows the caller scope and M02 grants
+ok 118 - region catalogue follows the caller scope and M02 grants
+  ---
+  duration_ms: 4388.0448
+  type: 'test'
+  ...
+# Subtest: assignment keeps one owner, history and the data scope in sync
+ok 119 - assignment keeps one owner, history and the data scope in sync
+  ---
+  duration_ms: 1417.9886
+  type: 'test'
+  ...
+# Subtest: region and account writes validate input, permissions and lifecycle
+ok 120 - region and account writes validate input, permissions and lifecycle
+  ---
+  duration_ms: 2263.1406
+  type: 'test'
+  ...
+# Subtest: officer lookup and assignment target obey the caller scope
+ok 121 - officer lookup and assignment target obey the caller scope
+  ---
+  duration_ms: 1468.7913
+  type: 'test'
+  ...
+# Subtest: region detail and counts never expose facilities outside the caller scope
+ok 122 - region detail and counts never expose facilities outside the caller scope
+  ---
+  duration_ms: 1449.7329
+  type: 'test'
+  ...
+# Subtest: account changes cannot break assignment links or leave an owner without access
+ok 123 - account changes cannot break assignment links or leave an owner without access
+  ---
+  duration_ms: 1249.4596
+  type: 'test'
+  ...
+# Subtest: transfers append assignment history instead of inheriting old notes
+ok 124 - transfers append assignment history instead of inheriting old notes
+  ---
+  duration_ms: 1322.9121
+  type: 'test'
+  ...
+# Subtest: assignment dates are calendar-valid
+ok 125 - assignment dates are calendar-valid
+  ---
+  duration_ms: 1269.6696
+  type: 'test'
+  ...
+# Subtest: concurrent account creation keeps username and officer id unique
+ok 126 - concurrent account creation keeps username and officer id unique
+  ---
+  duration_ms: 1447.3503
+  type: 'test'
+  ...
+# Backend request failed { name: 'error' }
+# Subtest: status guards and an audit failure roll back the assignment
+ok 127 - status guards and an audit failure roll back the assignment
+  ---
+  duration_ms: 1439.6457
+  type: 'test'
+  ...
+# Subtest: schema enforces unique officer codes and append-only assignment history
+ok 128 - schema enforces unique officer codes and append-only assignment history
+  ---
+  duration_ms: 1223.377
+  type: 'test'
+  ...
+# Subtest: a region-scoped officer can assign within the region's unit
+ok 129 - a region-scoped officer can assign within the region's unit
+  ---
+  duration_ms: 1278.194
+  type: 'test'
+  ...
+# Subtest: business date follows Vietnam time around the UTC midnight boundary
+ok 130 - business date follows Vietnam time around the UTC midnight boundary
+  ---
+  duration_ms: 0.4683
+  type: 'test'
+  ...
+# Subtest: migration adds report tables and M08 report grants
+ok 131 - migration adds report tables and M08 report grants
+  ---
+  duration_ms: 3360.1722
+  type: 'test'
+  ...
+# Subtest: types, options and previews enforce filters and data scope
+ok 132 - types, options and previews enforce filters and data scope
+  ---
+  duration_ms: 1430.1431
+  type: 'test'
+  ...
+# Subtest: exports XLSX/PDF, stores history and protects download
+ok 133 - exports XLSX/PDF, stores history and protects download
+  ---
+  duration_ms: 1732.1115
+  type: 'test'
+  ...
+# Subtest: templates override labels/title and are validated
+ok 134 - templates override labels/title and are validated
+  ---
+  duration_ms: 1259.6306
+  type: 'test'
+  ...
+# Subtest: date range and row caps reject oversized exports before writing history
+ok 135 - date range and row caps reject oversized exports before writing history
+  ---
+  duration_ms: 4102.6078
+  type: 'test'
+  ...
+# Subtest: HTTP report lifecycle covers validation, deadline reminder, scoped file access and audit
+ok 136 - HTTP report lifecycle covers validation, deadline reminder, scoped file access and audit
+  ---
+  duration_ms: 3948.2271
+  type: 'test'
+  ...
+# Subtest: HTTP recurring report schedule creates one period and rejects invalid or duplicate generation
+ok 137 - HTTP recurring report schedule creates one period and rejects invalid or duplicate generation
+  ---
+  duration_ms: 1184.2845
+  type: 'test'
+  ...
+# Subtest: dashboard API aggregates match canonical facility, officer and region rows
+ok 138 - dashboard API aggregates match canonical facility, officer and region rows
+  ---
+  duration_ms: 1237.9223
+  type: 'test'
+  ...
+# Subtest: seed tạo nhiều báo cáo và không ghi đè dữ liệu khi chạy lại
+ok 139 - seed tạo nhiều báo cáo và không ghi đè dữ liệu khi chạy lại
+  ---
+  duration_ms: 3314.8706
+  type: 'test'
+  ...
+# Subtest: giao → cảnh báo → nộp file → hoàn thành, quyền và audit
+ok 140 - giao → cảnh báo → nộp file → hoàn thành, quyền và audit
+  ---
+  duration_ms: 941.604
+  type: 'test'
+  ...
+# Subtest: lịch định kỳ sinh kỳ kế tiếp và chặn tạo trùng
+ok 141 - lịch định kỳ sinh kỳ kế tiếp và chặn tạo trùng
+  ---
+  duration_ms: 876.4697
+  type: 'test'
+  ...
+# Subtest: dropdown chỉ đưa người có quyền nộp; thông báo theo scope và đọc riêng
+ok 142 - dropdown chỉ đưa người có quyền nộp; thông báo theo scope và đọc riêng
+  ---
+  duration_ms: 878.8236
+  type: 'test'
+  ...
+# Subtest: API yêu cầu session và không lộ báo cáo ngoài phạm vi
+ok 143 - API yêu cầu session và không lộ báo cáo ngoài phạm vi
+  ---
+  duration_ms: 910.4884
+  type: 'test'
+  ...
+# Subtest: findRoute matches method and exact or RegExp paths, first match wins
+ok 144 - findRoute matches method and exact or RegExp paths, first match wins
+  ---
+  duration_ms: 1.0637
+  type: 'test'
+  ...
+# Subtest: app dispatches public routes without session, protects the rest, 404 only after login
+ok 145 - app dispatches public routes without session, protects the rest, 404 only after login
+  ---
+  duration_ms: 3071.1387
+  type: 'test'
+  ...
+# Subtest: migration exposes read-only views joined to the shared catalog
+ok 146 - migration exposes read-only views joined to the shared catalog
+  ---
+  duration_ms: 2906.8375
+  type: 'test'
+  ...
+# Subtest: dashboard totals and breakdowns agree for system-wide scope
+ok 147 - dashboard totals and breakdowns agree for system-wide scope
+  ---
+  duration_ms: 1049.1457
+  type: 'test'
+  ...
+# Subtest: dashboard follows unit, region, facility and empty scopes, including empty regions
+ok 148 - dashboard follows unit, region, facility and empty scopes, including empty regions
+  ---
+  duration_ms: 1095.2041
+  type: 'test'
+  ...
+# Subtest: dashboard paginates breakdowns and validates paging input
+ok 149 - dashboard paginates breakdowns and validates paging input
+  ---
+  duration_ms: 1023.8772
+  type: 'test'
+  ...
+# Subtest: search is accent-insensitive and groups results by data type
+ok 150 - search is accent-insensitive and groups results by data type
+  ---
+  duration_ms: 1159.06
+  type: 'test'
+  ...
+# Subtest: search never returns objects outside the caller's data scope
+ok 151 - search never returns objects outside the caller's data scope
+  ---
+  duration_ms: 1397.4783
+  type: 'test'
+  ...
+# Subtest: search and dashboard enforce authentication, permissions and input limits
+ok 152 - search and dashboard enforce authentication, permissions and input limits
+  ---
+  duration_ms: 1202.2017
+  type: 'test'
+  ...
+# Subtest: seed creates real tasks and a message once without replacing a conversation
+ok 153 - seed creates real tasks and a message once without replacing a conversation
+  ---
+  duration_ms: 4303.0547
+  type: 'test'
+  ...
+# Subtest: re-seed backfills only untouched pre-progress demo tasks
+ok 154 - re-seed backfills only untouched pre-progress demo tasks
+  ---
+  duration_ms: 1359.8411
+  type: 'test'
+  ...
+# Subtest: only task participants can read and exchange messages; input and paging are bounded
+ok 155 - only task participants can read and exchange messages; input and paging are bounded
+  ---
+  duration_ms: 1594.4575
+  type: 'test'
+  ...
+# Subtest: author can edit and soft-delete, others cannot; closed tasks reject mutations
+ok 156 - author can edit and soft-delete, others cannot; closed tasks reject mutations
+  ---
+  duration_ms: 1186.4479
+  type: 'test'
+  ...
+# Backend request failed { name: 'error' }
+# Subtest: audit failure rolls back message creation
+ok 157 - audit failure rolls back message creation
+  ---
+  duration_ms: 1053.5977
+  type: 'test'
+  ...
+# Subtest: an assigned account with no active data scope cannot read its task
+ok 158 - an assigned account with no active data scope cannot read its task
+  ---
+  duration_ms: 1028.4015
+  type: 'test'
+  ...
+# Subtest: commander assigns a scoped task; assignee updates durable progress and history
+ok 159 - commander assigns a scoped task; assignee updates durable progress and history
+  ---
+  duration_ms: 1285.5519
+  type: 'test'
+  ...
+# Subtest: assignment rejects unprivileged, out-of-scope and invalid changes
+ok 160 - assignment rejects unprivileged, out-of-scope and invalid changes
+  ---
+  duration_ms: 1139.2696
+  type: 'test'
+  ...
+# Backend request failed { name: 'error' }
+# Subtest: task progress rolls back when audit logging fails
+ok 161 - task progress rolls back when audit logging fails
+  ---
+  duration_ms: 1014.06
+  type: 'test'
+  ...
+# Subtest: closed suspensions cannot be edited; active cases retain editing and audit
+ok 162 - closed suspensions cannot be edited; active cases retain editing and audit
+  ---
+  duration_ms: 3309.6031
+  type: 'test'
+  ...
+# Subtest: unknown tracked officers rejected on create and update without changing data
+ok 163 - unknown tracked officers rejected on create and update without changing data
+  ---
+  duration_ms: 979.6125
+  type: 'test'
+  ...
+# Subtest: both suspension sources must close before facility restoration
+ok 164 - both suspension sources must close before facility restoration
+  ---
+  duration_ms: 981.1702
+  type: 'test'
+  ...
+# Subtest: facility history records only actual transitions with linked audit and actors
+ok 165 - facility history records only actual transitions with linked audit and actors
+  ---
+  duration_ms: 993.4107
+  type: 'test'
+  ...
+# Subtest: new suspension cycle restores current paused/unlicensed state rather than old active state
+ok 166 - new suspension cycle restores current paused/unlicensed state rather than old active state
+  ---
+  duration_ms: 1095.7914
+  type: 'test'
+  ...
+# Subtest: failed facility audit rolls back suspension and approval atomically
+ok 167 - failed facility audit rolls back suspension and approval atomically
+  ---
+  duration_ms: 947.459
+  type: 'test'
+  ...
+# Subtest: new mutation checks retain permission and scope protections
+ok 168 - new mutation checks retain permission and scope protections
+  ---
+  duration_ms: 893.0199
+  type: 'test'
+  ...
+# Subtest: migration adds KPI, explanation, assignment and progress structures
+ok 169 - migration adds KPI, explanation, assignment and progress structures
+  ---
+  duration_ms: 2855.3257
+  type: 'test'
+  ...
+# Subtest: task filters, completion and KPI debt/explanation flow
+ok 170 - task filters, completion and KPI debt/explanation flow
+  ---
+  duration_ms: 1483.6195
+  type: 'test'
+  ...
+1..170
+# tests 170
+# suites 0
+# pass 170
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 213321.5253

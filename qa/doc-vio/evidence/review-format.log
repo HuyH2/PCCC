@@ -1,0 +1,6 @@
+
+> pccc@1.0.0 format:check D:\Learn\QLDAPM\PCCC
+> node scripts/format-auth.mjs
+
+Checking formatting...
+All matched files use Prettier code style!

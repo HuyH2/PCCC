@@ -1,0 +1,55 @@
+{
+  "id": "VIO-04",
+  "uc": "UC-VIO-01..05",
+  "title": "Ngày/hạn không hợp lệ",
+  "steps": "Tạo với ngày 2026-02-30 và hạn trước ngày phát hiện.",
+  "expected": "400.",
+  "startedAt": "2026-11-14T20:41:07.328Z",
+  "layer": "HTTP API + isolated PostgreSQL/PGlite",
+  "status": "PASS",
+  "finishedAt": "2026-11-14T20:41:08.205Z",
+  "evidence": "VIO-04.json",
+  "trace": [
+    {
+      "actor": "officer",
+      "method": "POST",
+      "path": "/api/violations",
+      "request": {
+        "facilityId": "CS001",
+        "type": "TEST_Lối thoát nạn bị chặn",
+        "severity": "Nghiêm trọng",
+        "detectedOn": "2026-02-30",
+        "description": "TEST_VIO: dữ liệu giả lập kiểm thử",
+        "trackedOfficerId": "CB-A03"
+      },
+      "status": 400,
+      "response": {
+        "error": {
+          "code": "INVALID_INPUT",
+          "message": "Ngày phát hiện không hợp lệ."
+        }
+      }
+    },
+    {
+      "actor": "officer",
+      "method": "POST",
+      "path": "/api/violations",
+      "request": {
+        "facilityId": "CS001",
+        "type": "TEST_Lối thoát nạn bị chặn",
+        "severity": "Nghiêm trọng",
+        "detectedOn": "2026-11-01",
+        "description": "TEST_VIO: dữ liệu giả lập kiểm thử",
+        "trackedOfficerId": "CB-A03",
+        "remediationDeadline": "2026-10-01"
+      },
+      "status": 400,
+      "response": {
+        "error": {
+          "code": "INVALID_INPUT",
+          "message": "Hạn khắc phục phải sau ngày phát hiện."
+        }
+      }
+    }
+  ]
+}

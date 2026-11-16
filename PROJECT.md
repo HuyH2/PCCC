@@ -379,6 +379,13 @@ Thêm mục mới **ở cuối** danh sách, theo mẫu ở §7.
 - **Kết quả xác minh:** 20/20 test trong bốn suite liên quan PASS; `pnpm format:check` và `pnpm --filter pccc-be check` PASS. UI và mở file bằng ứng dụng văn phòng/PDF chưa kiểm thủ công.
 - **Giới hạn:** Chưa chạy kiểm thử trình duyệt hoặc mở file bằng ứng dụng văn phòng/PDF; nhắc deadline hiện được refresh khi API notification được gọi, không xác minh scheduler nền. Dashboard hiện thống kê cơ sở/cán bộ/khu vực, không thống kê báo cáo.
 
+### F16 — Sửa lỗi kiểm thử vi phạm và khắc phục (UC-VIO-01..05)
+
+- **Mô tả:** Sửa bốn lỗi phát hiện trong bộ QA DOC/VIO: khôi phục cơ sở khi còn đình chỉ ở phân hệ khác, sửa quyết định của hồ sơ đã hoàn thành, cán bộ theo dõi không tồn tại và thiếu lịch sử trạng thái cơ sở.
+- **Backend:** `core/violations.js` kiểm cán bộ khi tạo/đổi phân công, khóa sửa quyết định sau completed, ghi audit/lịch sử cơ sở trong cùng transaction và chỉ xét quyết định chưa đóng khi lấy trạng thái cần khôi phục. `facility-history.service.js` chặn khôi phục từ M03 khi còn đình chỉ M04; M04 không tự đóng hồ sơ đình chỉ M03.
+- **Test:** `test/violations-regression.test.js` bổ sung 7 test cho bốn lỗi, chu kỳ đình chỉ mới, nhiều hồ sơ, quyền/scope và rollback khi audit lỗi. Bộ QA `qa/doc-vio/run.mjs`: 34 case HTTP. Kết quả review mới nhất ở `qa/doc-vio/Review_16_11.md`; báo cáo retest cũ giữ làm lịch sử.
+- **Giới hạn:** Không migration hoặc chỉnh sửa dữ liệu cũ; mã cán bộ không hợp lệ đã lưu trước đây không tự được sửa. Không đổi ma trận quyền hay quy tắc phạm vi cán bộ chưa chốt. Kết quả UI thủ công và nguồn từng testcase nằm trong `qa/doc-vio/handoff`; build còn cảnh báo dependency Next.js, chưa merge/nghiệm thu.
+
 ## 7. Quy tắc khi làm feature
 
 Bắt buộc với mọi feature mới (người hoặc AI agent):

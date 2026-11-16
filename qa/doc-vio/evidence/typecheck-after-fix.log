@@ -1,0 +1,7 @@
+
+> pccc@1.0.0 typecheck D:\Learn\QLDAPM\PCCC
+> pnpm --filter pccc-fe typecheck
+
+
+> pccc-fe@1.0.0 typecheck D:\Learn\QLDAPM\PCCC\pccc-FE
+> tsc --noEmit

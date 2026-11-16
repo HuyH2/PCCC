@@ -1,0 +1,6 @@
+# Local snapshots and duplicate archives are not the current handoff.
+evidence/source/
+evidence/source-sha256.json
+evidence/fix.patch
+evidence/initial-run/
+evidence/confirmed-run/

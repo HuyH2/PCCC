@@ -1,0 +1,158 @@
+- link:
+  - /url: /
+  - generic: PCCC & CNCH
+  - generic: PC07 · Đội Khu vực 10
+- generic: Điều hành
+- list:
+  - link:
+    - /url: /
+    - generic: Tổng quan
+  - link:
+    - /url: /tra-cuu
+    - generic: Tra cứu toàn hệ thống
+  - link:
+    - /url: /canh-bao
+    - generic: Cảnh báo & nhắc việc
+- generic: Quản lý địa bàn
+- list:
+  - button:
+    - generic: Tổ chức - Cán bộ
+  - link:
+    - /url: /co-so
+    - generic: Cơ sở & hồ sơ
+  - link:
+    - /url: /vi-pham
+    - generic: Vi phạm - Đình chỉ
+- generic: Nghiệp vụ
+- list:
+  - button:
+    - generic: Công tác kiểm tra
+  - button:
+    - generic: Lịch - Công việc - KPI
+  - button:
+    - generic: Báo cáo - Deadline
+  - link:
+    - /url: /su-co
+    - generic: Sự cố cháy nổ - CNCH
+  - link:
+    - /url: /van-ban
+    - generic: Văn bản - Quy chuẩn
+- generic: Hệ thống
+- list:
+  - button:
+    - generic: Số hóa dữ liệu
+- paragraph:
+  - text: URD v1.0 · Bản demo dùng
+  - strong: dữ liệu mẫu
+  - text: theo NFR-02.
+- main:
+  - button:
+    - generic: Ẩn/hiện menu
+  - navigation:
+    - list:
+      - link:
+        - /url: /
+        - text: Trang chủ
+      - generic: Vi phạm - Đình chỉ
+  - link:
+    - /url: /tra-cuu
+    - generic: Tra cứu toàn hệ thống…
+  - button:
+  - button:
+    - generic: "5"
+  - button:
+    - generic: t(
+    - generic: Chỉ huy/Đội trưởng (mẫu)
+    - generic: Chỉ huy/Đội trưởng
+  - heading [level=1]: Vi phạm - Đình chỉ - Khắc phục
+  - generic: M04
+  - generic: UC-VIO-01
+  - generic: UC-VIO-02
+  - generic: UC-VIO-03
+  - generic: UC-VIO-04
+  - generic: UC-VIO-05
+  - paragraph: Theo dõi vi phạm, hồ sơ đình chỉ, bằng chứng khắc phục và phê duyệt hoạt động trở lại.
+  - button:
+    - text: Ghi nhận vi phạm
+  - paragraph: Tổng hồ sơ vi phạm
+  - paragraph: "1"
+  - paragraph: Đang đình chỉ
+  - paragraph: "0"
+  - paragraph: Quá hạn khắc phục
+  - paragraph: "0"
+  - paragraph: Chờ phê duyệt
+  - paragraph: "0"
+  - textbox:
+    - /placeholder: Tìm mã, cơ sở, loại vi phạm, số quyết định...
+  - combobox
+  - combobox
+  - combobox
+  - table:
+    - rowgroup:
+      - row:
+        - columnheader: Mã hồ sơ
+        - columnheader: Cơ sở
+        - columnheader: Loại vi phạm
+        - columnheader: Mức độ
+        - columnheader: Hạn khắc phục
+        - columnheader: Tiến độ
+        - columnheader: Trạng thái
+        - columnheader: Bằng chứng
+    - rowgroup:
+      - row:
+        - cell: VP-e56dc918-5c2a-4591-9a04-c50709081fe1
+        - cell:
+          - generic: Cơ sở CS001 (dữ liệu mẫu)
+          - generic: Địa chỉ giả lập
+        - cell: Lối thoát nạn bị chặn
+        - cell:
+          - generic: Trung bình
+        - cell: —
+        - cell: 0%
+        - cell:
+          - generic: Mới ghi nhận
+        - cell:
+          - text: "0"
+  - paragraph:
+    - text: Kết quả
+    - strong: "1"
+    - text: –
+    - strong: "1"
+    - text: trong
+    - strong: "1"
+    - text: bản ghi
+  - combobox:
+    - generic: "20"
+  - button [disabled]:
+  - button [disabled]:
+  - generic: 1 / 1
+  - button [disabled]:
+  - button [disabled]:
+  - paragraph: Hồ sơ chờ duyệt cần có nội dung khắc phục và ít nhất một tệp bằng chứng. Việc phê duyệt được ghi lịch sử.
+- region "Notifications alt+T"
+- alert: Vi phạm - Đình chỉ - Khắc phục · PCCC & CNCH — PC07
+- generic: Khu phố 01 (mẫu)
+- dialog "VP-e56dc918-5c2a-4591-9a04-c50709081fe1 · Cơ sở CS001 (dữ liệu mẫu)":
+  - heading "VP-e56dc918-5c2a-4591-9a04-c50709081fe1 · Cơ sở CS001 (dữ liệu mẫu)" [level=2]
+  - paragraph: Địa chỉ giả lập · Mới ghi nhận
+  - paragraph: "Loại: Lối thoát nạn bị chặn"
+  - paragraph: "Mức độ: Trung bình"
+  - paragraph: "Tình trạng cơ sở: Vi phạm"
+  - paragraph: "Ngày phát hiện: 2026-11-14"
+  - paragraph: "Hạn khắc phục: Chưa đặt"
+  - paragraph: "Nội dung: TEST_UI Luồng đình chỉ khắc phục phê duyệt, dữ liệu giả lập"
+  - button "Sửa thông tin vi phạm"
+  - button "Lập hồ sơ đình chỉ" [active]
+  - button "Ghi nhận khắc phục"
+  - generic: Tải bằng chứng
+  - button "Tải bằng chứng"
+  - button "Gửi duyệt" [disabled]
+  - heading "Tiến độ khắc phục" [level=3]
+  - paragraph: Chưa có cập nhật khắc phục.
+  - heading "Bằng chứng (0)" [level=3]
+  - paragraph: Chưa có tài liệu chứng minh.
+  - heading "Lịch sử trạng thái" [level=3]
+  - text: Mới ghi nhận
+  - paragraph: Ghi nhận vi phạm · Chỉ huy/Đội trưởng (mẫu) · 21:14:58 14/11/2026
+  - button "Đóng":
+    - generic: Đóng

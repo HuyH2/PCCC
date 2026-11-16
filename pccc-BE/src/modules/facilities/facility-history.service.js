@@ -281,8 +281,21 @@ export async function updateFacilityStatus(db, user, id, input, ip) {
             )
             .get(id)
         : null;
-    if (before.status === "suspended")
+    if (before.status === "suspended") {
       assert(openCase, 409, "MISSING_VIOLATION", "Không tìm thấy hồ sơ đình chỉ để phê duyệt.");
+      const openViolationSuspension = await db
+        .prepare(
+          `SELECT 1 FROM suspensions s JOIN violations v ON v.id=s.violation_id
+          WHERE v.facility_id=? AND v.status<>'completed' LIMIT 1`,
+        )
+        .get(id);
+      assert(
+        !openViolationSuspension,
+        409,
+        "OPEN_SUSPENSION",
+        "Cần phê duyệt các hồ sơ đình chỉ đang mở trước khi cho cơ sở hoạt động lại.",
+      );
+    }
     const changed = await db
       .prepare("UPDATE facilities SET status=? WHERE id=? AND status=?")
       .run(status, id, before.status);

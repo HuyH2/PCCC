@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { assert } from "./errors.js";
-import { audit } from "../modules/audit/audit.service.js";
+import { audit, writeAudit } from "../modules/audit/audit.service.js";
 import {
   facilityScope,
   requirePermission,
@@ -114,6 +114,54 @@ async function inScope(db, principal, facilityId) {
     .get(...scope.params, facilityId);
   assert(facility, 404, "NOT_FOUND", "Không tìm thấy cơ sở trong phạm vi được cấp.");
   return facility;
+}
+
+async function requireTrackedOfficer(db, officerId) {
+  assert(
+    await db.prepare("SELECT 1 FROM officers WHERE id=?").get(officerId),
+    400,
+    "INVALID_OFFICER",
+    "Không tìm thấy cán bộ theo dõi.",
+  );
+}
+
+// Called inside the same transaction as the suspension/approval mutation.
+async function changeFacilityStatus(
+  db,
+  principal,
+  { facilityId, status, reason, decisionReference, now, ip },
+) {
+  const before = await db
+    .prepare("SELECT status FROM facilities WHERE id=? FOR UPDATE")
+    .get(facilityId);
+  if (before.status === status) return;
+  await db.prepare("UPDATE facilities SET status=? WHERE id=?").run(status, facilityId);
+  const auditId = await writeAudit(db, {
+    actorId: principal.id,
+    feature: "M04",
+    objectType: "facility",
+    objectId: facilityId,
+    action: "facility.status_changed",
+    before: { status: before.status },
+    after: { status, reason, decisionReference },
+    ip,
+  });
+  await db
+    .prepare(
+      `INSERT INTO facility_status_history
+    (facility_id,previous_status,new_status,reason,decision_reference,actor_id,occurred_at,audit_log_id)
+    VALUES (?,?,?,?,?,?,?,?)`,
+    )
+    .run(
+      facilityId,
+      before.status,
+      status,
+      reason.slice(0, 1000),
+      decisionReference,
+      principal.id,
+      now,
+      auditId,
+    );
 }
 
 async function violationRow(db, principal, id) {
@@ -284,6 +332,7 @@ export async function createViolation(db, principal, payload, ip) {
   const now = Date.now(),
     id = `VP-${randomUUID()}`;
   await transaction(db, async () => {
+    await requireTrackedOfficer(db, value.trackedOfficerId);
     await db
       .prepare(
         `INSERT INTO violations(id,facility_id,violation_type,severity,detected_on,description,facility_condition,remediation_deadline,tracked_officer_id,status,created_by,created_at,updated_at)
@@ -347,6 +396,9 @@ export async function updateViolation(db, principal, id, payload, ip) {
     "Hạn khắc phục phải sau ngày phát hiện.",
   );
   await transaction(db, async () => {
+    if (Object.hasOwn(value, "trackedOfficerId")) {
+      await requireTrackedOfficer(db, next.trackedOfficerId);
+    }
     await db
       .prepare(
         `UPDATE violations SET facility_id=?,violation_type=?,severity=?,detected_on=?,description=?,facility_condition=?,remediation_deadline=?,tracked_officer_id=?,updated_at=? WHERE id=?`,
@@ -465,7 +517,7 @@ export async function createSuspension(db, principal, id, payload, ip) {
       .prepare(
         `SELECT s.previous_facility_status
       FROM suspensions s JOIN violations v ON v.id=s.violation_id
-      WHERE v.facility_id=? ORDER BY s.created_at,s.id LIMIT 1`,
+      WHERE v.facility_id=? AND v.status<>'completed' ORDER BY s.created_at,s.id LIMIT 1`,
       )
       .get(row.facility_id);
     const facility = await db
@@ -488,7 +540,14 @@ export async function createSuspension(db, principal, id, payload, ip) {
         now,
         now,
       );
-    await db.prepare("UPDATE facilities SET status='suspended' WHERE id=?").run(row.facility_id);
+    await changeFacilityStatus(db, principal, {
+      facilityId: row.facility_id,
+      status: "suspended",
+      reason,
+      decisionReference: number,
+      now,
+      ip,
+    });
     await audit(
       db,
       principal.id,
@@ -510,7 +569,8 @@ export async function createSuspension(db, principal, id, payload, ip) {
 
 export async function updateSuspension(db, principal, id, payload, ip) {
   requirePermission(principal, "M04.edit");
-  await violationRow(db, principal, id);
+  const row = await violationRow(db, principal, id);
+  assert(row.status !== "completed", 409, "INVALID_STATE", "Hồ sơ đã hoàn thành.");
   assert(
     payload &&
       typeof payload === "object" &&
@@ -762,6 +822,47 @@ export async function submitApproval(db, principal, id, ip) {
   return publicViolation(await violationRow(db, principal, id));
 }
 
+// Runs inside the approval transaction so status, audit and history stay atomic.
+async function restoreFacilityAfterApproval(db, principal, row, { reason, now, ip }) {
+  const id = row.id;
+  const suspension = await db
+    .prepare(
+      "SELECT previous_facility_status,decision_number FROM suspensions WHERE violation_id=?",
+    )
+    .get(id);
+  if (!suspension) return;
+  const otherOpenSuspension = await db
+    .prepare(
+      `SELECT 1 FROM suspensions s
+      JOIN violations v ON v.id=s.violation_id
+      WHERE v.facility_id=? AND v.id<>? AND v.status<>'completed' LIMIT 1`,
+    )
+    .get(row.facility_id, id);
+  if (otherOpenSuspension) return;
+
+  // M03 suspension records must also be closed before M04 restores the facility.
+  const openFacilitySuspension = await db
+    .prepare("SELECT 1 FROM facility_violations WHERE facility_id=? AND status='suspended'")
+    .get(row.facility_id);
+  if (openFacilitySuspension) return;
+  const facility = await db
+    .prepare("SELECT status FROM facilities WHERE id=? FOR UPDATE")
+    .get(row.facility_id);
+  if (facility.status !== "suspended") return;
+  const restoredStatus =
+    suspension.previous_facility_status === "suspended"
+      ? "active"
+      : suspension.previous_facility_status;
+  await changeFacilityStatus(db, principal, {
+    facilityId: row.facility_id,
+    status: restoredStatus,
+    reason: reason || "Phê duyệt hồ sơ khắc phục và khôi phục trạng thái cơ sở.",
+    decisionReference: suspension.decision_number,
+    now,
+    ip,
+  });
+}
+
 export async function decideApproval(db, principal, id, payload, approved, ip) {
   requirePermission(principal, "M04.approve");
   const row = await violationRow(db, principal, id);
@@ -796,41 +897,23 @@ export async function decideApproval(db, principal, id, payload, approved, ip) {
       ? requiredText(payload.reason, "Ý kiến duyệt", 1, 1000)
       : null
     : requiredText(payload.reason, "Lý do từ chối", 5, 1000);
-  const to = approved ? "completed" : "returned",
-    now = Date.now();
+  const nextStatus = approved ? "completed" : "returned";
+  const now = Date.now();
   await transaction(db, async () => {
-    await db.prepare("UPDATE violations SET status=?,updated_at=? WHERE id=?").run(to, now, id);
-    const suspension = approved
-      ? await db
-          .prepare("SELECT previous_facility_status FROM suspensions WHERE violation_id=?")
-          .get(id)
-      : null;
-    const otherOpenSuspension =
-      approved &&
-      (await db
-        .prepare(
-          `SELECT 1 FROM suspensions s
-      JOIN violations v ON v.id=s.violation_id
-      WHERE v.facility_id=? AND v.id<>? AND v.status<>'completed' LIMIT 1`,
-        )
-        .get(row.facility_id, id));
-    if (suspension && !otherOpenSuspension)
-      await db
-        .prepare("UPDATE facilities SET status=? WHERE id=? AND status='suspended'")
-        .run(
-          suspension.previous_facility_status === "suspended"
-            ? "active"
-            : suspension.previous_facility_status,
-          row.facility_id,
-        );
-    await history(db, id, row.status, to, reason, principal, now);
+    await db
+      .prepare("UPDATE violations SET status=?,updated_at=? WHERE id=?")
+      .run(nextStatus, now, id);
+    if (approved) {
+      await restoreFacilityAfterApproval(db, principal, row, { reason, now, ip });
+    }
+    await history(db, id, row.status, nextStatus, reason, principal, now);
     await audit(
       db,
       principal.id,
       approved ? "violation.approved" : "violation.rejected",
       id,
       { status: row.status },
-      { status: to, reason },
+      { status: nextStatus, reason },
       ip,
     );
   });

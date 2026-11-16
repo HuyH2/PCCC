@@ -1,5 +1,6 @@
 node_modules
 .next
+pccc-FE/.next-doc-vio/
 out
 build
 .DS_Store

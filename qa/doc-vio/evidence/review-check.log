@@ -1,0 +1,7 @@
+
+> pccc@1.0.0 check D:\Learn\QLDAPM\PCCC
+> pnpm --filter pccc-be check
+
+
+> pccc-be@1.0.0 check D:\Learn\QLDAPM\PCCC\pccc-BE
+> node scripts/check.js
