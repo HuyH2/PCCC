@@ -4,6 +4,7 @@ import { object, pagination } from "../../core/validation.js";
 import { transaction } from "../../core/database.js";
 import { facilityScope } from "../authorization/authorization.service.js";
 import { writeAudit } from "../audit/audit.service.js";
+import { assertNoScheduleConflict } from "../inspections/inspections.service.js";
 import {
   date,
   optionalTime,
@@ -114,6 +115,14 @@ export async function updateSchedule(db, user, id, payload, ip) {
   };
   const now = Date.now();
   return await transaction(db, async () => {
+    await assertNoScheduleConflict(db, {
+      facilityId: inspection.facility_id,
+      officerId: inspection.lead_officer_id,
+      date: scheduledDate,
+      startTime,
+      endTime,
+      excludeId: id,
+    });
     await db
       .prepare(
         `UPDATE inspection_schedules SET scheduled_date=?,start_time=?,end_time=?,location=?,
@@ -216,6 +225,14 @@ export async function rescheduleInspection(db, user, id, payload, ip) {
   const rescheduleId = randomUUID();
   const now = Date.now();
   return await transaction(db, async () => {
+    await assertNoScheduleConflict(db, {
+      facilityId: before.facility_id,
+      officerId: before.lead_officer_id,
+      date: newDate,
+      startTime,
+      endTime,
+      excludeId: id,
+    });
     await db
       .prepare(
         `INSERT INTO inspection_reschedules(

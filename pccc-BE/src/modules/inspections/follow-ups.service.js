@@ -4,6 +4,7 @@ import { object } from "../../core/validation.js";
 import { transaction } from "../../core/database.js";
 import {
   requireInspectionAccess,
+  requireAssignedOfficer,
   date,
   trimmed,
   writeInspectionAudit,
@@ -22,6 +23,7 @@ export async function createFollowUp(db, user, id, payload, ip) {
   const dueDate = date(payload.due_date, "Hạn hậu kiểm");
   return await transaction(db, async () => {
     const inspection = await scopedInspection(db, user, id);
+    requireAssignedOfficer(user, inspection);
     assert(
       inspection.status === "completed",
       409,
@@ -77,7 +79,7 @@ export async function completeFollowUp(db, user, id, followUpId, payload, ip) {
   );
   const resultNote = trimmed(payload.result_note, "Kết quả hậu kiểm", 1, 2000);
   return await transaction(db, async () => {
-    await scopedInspection(db, user, id);
+    requireAssignedOfficer(user, await scopedInspection(db, user, id));
     const select = db.prepare("SELECT * FROM follow_up_inspections WHERE id=? AND inspection_id=?");
     const before = await select.get(followUpId, id);
     assert(before, 404, "NOT_FOUND", "Không tìm thấy yêu cầu hậu kiểm.");

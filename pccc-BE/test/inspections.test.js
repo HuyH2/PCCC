@@ -72,7 +72,7 @@ const unscheduled = (extra = {}) => ({
   facility_id: "CS001",
   kind: "unscheduled",
   reason: "Phản ánh của người dân (kiểm thử)",
-  scheduled_date: "2026-10-20",
+  scheduled_date: "2026-10-21",
   ...extra,
 });
 

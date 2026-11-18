@@ -11,6 +11,8 @@ import {
   expectStatus,
   nextCode,
   activeChecklist,
+  assertNoScheduleConflict,
+  requireAssignedOfficer,
   writeInspectionAudit,
 } from "./inspections.helpers.js";
 import { scopedInspection, inspectionDetail } from "./inspections.queries.js";
@@ -28,7 +30,13 @@ import {
 // Every lookup joins facilities on alias f and applies the caller's facility scope in SQL.
 
 // Re-export identifiers that routes and external callers still need directly.
-export { requireInspectionAccess, scopedInspection, inspectionDetail };
+export {
+  requireInspectionAccess,
+  scopedInspection,
+  inspectionDetail,
+  nextCode,
+  assertNoScheduleConflict,
+};
 
 // ---------------------------------------------------------------------------
 // UC-INS-06 — list inspections
@@ -125,6 +133,11 @@ export async function createInspection(db, user, payload, ip) {
   return await transaction(db, async () => {
     const now = Date.now();
     const id = randomUUID();
+    await assertNoScheduleConflict(db, {
+      facilityId,
+      officerId: leadOfficerId,
+      date: scheduledDate,
+    });
     await db
       .prepare(
         `INSERT INTO inspections(id,code,facility_id,kind,topic,reason,scheduled_date,lead_officer_id,
@@ -132,7 +145,7 @@ export async function createInspection(db, user, payload, ip) {
       )
       .run(
         id,
-        await nextCode(db, now),
+        await nextCode(db, new Date(now).getFullYear()),
         facilityId,
         payload.kind,
         topic,
@@ -145,6 +158,13 @@ export async function createInspection(db, user, payload, ip) {
         now,
         now,
       );
+    // Same shared calendar record the planning module creates, so the inspection shows on /kiem-tra/lich.
+    await db
+      .prepare(
+        `INSERT INTO inspection_schedules(id,inspection_id,scheduled_date,location,created_by,updated_by,
+        created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)`,
+      )
+      .run(`SCHED-${id}`, id, scheduledDate, "", user.id, user.id, now, now);
     const after = await scopedInspection(db, user, id);
     await writeInspectionAudit(db, user, ip, id, "inspection.created", null, after);
     return after;
@@ -193,6 +213,7 @@ export async function saveResults(db, user, id, payload, ip) {
   return await transaction(db, async () => {
     const before = await inspectionDetail(db, user, id);
     const inspection = before.inspection;
+    requireAssignedOfficer(user, inspection);
     expectVersion(inspection, payload.version);
     expectStatus(
       inspection,
@@ -300,6 +321,7 @@ export async function saveConclusion(db, user, id, payload, ip) {
   const conclusion = trimmed(payload.conclusion, "Kết luận", 1, 4000);
   return await transaction(db, async () => {
     const before = await scopedInspection(db, user, id);
+    requireAssignedOfficer(user, before);
     expectVersion(before, payload.version);
     expectStatus(
       before,
@@ -326,6 +348,7 @@ export async function completeInspection(db, user, id, payload, ip) {
   object(payload, ["version"]);
   return await transaction(db, async () => {
     const { inspection: before, items } = await inspectionDetail(db, user, id);
+    requireAssignedOfficer(user, before);
     expectVersion(before, payload.version);
     expectStatus(
       before,

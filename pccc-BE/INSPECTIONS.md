@@ -65,4 +65,6 @@ Mutation cần `version` (trừ upload/hậu kiểm) — lệch trả 409 `VERSI
 - Loại cơ sở chưa có trong bảng `facilities`, nên checklist lọc theo tham số `facilityType`.
 - Quyền M06 trong seed là ma trận mẫu (Q02). Seed không ghi đè quyền vai trò đã có; DB cũ cần cấp
   M06 qua `/quan-tri/vai-tro` hoặc tạo lại DB demo.
-- Chưa bắt buộc tài liệu khi đóng hậu kiểm, chưa giới hạn sửa theo trưởng đoàn — chỉ theo quyền + scope.
+- Chưa bắt buộc tài liệu khi đóng hậu kiểm. Cập nhật kết quả/biên bản/kết luận/hoàn thành/hậu kiểm chỉ cho trưởng đoàn được phân công (`lead_officer_id`) hoặc Phó chỉ huy (A02, giám sát); vai trò khác trả 403 (giả định cần xác nhận). Kiểm tra đột xuất/chuyên đề ghi cả `inspection_schedules` để hiện trên lịch. Mã `KT-YYYY-NNNN` cấp tuần tự dùng chung cho định kỳ và đột xuất/chuyên đề.
+- Seed mẫu bổ sung M06.edit cho A01 và M06.create/edit cho A04; DB đã có tài khoản không tự đổi, cần cấp qua `/quan-tri/vai-tro`.
+- Chặn trùng lịch (`409 SCHEDULE_CONFLICT`): cùng cơ sở hoặc cùng trưởng đoàn không được có hai cuộc kiểm tra trùng ngày và giao khung giờ (nếu thiếu giờ bắt đầu/kết thúc thì tính cả ngày; bỏ qua lịch đã hủy). Kiểm tra khi tạo định kỳ, tạo đột xuất/chuyên đề, dời lịch, sửa giờ và đổi trưởng đoàn.
