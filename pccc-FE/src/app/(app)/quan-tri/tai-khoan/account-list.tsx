@@ -22,6 +22,7 @@ interface ManagedAccount {
   username: string;
   full_name: string;
   officer_id: string;
+  officer_code?: string | null;
   role_code: string;
   status: "active" | "locked" | "inactive";
   region_count?: number;
@@ -103,7 +104,9 @@ export function AccountList({
     if (!canEdit) return;
     Promise.all([
       accountApi<{ roles: RoleOption[] }>("/api/authorization/roles"),
-      accountApi<{ items: ScopeOption[] }>("/api/authorization/scope-options?kind=unit&pageSize=100"),
+      accountApi<{ items: ScopeOption[] }>(
+        "/api/authorization/scope-options?kind=unit&pageSize=100",
+      ),
     ])
       .then(([roleData, unitData]) => {
         setRoles(roleData.roles.filter((role) => role.enabled === 1));
@@ -159,7 +162,7 @@ export function AccountList({
       setEditing({
         account: data.account,
         fullName: data.account.full_name,
-        officerId: data.account.officer_id,
+        officerId: data.account.officer_code ?? data.account.officer_id,
         role: data.account.role_code,
         unitId: unitScope?.targetId ?? "",
         scopeCount: data.scopes.length,
@@ -184,13 +187,19 @@ export function AccountList({
         ...(editing.unitId ? [{ kind: "unit", targetId: editing.unitId }] : []),
         ...otherScopes,
       ];
-      await accountApi(`/api/authorization/accounts/${encodeURIComponent(editing.account.id)}`, "PUT", {
-        role: editing.role,
-        fullName: editing.fullName.trim(),
-        officerId: editing.officerId.trim(),
-        scopes,
-      });
-      setMessage(`Đã cập nhật tài khoản ${editing.account.username}. Người dùng cần đăng nhập lại.`);
+      await accountApi(
+        `/api/authorization/accounts/${encodeURIComponent(editing.account.id)}`,
+        "PUT",
+        {
+          role: editing.role,
+          fullName: editing.fullName.trim(),
+          officerId: editing.officerId.trim(),
+          scopes,
+        },
+      );
+      setMessage(
+        `Đã cập nhật tài khoản ${editing.account.username}. Người dùng cần đăng nhập lại.`,
+      );
       setEditing(null);
       await load();
     } catch (failure) {
@@ -208,9 +217,13 @@ export function AccountList({
     setError(null);
     setMessage(null);
     try {
-      await accountApi(`/api/authorization/accounts/${encodeURIComponent(account.id)}/status`, "POST", {
-        status,
-      });
+      await accountApi(
+        `/api/authorization/accounts/${encodeURIComponent(account.id)}/status`,
+        "POST",
+        {
+          status,
+        },
+      );
       setMessage(`Đã ${label} tài khoản ${account.full_name}.`);
       await load();
     } catch (failure) {
@@ -425,7 +438,7 @@ export function AccountList({
                     <TableCell>
                       {account.full_name}
                       <span className="text-muted-foreground block text-xs">
-                        {account.officer_id}
+                        {account.officer_code ?? account.officer_id}
                       </span>
                     </TableCell>
                     <TableCell>{account.role_code}</TableCell>

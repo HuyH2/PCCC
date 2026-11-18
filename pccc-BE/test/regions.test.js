@@ -12,6 +12,26 @@ const origin = "http://localhost:3000";
 async function fixture(t) {
   const db = await openDatabase(":memory:");
   await seedDemo(db, password);
+  // Account creation now requires a real personnel profile, as the UI label promises.
+  for (const code of [
+    "CB-NEW",
+    "CB-KHAC",
+    "CB-TEST",
+    "CB-KV11",
+    "CB-FACILITY",
+    "CB-RENAMED",
+    "CB-RACE",
+    "CB-RACE-A",
+    "CB-RACE-B",
+    "CB-INACTIVE",
+    "CB-REGION",
+  ])
+    await db
+      .prepare(
+        `INSERT INTO officers(id,officer_code,full_name,rank,position,phone,email,unit_id,business_role,created_at,updated_at)
+      VALUES (?,?,?,'Đại úy','Cán bộ','0900000000',?,'DV-KV10','A03',0,0)`,
+      )
+      .run(code, code, `Hồ sơ kiểm thử ${code}`, `${code}@example.test`);
   await db.exec("UPDATE accounts SET must_change_password=0");
   const server = createApp(db);
   server.listen(0, "127.0.0.1");

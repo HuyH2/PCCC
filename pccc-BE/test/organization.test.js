@@ -98,6 +98,142 @@ async function auditFor(db, id) {
   return await db.prepare("SELECT * FROM audit_logs WHERE object_id=? ORDER BY id").all(id);
 }
 
+test("BUG-001 M02 audit classification and legacy filtering preserve original evidence", async (t) => {
+  const f = await fixture(t);
+  const unit = await f.unit();
+  const officer = await f.officer();
+  const regionResult = await f.request("/api/organization/regions", {
+    method: "POST",
+    cookie: f.cookie,
+    body: {
+      code: "BUG-001-KP",
+      name: "Khu phố kiểm thử",
+      level: "NEIGHBORHOOD",
+      parentId: unit.id,
+    },
+  });
+  assert.equal(regionResult.status, 201);
+  for (const [type, item, path, change] of [
+    ["unit", unit, "/api/units", { name: "Đơn vị đã sửa" }],
+    ["officer", officer, "/api/officers", { fullName: "Cán bộ đã sửa" }],
+    ["region", regionResult.data.region, "/api/organization/regions", { name: "Khu phố đã sửa" }],
+  ]) {
+    assert.equal(
+      (await f.request(`${path}/${item.id}`, { method: "PATCH", cookie: f.cookie, body: change }))
+        .status,
+      200,
+    );
+    const logs = await auditFor(f.db, item.id);
+    assert.equal(logs.length, 2);
+    for (const log of logs) {
+      assert.equal(log.feature, "M02");
+      assert.equal(log.object_type, type);
+    }
+    // Reproduce the old writer's metadata while retaining action and snapshots.
+    const legacyRow = await f.db
+      .prepare(
+        `INSERT INTO audit_logs(actor_id,action,object_id,before_json,after_json,occurred_at,ip,feature,object_type)
+        SELECT actor_id,action,object_id,before_json,after_json,?,ip,'M01.authorization','account'
+        FROM audit_logs WHERE id=? RETURNING id`,
+      )
+      .get(Date.now(), logs[0].id);
+    const query = `/api/audit-logs?feature=M02&objectType=${type}&objectId=${item.id}&pageSize=1`;
+    const result = await f.request(query, { cookie: f.cookie });
+    assert.equal(result.status, 200);
+    assert.equal(result.data.total, 3);
+    assert.equal(result.data.items[0].object_type, type);
+    const legacy = await f.request(query, { cookie: f.cookie });
+    assert.equal(legacy.data.items[0].feature, "M02");
+    assert.equal(legacy.data.items[0].object_type, type);
+    const secondPage = await f.request(query + "&page=2", { cookie: f.cookie });
+    assert.equal(secondPage.data.total, 3);
+    assert.notEqual(secondPage.data.items[0].id, legacy.data.items[0].id);
+    assert.equal(
+      (await f.db.prepare("SELECT feature FROM audit_logs WHERE id=?").get(legacyRow.id)).feature,
+      "M01.authorization",
+    );
+  }
+  assert.equal((await f.request("/api/audit-logs")).status, 401);
+  assert.equal(
+    (await f.request("/api/audit-logs", { cookie: await f.login("demo.can-bo") })).status,
+    403,
+  );
+});
+
+test("BUG-002 account code resolves to personnel ID on create and edit; invalid links cannot persist", async (t) => {
+  const f = await fixture(t);
+  const officer = await f.officer({ officerCode: "BUG-002-CB" });
+  assert.notEqual(officer.id, officer.officerCode);
+  const payload = {
+    username: "bug002",
+    fullName: officer.fullName,
+    officerId: " bug-002-cb ",
+    role: "A03",
+    password,
+    scopes: [{ kind: "unit", targetId: "DV-KV10" }],
+  };
+  const create = (body = payload, cookie = f.cookie) =>
+    f.request("/api/authorization/accounts", { method: "POST", cookie, body });
+  assert.equal((await create(payload, "")).status, 401);
+  assert.equal((await create(payload, await f.login("demo.can-bo"))).status, 403);
+  const result = await create();
+  assert.equal(result.status, 201, JSON.stringify(result.data));
+  const accountId = result.data.account.id;
+  assert.equal(result.data.account.officer_id, officer.id);
+  assert.equal(result.data.account.officer_code, officer.officerCode);
+  const search = await f.request("/api/authorization/accounts?search=bug-002-cb", {
+    cookie: f.cookie,
+  });
+  assert.equal(search.data.total, 1);
+  assert.equal(search.data.items[0].officer_code, officer.officerCode);
+  assert.equal(
+    (await f.db.prepare("SELECT officer_id FROM accounts WHERE id=?").get(accountId)).officer_id,
+    officer.id,
+  );
+  const profile = await f.request(`/api/officers/${officer.id}`, { cookie: f.cookie });
+  assert.equal(profile.data.officer.linkedAccountCount, 1);
+  assert.equal(
+    (await create({ ...payload, username: "duplicate", officerId: officer.id })).status,
+    409,
+  );
+  assert.equal(
+    (await create({ ...payload, username: "missing", officerId: "UNKNOWN-CODE" })).status,
+    400,
+  );
+  assert.equal((await create({ ...payload, username: "empty.scope", scopes: [] })).status, 400);
+  assert.equal(
+    (
+      await f.db
+        .prepare(
+          "SELECT count(*) AS n FROM accounts WHERE username IN ('missing','duplicate','empty.scope')",
+        )
+        .get()
+    ).n,
+    0,
+  );
+  const next = await f.officer({ officerCode: "BUG-002-NEXT" });
+  const edit = await f.request(`/api/authorization/accounts/${accountId}`, {
+    method: "PUT",
+    cookie: f.cookie,
+    body: { role: "A03", scopes: payload.scopes, officerId: next.officerCode },
+  });
+  assert.equal(edit.status, 200, JSON.stringify(edit.data));
+  assert.equal(
+    (await f.db.prepare("SELECT officer_id FROM accounts WHERE id=?").get(accountId)).officer_id,
+    next.id,
+  );
+  const invalid = await f.request(`/api/authorization/accounts/${accountId}`, {
+    method: "PUT",
+    cookie: f.cookie,
+    body: { role: "A03", scopes: payload.scopes, officerId: "UNKNOWN-CODE" },
+  });
+  assert.equal(invalid.status, 400);
+  assert.equal(
+    (await f.db.prepare("SELECT officer_id FROM accounts WHERE id=?").get(accountId)).officer_id,
+    next.id,
+  );
+});
+
 test("ORG tree uses shared units/regions and readonly root; valid ward and neighborhood persist", async (t) => {
   const f = await fixture(t);
   const before = await f.request("/api/organization/tree", { cookie: f.cookie });

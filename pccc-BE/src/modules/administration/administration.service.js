@@ -145,6 +145,17 @@ async function uniqueOfficer(db, officerId, exceptId = "") {
   return officerId;
 }
 
+// The UI accepts the public officer code; domain links always store officers.id.
+async function resolveOfficer(db, value) {
+  const input = text(value?.trim(), "Mã cán bộ", 1, 64);
+  const rows = await db
+    .prepare("SELECT id FROM officers WHERE officer_code=? OR id=?")
+    .all(input, input);
+  assert(rows.length > 0, 400, "OFFICER_NOT_FOUND", "Mã cán bộ không tồn tại trong hồ sơ cán bộ.");
+  assert(rows.length === 1, 409, "AMBIGUOUS_OFFICER", "Mã cán bộ trùng với ID hồ sơ khác.");
+  return rows[0].id;
+}
+
 async function writeScopes(db, accountId, scopes) {
   await db.prepare("DELETE FROM account_scopes WHERE account_id=?").run(accountId);
   for (const scope of scopes)
@@ -177,7 +188,7 @@ export async function updateAccountAuthorization(db, principal, id, payload, ip)
   const officerId =
     payload.officerId === undefined
       ? account.officer_id
-      : text(payload.officerId?.trim(), "Mã cán bộ", 1, 64);
+      : await resolveOfficer(db, payload.officerId);
   if (officerId !== account.officer_id) {
     await uniqueOfficer(db, officerId, id);
     assert(
@@ -264,7 +275,7 @@ export async function createAccount(db, principal, payload, ip) {
   const username = text(payload.username?.trim().toLowerCase(), "Tên đăng nhập", 1, 100);
   assert(USERNAME.test(username), 400, "INVALID_INPUT", "Tên đăng nhập không đúng định dạng.");
   const fullName = text(payload.fullName?.trim(), "Họ tên", 1, 200);
-  const officerId = text(payload.officerId?.trim(), "Mã cán bộ", 1, 64);
+  const officerInput = text(payload.officerId?.trim(), "Mã cán bộ", 1, 64);
   const role = await activeRole(db, payload.role);
   const password = text(payload.password, "Mật khẩu", 12, 256);
   const scopes = await normalizeScopes(db, payload.scopes ?? []);
@@ -279,6 +290,7 @@ export async function createAccount(db, principal, payload, ip) {
   return await transaction(db, async () => {
     // Both checks run after the async hash, inside the write transaction, so concurrent
     // requests cannot create duplicate usernames or officer ids.
+    const officerId = await resolveOfficer(db, officerInput);
     await uniqueOfficer(db, officerId);
     assert(
       !(await db.prepare("SELECT 1 FROM accounts WHERE username=?").get(username)),
@@ -385,19 +397,26 @@ export async function listRoles(db) {
 }
 
 export async function findAccount(db, id) {
-  return await db.prepare(`SELECT ${ACCOUNT_COLUMNS} FROM accounts WHERE id=?`).get(id);
+  return await db
+    .prepare(
+      `SELECT ${ACCOUNT_COLUMNS},
+    (SELECT o.officer_code FROM officers o WHERE o.id=accounts.officer_id) AS officer_code
+    FROM accounts WHERE id=?`,
+    )
+    .get(id);
 }
 
 export async function listAccounts(db, { page, pageSize }, search = "") {
   assert(search.length <= 100, 400, "INVALID_INPUT", "Từ khóa tìm kiếm quá dài.");
   const where = search
-    ? "WHERE instr(fold(a.username),fold(?))>0 OR instr(fold(a.full_name),fold(?))>0 OR instr(fold(a.officer_id),fold(?))>0"
+    ? "WHERE instr(fold(a.username),fold(?))>0 OR instr(fold(a.full_name),fold(?))>0 OR instr(fold(a.officer_id),fold(?))>0 OR EXISTS(SELECT 1 FROM officers o WHERE o.id=a.officer_id AND instr(fold(o.officer_code),fold(?))>0)"
     : "";
-  const params = search ? [search, search, search] : [];
+  const params = search ? [search, search, search, search] : [];
   return {
     items: await db
       .prepare(
         `SELECT a.id,a.username,a.full_name,a.officer_id,a.role_code,a.status,a.last_login_at,
+      (SELECT o.officer_code FROM officers o WHERE o.id=a.officer_id) AS officer_code,
       (SELECT count(*) FROM region_assignments ra WHERE ra.account_id=a.id) AS region_count,
       (SELECT count(*) FROM facilities f WHERE f.officer_id=a.officer_id) AS facility_count,
       (SELECT u.name FROM account_scopes s JOIN units u ON u.id=s.unit_id

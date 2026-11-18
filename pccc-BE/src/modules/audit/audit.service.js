@@ -49,12 +49,17 @@ export async function writeAudit(
   return Number(result.lastInsertRowid);
 }
 
-// Backward-compatible signature for authentication and authorization features.
+// Organization callers also use the legacy signature; classify by the action, not the caller.
+function organizationType(action) {
+  return /^organization\.(officer|unit|region)_(created|updated|status_changed)$/.exec(action)?.[1];
+}
+
 export async function audit(db, actor, action, object, before, after, ip) {
+  const type = organizationType(action);
   await writeAudit(db, {
     actorId: actor,
-    feature: action.startsWith("auth.") ? "M01.auth" : "M01.authorization",
-    objectType: action.includes("role_permissions") ? "role" : "account",
+    feature: type ? "M02" : action.startsWith("auth.") ? "M01.auth" : "M01.authorization",
+    objectType: type ?? (action.includes("role_permissions") ? "role" : "account"),
     objectId: object,
     action,
     before,
@@ -68,11 +73,15 @@ export async function listAuditLogs(db, user, url) {
   const { page, pageSize } = pagination(url);
   const clauses = [];
   const params = [];
+  // Project known legacy M02 actions without rewriting immutable audit evidence.
+  const organizationAction =
+    "l.action ~ '^organization\\.(officer|unit|region)_(created|updated|status_changed)$'";
+  const objectTypeSql = `CASE WHEN ${organizationAction} THEN split_part(split_part(l.action,'.',2),'_',1) ELSE l.object_type END`;
   for (const [key, column] of Object.entries({
     actorId: "l.actor_id",
     action: "l.action",
     objectId: "l.object_id",
-    objectType: "l.object_type",
+    objectType: `(${objectTypeSql})`,
   })) {
     const value = url.searchParams.get(key);
     if (value) {
@@ -82,7 +91,8 @@ export async function listAuditLogs(db, user, url) {
     }
   }
   // Older rows retain their original content; classify them without mutating history.
-  const featureSql = `CASE WHEN l.feature='system' AND l.action LIKE 'auth.%' THEN 'M01.auth'
+  const featureSql = `CASE WHEN ${organizationAction} THEN 'M02'
+    WHEN l.feature='system' AND l.action LIKE 'auth.%' THEN 'M01.auth'
     WHEN l.feature='system' AND l.action LIKE 'authorization.%' THEN 'M01.authorization' ELSE l.feature END`;
   const feature = url.searchParams.get("feature");
   if (feature) {
@@ -116,7 +126,7 @@ export async function listAuditLogs(db, user, url) {
   return {
     items: await db
       .prepare(
-        `SELECT l.*, (${featureSql}) AS feature, a.full_name AS actor_name, a.username AS actor_username
+        `SELECT l.*, (${featureSql}) AS feature, (${objectTypeSql}) AS object_type, a.full_name AS actor_name, a.username AS actor_username
       FROM audit_logs l LEFT JOIN accounts a ON a.id=l.actor_id WHERE ${where}
       ORDER BY l.occurred_at DESC,l.id DESC LIMIT ? OFFSET ?`,
       )

@@ -1,0 +1,119 @@
+{
+  "checkedAt": "2026-11-18T08:21:12.436Z",
+  "version": "PostgreSQL 18.0 on x86_64-windows, compiled by msvc-19.44.35217, 64-bit",
+  "database": "pccc_test_33096_1",
+  "link": {
+    "account_id": "ACC-3e095495-5322-4ca7-b754-c993b57e51ca",
+    "username": "bug002.ui",
+    "officer_id": "d3bcf3a5-1407-449f-bbf9-1a5843cb9a0e",
+    "profile_id": "d3bcf3a5-1407-449f-bbf9-1a5843cb9a0e",
+    "officer_code": "BUG002-UI"
+  },
+  "rejectedAccounts": 0,
+  "logs": [
+    {
+      "action": "organization.officer_created",
+      "feature": "M02",
+      "object_type": "officer",
+      "object_id": "d3bcf3a5-1407-449f-bbf9-1a5843cb9a0e"
+    },
+    {
+      "action": "organization.unit_created",
+      "feature": "M02",
+      "object_type": "unit",
+      "object_id": "4b378553-e551-412e-b158-488f0e2b1f13"
+    }
+  ],
+  "responses": [
+    {
+      "path": "/api/authorization/accounts?search=BUG002-UI",
+      "status": 200,
+      "data": {
+        "items": [
+          {
+            "id": "ACC-3e095495-5322-4ca7-b754-c993b57e51ca",
+            "username": "bug002.ui",
+            "full_name": "Cán bộ kiểm thử BUG002",
+            "officer_id": "d3bcf3a5-1407-449f-bbf9-1a5843cb9a0e",
+            "role_code": "A03",
+            "status": "active",
+            "last_login_at": null,
+            "officer_code": "BUG002-UI",
+            "region_count": 0,
+            "facility_count": 0,
+            "unit_name": "Đội khu vực 10 (mẫu)"
+          }
+        ],
+        "total": 1,
+        "page": 1,
+        "pageSize": 20
+      }
+    },
+    {
+      "path": "/api/officers/d3bcf3a5-1407-449f-bbf9-1a5843cb9a0e",
+      "status": 200,
+      "data": {
+        "officer": {
+          "id": "d3bcf3a5-1407-449f-bbf9-1a5843cb9a0e",
+          "officerCode": "BUG002-UI",
+          "fullName": "Cán bộ kiểm thử BUG002",
+          "rank": "Đại úy",
+          "position": "Cán bộ tổng hợp",
+          "phone": "0900000099",
+          "email": "bug002-ui@example.test",
+          "notes": "",
+          "unitId": "DV-KV10",
+          "unitName": "Đội khu vực 10 (mẫu)",
+          "businessRole": "A03",
+          "businessRoleName": "Cán bộ kiểm tra/Quản lý địa bàn",
+          "status": "ACTIVE",
+          "statusReason": null,
+          "statusEffectiveDate": null,
+          "createdAt": 1794989630946,
+          "updatedAt": 1794989630946,
+          "linkedAccountCount": 1,
+          "linkedActiveAccountCount": 1
+        }
+      }
+    },
+    {
+      "path": "/api/audit-logs?feature=M02",
+      "status": 200,
+      "data": {
+        "items": [
+          {
+            "id": 15,
+            "actor_id": "DEMO-A05",
+            "action": "organization.unit_created",
+            "object_id": "4b378553-e551-412e-b158-488f0e2b1f13",
+            "before_json": null,
+            "after_json": "{\"id\":\"4b378553-e551-412e-b158-488f0e2b1f13\",\"kind\":\"unit\",\"code\":\"BUG001-UI\",\"name\":\"Đơn vị kiểm thử BUG001\",\"level\":\"AREA\",\"parentId\":\"DV-PC07\",\"leaderOfficerId\":null,\"status\":\"ACTIVE\",\"notes\":\"\",\"createdAt\":1794989832747,\"updatedAt\":1794989832747}",
+            "occurred_at": 1794989832758,
+            "ip": "127.0.0.1",
+            "feature": "M02",
+            "object_type": "unit",
+            "actor_name": "Quản trị hệ thống (mẫu)",
+            "actor_username": "demo.admin"
+          },
+          {
+            "id": 12,
+            "actor_id": "DEMO-A05",
+            "action": "organization.officer_created",
+            "object_id": "d3bcf3a5-1407-449f-bbf9-1a5843cb9a0e",
+            "before_json": null,
+            "after_json": "{\"id\":\"d3bcf3a5-1407-449f-bbf9-1a5843cb9a0e\",\"officerCode\":\"BUG002-UI\",\"fullName\":\"Cán bộ kiểm thử BUG002\",\"rank\":\"Đại úy\",\"position\":\"Cán bộ tổng hợp\",\"phone\":\"0900000099\",\"email\":\"bug002-ui@example.test\",\"notes\":\"\",\"unitId\":\"DV-KV10\",\"unitName\":\"Đội khu vực 10 (mẫu)\",\"businessRole\":\"A03\",\"businessRoleName\":\"Cán bộ kiểm tra/Quản lý địa bàn\",\"status\":\"ACTIVE\",\"statusReason\":null,\"statusEffectiveDate\":null,\"createdAt\":1794989630946,\"updatedAt\":1794989630946,\"linkedAccountCount\":0,\"linkedActiveAccountCount\":0}",
+            "occurred_at": 1794989630953,
+            "ip": "127.0.0.1",
+            "feature": "M02",
+            "object_type": "officer",
+            "actor_name": "Quản trị hệ thống (mẫu)",
+            "actor_username": "demo.admin"
+          }
+        ],
+        "total": 2,
+        "page": 1,
+        "pageSize": 20
+      }
+    }
+  ]
+}

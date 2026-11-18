@@ -1,0 +1,19 @@
+{
+  "baseline": "efcebe7",
+  "database": {
+    "version": "PostgreSQL 18.0 on x86_64-windows, compiled by msvc-19.44.35217, 64-bit"
+  },
+  "audit": {
+    "feature": "M01.authorization",
+    "object_type": "account",
+    "action": "organization.officer_updated"
+  },
+  "account": {
+    "officer_id": "BUG002-BASELINE"
+  },
+  "profile": {
+    "id": "6f2eae4a-c467-439d-93ca-dad67053aad4",
+    "officerCode": "BUG002-BASELINE"
+  },
+  "linkedAccountCount": 0
+}
