@@ -3,6 +3,7 @@ import { assert } from "../../core/errors.js";
 import { object } from "../../core/validation.js";
 import { transaction } from "../../core/database.js";
 import { writeAudit } from "../audit/audit.service.js";
+import { nextCode, assertNoScheduleConflict } from "../inspections/inspections.service.js";
 import {
   trimmed,
   optionalText,
@@ -117,9 +118,16 @@ export async function createPeriodicInspection(db, user, planId, payload, ip) {
   const decision = parseFile(payload.team_decision, "Quyết định đoàn kiểm tra");
   const id = randomUUID();
   const scheduleId = randomUUID();
-  const code = `KT-${plan.year}-${randomUUID().slice(0, 8).toUpperCase()}`;
   const now = Date.now();
   return await transaction(db, async () => {
+    await assertNoScheduleConflict(db, {
+      facilityId: facility.id,
+      officerId: officer.id,
+      date: scheduledDate,
+      startTime,
+      endTime,
+    });
+    const code = await nextCode(db, plan.year);
     await db
       .prepare(
         `INSERT INTO inspections(
@@ -251,6 +259,14 @@ export async function assignLeadOfficer(db, user, id, payload, ip) {
   );
   const now = Date.now();
   return await transaction(db, async () => {
+    await assertNoScheduleConflict(db, {
+      facilityId: before.facility_id,
+      officerId: officer.id,
+      date: before.scheduled_date,
+      startTime: before.start_time,
+      endTime: before.end_time,
+      excludeId: id,
+    });
     await db
       .prepare(
         "UPDATE inspections SET lead_officer_id=?,version=version+1,updated_by=?,updated_at=? WHERE id=? AND version=?",

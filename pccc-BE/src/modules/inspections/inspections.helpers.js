@@ -45,12 +45,13 @@ export function expectStatus(inspection, statuses, message) {
 // Code generation & checklist lookup
 // ---------------------------------------------------------------------------
 
-export async function nextCode(db, now) {
-  const year = new Date(now).getFullYear();
+// Sequential code KT-YYYY-NNNN. Only purely numeric suffixes count, so codes issued earlier
+// in another format (e.g. random hex) can never break the sequence.
+export async function nextCode(db, year) {
   const prefix = `KT-${year}-`;
   const last = await db
-    .prepare("SELECT code FROM inspections WHERE code LIKE ? ORDER BY code DESC LIMIT 1")
-    .get(`${prefix}%`);
+    .prepare("SELECT code FROM inspections WHERE code ~ ? ORDER BY code DESC LIMIT 1")
+    .get(`^KT-${year}-[0-9]+$`);
   const sequence = last ? Number(last.code.slice(prefix.length)) + 1 : 1;
   return `${prefix}${String(sequence).padStart(4, "0")}`;
 }
@@ -67,12 +68,59 @@ export async function activeChecklist(db, id) {
 }
 
 // ---------------------------------------------------------------------------
+// Schedule conflict: one facility or one lead officer cannot hold two inspections that overlap
+// in time on the same day. A missing start/end time is treated as the whole day.
+// ---------------------------------------------------------------------------
+
+function timesOverlap(startA, endA, startB, endB) {
+  if (!startA || !endA || !startB || !endB) return true;
+  return startA < endB && startB < endA;
+}
+
+export async function assertNoScheduleConflict(
+  db,
+  { facilityId, officerId, date: day, startTime = null, endTime = null, excludeId = null },
+) {
+  const rows = await db
+    .prepare(
+      `SELECT i.code,i.facility_id,i.lead_officer_id,s.start_time,s.end_time
+      FROM inspection_schedules s JOIN inspections i ON i.id=s.inspection_id
+      WHERE s.scheduled_date=? AND s.status<>'cancelled' AND i.id<>?
+        AND (i.facility_id=? OR i.lead_officer_id=?)`,
+    )
+    .all(day, excludeId ?? "", facilityId, officerId);
+  const clash = rows.find((row) => timesOverlap(startTime, endTime, row.start_time, row.end_time));
+  assert(
+    !clash,
+    409,
+    "SCHEDULE_CONFLICT",
+    `Trùng lịch với cuộc kiểm tra ${clash?.code}: cùng ${
+      clash?.facility_id === facilityId ? "cơ sở" : "trưởng đoàn"
+    } trong khung giờ này.`,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Permission
 // ---------------------------------------------------------------------------
 
 export function requireInspectionAccess(user, action = "view") {
   requirePermission(user, "M06.view");
   if (action !== "view") requirePermission(user, `M06.${action}`);
+}
+
+// Executing an inspection (checklist, record, conclusion, completion, follow-up) belongs to the
+// assigned lead officer; the deputy commander (A02) supervises and may act for the team.
+export const INSPECTION_SUPERVISOR_ROLES = ["A02"];
+
+export function requireAssignedOfficer(user, inspection) {
+  assert(
+    INSPECTION_SUPERVISOR_ROLES.includes(user.role) ||
+      inspection.lead_officer_id === user.officerId,
+    403,
+    "FORBIDDEN",
+    "Chỉ cán bộ được phân công (trưởng đoàn) hoặc Phó chỉ huy mới được cập nhật cuộc kiểm tra này.",
+  );
 }
 
 // ---------------------------------------------------------------------------

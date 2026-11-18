@@ -9,6 +9,7 @@ import {
 } from "./inspections.constants.js";
 import {
   requireInspectionAccess,
+  requireAssignedOfficer,
   trimmed,
   expectStatus,
   writeInspectionAudit,
@@ -61,6 +62,7 @@ export async function uploadDocument(db, user, id, upload, ip) {
   validateInspectionFile(fileName, contentType, data);
   return await transaction(db, async () => {
     const inspection = await scopedInspection(db, user, id);
+    requireAssignedOfficer(user, inspection);
     let followUpId = null;
     if (inspection.status === "completed") {
       assert(

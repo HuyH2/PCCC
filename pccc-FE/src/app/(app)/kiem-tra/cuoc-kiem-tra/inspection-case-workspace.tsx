@@ -66,9 +66,7 @@ function CaseFields({ planId }: { planId: string }) {
         {error}
       </p>
     );
-  const assignedTargets = detail.data?.targets.filter(
-    (target) => target.officer_id || target.region_id,
-  );
+  const assignedTargets = detail.data?.targets.filter((target) => target.period_type !== "year");
   return (
     <>
       <div className="space-y-2 sm:col-span-2">
@@ -100,7 +98,7 @@ function CaseFields({ planId }: { planId: string }) {
           {assignedTargets?.map((target) => (
             <option key={target.id} value={target.id}>
               {target.period_type === "month" ? `Tháng ${target.month}` : `Tuần ${target.week}`} —{" "}
-              {target.officer_name ?? target.region_name} ({target.actual_count}/
+              {target.officer_name ?? target.region_name ?? "Tổng kỳ"} ({target.actual_count}/
               {target.target_count})
             </option>
           ))}
